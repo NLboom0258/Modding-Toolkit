@@ -9,6 +9,7 @@ from ..core.bone_utils import get_import_presets_callback, get_target_presets_ca
 from ..core.pose_ops import get_pose_presets_callback
 from ..games.re9.batch_export import get_schemes_callback
 from ..games.re4.batch_export import get_schemes_callback as get_re4_schemes_callback
+from ..games.dmc5.batch_export import get_schemes_callback as get_dmc5_schemes_callback
 from ..games.mhws.batch_export import get_mhws_schemes_callback, get_mhws_armor_callback, get_mhws_variants
 from ..games.mhrs.batch_export import get_mhrs_schemes_callback, get_mhrs_armor_callback, get_mhrs_genders
 from ..games.mhwi.batch_export import (
@@ -417,6 +418,24 @@ class MHW_PT_SuiteSettings(bpy.types.PropertyGroup):
         description="Automatically get the armature from the body Mesh collection and align it to the native "
                      "skeleton, skipping manual fbxskel armature binding",
         default=False,
+    )
+
+    # DMC5 batch export
+    dmc5_export_scheme: bpy.props.EnumProperty(
+        name="Export Scheme",
+        description="Select character export scheme for DMC5",
+        items=get_dmc5_schemes_callback
+    )
+    dmc5_triangulate_face: bpy.props.BoolProperty(
+        name="Triangulate Face Mesh",
+        description="Before export, temporarily add a Triangulate modifier to meshes weighted to the head bone. "
+                     "RE Mesh Editor's exporter otherwise breaks face shading. The mesh data itself is not modified",
+        default=False,
+    )
+    dmc5_use_blank_export: bpy.props.BoolProperty(
+        name="Use Blank Model for Unselected",
+        description="For slots with no collection selected, copy in the built-in blank file instead of skipping",
+        default=True,
     )
 
 

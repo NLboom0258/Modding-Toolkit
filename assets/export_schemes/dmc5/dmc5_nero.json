@@ -1,0 +1,19 @@
+{
+  "character": "Nero (DMC5)",
+  "character_id": "dmc5_nero",
+  "base_path": "x64/character/player",
+  "groups": [
+    {
+      "name": "身体(00)",
+      "entries": [
+        {
+          "id": "pl0000_body",
+          "mesh": "pl0000_nero/pl0000_body/pl0000.mesh.1808282334",
+          "mdf2": ["pl0000_nero/pl0000_body/pl0000.mdf2.10"],
+          "chain": "pl0000_nero/pl0000_body/pl0000.chain.21",
+          "note": "身体"
+        }
+      ]
+    }
+  ]
+}

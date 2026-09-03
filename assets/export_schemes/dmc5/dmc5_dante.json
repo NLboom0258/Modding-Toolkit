@@ -1,0 +1,19 @@
+{
+  "character": "Dante (DMC5)",
+  "character_id": "dmc5_dante",
+  "base_path": "x64/character/player",
+  "groups": [
+    {
+      "name": "身体(00)",
+      "entries": [
+        {
+          "id": "pl0100_body",
+          "mesh": "pl0100_dante/pl0100_body/pl0100.mesh.1808282334",
+          "mdf2": ["pl0100_dante/pl0100_body/pl0100.mdf2.10"],
+          "chain": "pl0100_dante/pl0100_body/pl0100.chain.21",
+          "note": "身体"
+        }
+      ]
+    }
+  ]
+}

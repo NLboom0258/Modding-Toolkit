@@ -1,0 +1,19 @@
+{
+  "character": "V (DMC5)",
+  "character_id": "dmc5_v",
+  "base_path": "x64/character/player",
+  "groups": [
+    {
+      "name": "身体(00)",
+      "entries": [
+        {
+          "id": "pl0200_body",
+          "mesh": "pl0200_v/pl0200_body/pl0200.mesh.1808282334",
+          "mdf2": ["pl0200_v/pl0200_body/pl0200.mdf2.10"],
+          "chain": "pl0200_v/pl0200_body/pl0200.chain.21",
+          "note": "身体"
+        }
+      ]
+    }
+  ]
+}

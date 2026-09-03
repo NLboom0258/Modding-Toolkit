@@ -1,0 +1,239 @@
+import bpy
+from bpy.props import CollectionProperty, IntProperty, StringProperty
+
+from .batch_export import (
+    _load_scheme, _get_binding, _set_binding,
+    _get_enabled, _set_enabled,
+)
+
+EXPORTER_WINDOW_WIDTH = 600
+
+
+def _get_filtered_collections(suffix):
+    result = []
+    type_map = {"mesh": "RE_MESH_COLLECTION", "mdf2": "RE_MDF_COLLECTION", "chain": "RE_CHAIN_COLLECTION"}
+    name_sfx_map = {"mesh": ".mesh", "mdf2": ".mdf2", "chain": ".chain"}
+    target_type = type_map.get(suffix, "")
+    name_sfx = name_sfx_map.get(suffix, "")
+    for c in bpy.data.collections:
+        col_type = c.get("~TYPE", "")
+        if col_type == target_type:
+            icon = f"COLLECTION_{c.color_tag}" if c.color_tag != "NONE" else "OUTLINER_COLLECTION"
+            result.append((c.name, c.name, "", icon, len(result)))
+            continue
+        if not col_type and name_sfx and c.name.endswith(name_sfx):
+            result.append((c.name, c.name, "", "OUTLINER_COLLECTION", len(result)))
+    if not result:
+        result.append(("NONE", "No matching collections", "", "ERROR", 0))
+    return result
+
+
+class DMC5_OT_ToggleEntry(bpy.types.Operator):
+    bl_idname = "dmc5.toggle_entry"
+    bl_label = "Toggle"
+    bl_options = {'INTERNAL'}
+    character_id: bpy.props.StringProperty()
+    entry_id: bpy.props.StringProperty()
+    suffix: bpy.props.StringProperty()
+    def execute(self, context):
+        current = _get_enabled(context.scene, self.character_id, self.entry_id, self.suffix)
+        _set_enabled(context.scene, self.character_id, self.entry_id, self.suffix, not current)
+        return {'FINISHED'}
+
+
+class DMC5_OT_PickBinding(bpy.types.Operator):
+    bl_idname = "dmc5.pick_binding"
+    bl_label = "Pick Collection"
+    bl_options = {'INTERNAL'}
+    bl_property = "collection_name"
+
+    scope: bpy.props.StringProperty(default="ENTRY")
+    slot: bpy.props.StringProperty()
+    character_id: bpy.props.StringProperty()
+    entry_id: bpy.props.StringProperty()
+    collection_name: bpy.props.EnumProperty(
+        name="Collection",
+        items=lambda self, ctx: _get_filtered_collections(self.slot)
+    )
+
+    def invoke(self, context, event):
+        context.window_manager.invoke_search_popup(self)
+        return {'RUNNING_MODAL'}
+
+    def execute(self, context):
+        if self.collection_name != "NONE":
+            _set_binding(context.scene, self.character_id, self.entry_id, self.slot,
+                         self.collection_name)
+        return {'FINISHED'}
+
+
+class DMC5_GroupListItem(bpy.types.PropertyGroup):
+    group_name: StringProperty()
+    entry_count: IntProperty()
+
+
+class DMC5_UL_Groups(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon,
+                  active_data, active_propname, index):
+        layout.label(text=f"{item.group_name} ({item.entry_count})", icon='FILE_FOLDER')
+
+
+class DMC5_OT_BatchExportDialog(bpy.types.Operator):
+    """DMC5 batch export dialog"""
+    bl_idname = "dmc5.batch_export_dialog"
+    bl_label = "DMC5 Batch Exporter"
+    bl_options = {'REGISTER'}
+
+    groups: CollectionProperty(type=DMC5_GroupListItem)
+    group_index: IntProperty()
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self, width=EXPORTER_WINDOW_WIDTH)
+
+    def _sync_groups(self, scheme, scheme_file):
+        if getattr(self, '_groups_scheme_file', None) == scheme_file:
+            return
+        self._groups_scheme_file = scheme_file
+        self.groups.clear()
+        for group in scheme["groups"]:
+            item = self.groups.add()
+            item.group_name = group["name"]
+            item.entry_count = len(group["entries"])
+        self.group_index = 0
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+        settings = scene.mhw_suite_settings
+
+        layout.prop(settings, "dmc5_export_scheme", text="Character")
+
+        # Natives root
+        natives_root = scene.get("dmc5_natives_root", "")
+        row = layout.row(align=True)
+        row.operator("dmc5.set_natives_root", text="Natives Root", icon='FILE_FOLDER')
+        if natives_root:
+            parts = natives_root.replace("\\", "/").rstrip("/").split("/")
+            short = "/".join(parts[-3:]) if len(parts) > 3 else natives_root
+            row.label(text=f".../{short}")
+        else:
+            row.label(text="Not set", icon='ERROR')
+
+        scheme_file = settings.dmc5_export_scheme
+        if not scheme_file or scheme_file == 'NONE':
+            layout.label(text="Select a character scheme", icon='INFO')
+            return
+        scheme = _load_scheme(scheme_file)
+        if not scheme:
+            layout.label(text="Failed to load scheme", icon='ERROR')
+            return
+
+        character_id = scheme["character_id"]
+        self._sync_groups(scheme, scheme_file)
+
+        layout.separator()
+        layout.prop(settings, "dmc5_use_blank_export", text="Use Blank Model for Unselected", icon='FILE_BLANK')
+
+        layout.separator()
+        split = layout.split(factor=0.35)
+        col1, col2 = split.column(), split.column()
+        col1.template_list("DMC5_UL_Groups", "", self, "groups", self, "group_index",
+                           rows=max(4, min(len(self.groups), 10)))
+
+        selected_group = None
+        if self.groups and 0 <= self.group_index < len(self.groups):
+            item = self.groups[self.group_index]
+            selected_group = next((g for g in scheme["groups"] if g["name"] == item.group_name), None)
+
+        if selected_group is not None:
+            box = col2.box()
+            self._draw_group_detail_normal(box, scene, character_id, selected_group)
+
+    def _draw_group_detail_normal(self, layout, scene, character_id, group):
+        layout.label(text=group["name"], icon='FILE_FOLDER')
+        for entry in group["entries"]:
+            entry_id = entry["id"]
+            header = entry_id
+            note = entry.get("note", "")
+            if note:
+                header += f"  [{note}]"
+            entry_box = layout.box()
+            entry_box.label(text=header)
+
+            if entry.get("mesh"):
+                head = entry_box.row(align=True)
+                en = _get_enabled(scene, character_id, entry_id, "mesh")
+                op = head.operator("dmc5.toggle_entry", text="",
+                                   icon='CHECKBOX_HLT' if en else 'CHECKBOX_DEHLT', emboss=False)
+                op.character_id = character_id; op.entry_id = entry_id; op.suffix = "mesh"
+                cur = _get_binding(scene, character_id, entry_id, "mesh")
+                ic = 'OUTLINER_OB_MESH'
+                if cur and cur in bpy.data.collections:
+                    ct = bpy.data.collections[cur].color_tag
+                    if ct != "NONE":
+                        ic = f"COLLECTION_{ct}"
+                head.label(text="MESH", icon=ic)
+                row = entry_box.row(align=True)
+                op_p = row.operator("dmc5.pick_binding",
+                                    text=cur if cur else "Select...", icon='DOWNARROW_HLT')
+                op_p.scope = "ENTRY"; op_p.slot = "mesh"
+                op_p.character_id = character_id; op_p.entry_id = entry_id
+
+            if entry.get("mdf2"):
+                head = entry_box.row(align=True)
+                en = _get_enabled(scene, character_id, entry_id, "mdf2")
+                op = head.operator("dmc5.toggle_entry", text="",
+                                   icon='CHECKBOX_HLT' if en else 'CHECKBOX_DEHLT', emboss=False)
+                op.character_id = character_id; op.entry_id = entry_id; op.suffix = "mdf2"
+                cur = _get_binding(scene, character_id, entry_id, "mdf2")
+                ic = 'MATERIAL'
+                if cur and cur in bpy.data.collections:
+                    ct = bpy.data.collections[cur].color_tag
+                    if ct != "NONE":
+                        ic = f"COLLECTION_{ct}"
+                head.label(text=f"MDF2 x{len(entry['mdf2'])}", icon=ic)
+                row = entry_box.row(align=True)
+                op_p = row.operator("dmc5.pick_binding",
+                                    text=cur if cur else "Select...", icon='DOWNARROW_HLT')
+                op_p.scope = "ENTRY"; op_p.slot = "mdf2"
+                op_p.character_id = character_id; op_p.entry_id = entry_id
+
+            if entry.get("chain"):
+                head = entry_box.row(align=True)
+                en = _get_enabled(scene, character_id, entry_id, "chain")
+                op = head.operator("dmc5.toggle_entry", text="",
+                                   icon='CHECKBOX_HLT' if en else 'CHECKBOX_DEHLT', emboss=False)
+                op.character_id = character_id; op.entry_id = entry_id; op.suffix = "chain"
+                cur = _get_binding(scene, character_id, entry_id, "chain")
+                ic = 'CONSTRAINT_BONE'
+                if cur and cur in bpy.data.collections:
+                    ct = bpy.data.collections[cur].color_tag
+                    if ct != "NONE":
+                        ic = f"COLLECTION_{ct}"
+                head.label(text="Chain", icon=ic)
+                row = entry_box.row(align=True)
+                op_p = row.operator("dmc5.pick_binding",
+                                    text=cur if cur else "Select...", icon='DOWNARROW_HLT')
+                op_p.scope = "ENTRY"; op_p.slot = "chain"
+                op_p.character_id = character_id; op_p.entry_id = entry_id
+
+    def execute(self, context):
+        bpy.ops.dmc5.batch_export()
+        return {'FINISHED'}
+
+
+classes = [
+    DMC5_GroupListItem,
+    DMC5_UL_Groups,
+    DMC5_OT_PickBinding,
+    DMC5_OT_ToggleEntry,
+    DMC5_OT_BatchExportDialog,
+]
+
+def register():
+    for cls in classes:
+        bpy.utils.register_class(cls)
+
+def unregister():
+    for cls in reversed(classes):
+        bpy.utils.unregister_class(cls)

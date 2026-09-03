@@ -340,7 +340,7 @@ SECTIONS = {
     },
     'dmc5': {
         'label': "DMC5 Tools", 'icon': 'GHOST_ENABLED',
-        'io': [_pre_export_check('DMC5')],
+        'io': [_pre_export_check('DMC5'), _batch_export('dmc5', "ui.game_sections.btn_batch_export_dmc5")],
         'rig': [],
         'material': [
             # convert_to_packed_shader / mdf_generator 依赖 assets/mdf_presets/dmc5 +
