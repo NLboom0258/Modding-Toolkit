@@ -391,12 +391,12 @@ def make_mdf_path(base_path, tex_name, slot_type, abbrev_map, use_art_prefix=Tru
 
 
 def make_disk_path(natives_root, base_path, tex_name, slot_type, abbrev_map, tex_version,
-                   use_art_prefix=True):
+                   use_art_prefix=True, platform_segment='STM'):
     """Absolute filesystem path for the .tex file."""
     abbrev = abbrev_map.get(slot_type, slot_type)
     parts  = base_path.strip('/\\').replace('\\', '/').split('/')
     mid    = os.path.join('Art', *parts) if use_art_prefix else os.path.join(*parts)
-    rel    = os.path.join('natives', 'STM', mid, f"{tex_name}_{abbrev}.tex.{tex_version}")
+    rel    = os.path.join('natives', platform_segment, mid, f"{tex_name}_{abbrev}.tex.{tex_version}")
     return os.path.join(natives_root, rel)
 
 
@@ -1021,6 +1021,7 @@ class MdfTexProcessBase(bpy.types.Operator):
     _abbrev_map       = {}
     _use_art_prefix   = True
     _path_fixed_prefix = ""   # Optional path segment prepended to texture_base_path
+    _platform_segment  = "STM"  # natives/<platform_segment>/ 引擎平台段 (RE4/RE9/MHWS=STM, DMC5=x64)
     _log_tag          = "MDF Tex"
 
     def execute(self, context):
@@ -1152,7 +1153,8 @@ class MdfTexProcessBase(bpy.types.Operator):
 
                         disk_path = make_disk_path(
                             natives_root, base_path, tex_name, slot.texture_type,
-                            cls._abbrev_map, cls._tex_version, cls._use_art_prefix)
+                            cls._abbrev_map, cls._tex_version, cls._use_art_prefix,
+                            cls._platform_segment)
 
                         write_slot_tex(
                             src_img, disk_path, temp_dir,

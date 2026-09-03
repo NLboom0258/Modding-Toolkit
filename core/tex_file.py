@@ -1,8 +1,10 @@
-"""RE Engine .tex container writer.
+"""RE Engine .tex container writer (Modern + Legacy).
 
 Ported from kagenocookie/RE-Engine-Lib's TexFile.cs (the "Modern"/GDeflate header
-layout only — every game this addon targets, MHRS/RE4/MHWS/RE9, uses that layout;
-the older Legacy layout used by RE7/RE2/DMC5/RE3 is out of scope).
+layout) + the Legacy layout from the Noesis RE Engine plugin (fmt_RE_MESH.py):
+RE7/RE2/DMC5/RE3 ship a *Legacy* .tex header that is structurally different from
+the Modern one used by MHRS/RE4/MHWS/RE9 -- so this module supports both, chosen
+by the tex version number (version <= LEGACY_TEX_MAX_VERSION uses Legacy).
 
 Critical difference from RE Mesh Editor's own tex writer: the DXGI format is
 stored here as a raw integer taken directly from the source DDS's DX10 header,
@@ -25,12 +27,19 @@ TEX_MAGIC = 0x00584554  # "TEX\0"
 # TexSerializerVersion.GDeflate tier).
 GDEFLATE_VERSIONS = {241106027, 250813143}  # MHWILDS, RE9
 
+#: Versions <= this use the *Legacy* header (RE7/RE2/DMC5/RE3, e.g. DMC5's .tex.11).
+LEGACY_TEX_MAX_VERSION = 27
+
 # Modern header (40 bytes): magic, version, width, height, depth, imageCount,
 # mipHeaderSize, format, swizzleControl, cubemapMarker, flags,
 # swizzleHeightDepth, swizzleWidth, null1, seven, one.
 # All five modern-only trailer fields are left at 0 for freshly-built files,
 # matching REE-Content-Editor's own from-scratch DDS->tex conversion path.
 _HEADER_STRUCT = struct.Struct('<I i h h h B B i i I I B B H H H')
+
+# Legacy header (32 bytes): magic, version, width(UShort), height(UShort), unk(UShort),
+# mipCount(UByte), numImages(UByte), format(UInt), unk2/3/4(UInt).  No swizzle 8 bytes.
+_LEGACY_HEADER_STRUCT = struct.Struct('<IIHHHBBIIII')
 
 # MipHeader (16 bytes): offset(int64), pitch(int32), size(int32).
 _MIP_HEADER_STRUCT = struct.Struct('<q i i')
@@ -44,7 +53,7 @@ def _pad_to_256(pitch):
 
 
 def _build_uncompressed(dds, tex_version):
-    """Build the plain (pre-GDeflate) .tex byte layout: header + mip table + padded pixel data.
+    """Build the plain (pre-GDeflate) Modern .tex byte layout: header + mip table + padded pixel data.
     Returns (header_bytes, mip_table_bytes, mip_records, body_bytes) where mip_records
     is a list of (offset, pitch, size) describing each mip's position within the full file.
     """
@@ -87,6 +96,30 @@ def _build_uncompressed(dds, tex_version):
     return header_bytes, mip_table_bytes, mip_records, bytes(body)
 
 
+def _build_legacy_uncompressed(dds, tex_version):
+    """Build the Legacy (version<=27) .tex byte layout: 32-byte header + mip table + raw mip data.
+    No 256-row padding and no GDeflate (Legacy stores mips raw, sized per the mip header),
+    matching the Noesis RE Engine plugin's format for RE7/RE2/DMC5/RE3.
+    """
+    mip_count = len(dds.mips)
+    header_bytes = _LEGACY_HEADER_STRUCT.pack(
+        TEX_MAGIC, tex_version, dds.width, dds.height, 0,   # unk00 = 0
+        mip_count, 1, dds.dxgi_format, 0, 0, 0,             # numImages=1, unk2/3/4=0
+    )
+    mip_table_size = mip_count * MIP_HEADER_SIZE
+    body = bytearray()
+    mip_records = []
+    for level in range(mip_count):
+        w = max(1, dds.width >> level)
+        mip = dds.mips[level]
+        pitch = dxgi.get_pitch(dds.dxgi_format, w)
+        offset = len(header_bytes) + mip_table_size + len(body)
+        mip_records.append((offset, pitch, len(mip)))
+        body += mip
+    mip_table_bytes = b''.join(_MIP_HEADER_STRUCT.pack(o, p, s) for o, p, s in mip_records)
+    return header_bytes, mip_table_bytes, bytes(body)
+
+
 def _apply_gdeflate(header_bytes, mip_table_bytes, mip_records, body, level=gdeflate_native.BEST_RATIO):
     """Recompress the mip data section with GDeflate, matching REE-Content-Editor's
     TextureLoader.SaveTo: every mip is compressed individually, falling back to storing
@@ -117,6 +150,9 @@ def _apply_gdeflate(header_bytes, mip_table_bytes, mip_records, body, level=gdef
 
 def build_tex_from_dds(dds, tex_version):
     """Pack a dds_file.DDSFile into RE Engine .tex container bytes for tex_version."""
+    if tex_version <= LEGACY_TEX_MAX_VERSION:
+        header_bytes, mip_table_bytes, body = _build_legacy_uncompressed(dds, tex_version)
+        return header_bytes + mip_table_bytes + body
     header_bytes, mip_table_bytes, mip_records, body = _build_uncompressed(dds, tex_version)
     if tex_version in GDEFLATE_VERSIONS:
         return _apply_gdeflate(header_bytes, mip_table_bytes, mip_records, body)
@@ -134,7 +170,7 @@ def write_tex_from_dds(dds_filepath, tex_version, out_path):
 
 
 def read_tex_size(filepath):
-    """``(width, height)`` from the 40-byte header alone, or ``None`` when the
+    """``(width, height)`` from the header alone, or ``None`` when the
     file cannot be read as a .tex.
 
     Deliberately reads only the header: the pre-export check runs this over
@@ -149,15 +185,43 @@ def read_tex_size(filepath):
     """
     try:
         with open(filepath, 'rb') as f:
-            head = f.read(_HEADER_STRUCT.size)
+            head = f.read(16)
     except OSError:
         return None
-    if len(head) < _HEADER_STRUCT.size:
+    if len(head) < 12:
         return None
-    magic, _version, width, height = _HEADER_STRUCT.unpack(head)[:4]
+    magic, version = struct.unpack_from('<II', head, 0)
     if magic != TEX_MAGIC:
         return None
-    return (width, height)
+    if version <= LEGACY_TEX_MAX_VERSION:
+        # Legacy: width/height are UShorts at offset 8.
+        width, height = struct.unpack_from('<HH', head, 8)
+        return (width, height)
+    # Modern: width/height are int16 at offset 8 (via _HEADER_STRUCT).
+    width, height = struct.unpack_from('<hh', head, 8)
+    return (max(0, width), max(0, height))
+
+
+def _read_legacy_tex_to_dds(data):
+    """Parse a Legacy (version<=27) .tex into a dds_file.DDSFile."""
+    from . import dds_file
+    (magic, version, width, height, _unk00, mip_count, _num_images,
+     dxgi_fmt, _u2, _u3, _u4) = _LEGACY_HEADER_STRUCT.unpack_from(data, 0)
+    if magic != TEX_MAGIC:
+        raise ValueError("Not a .tex file")
+    header_size = _LEGACY_HEADER_STRUCT.size
+    mips = []
+    for level in range(mip_count):
+        offset, pitch, size = _MIP_HEADER_STRUCT.unpack_from(
+            data, header_size + level * MIP_HEADER_SIZE)
+        mips.append(data[offset: offset + size])
+    dds = dds_file.DDSFile()
+    dds.width = width
+    dds.height = height
+    dds.mip_count = len(mips)
+    dds.dxgi_format = dxgi_fmt
+    dds.mips = mips
+    return dds
 
 
 def read_tex_to_dds(filepath, all_mips=False):
@@ -180,11 +244,15 @@ def read_tex_to_dds(filepath, all_mips=False):
     with open(filepath, 'rb') as f:
         data = f.read()
 
+    magic, version = struct.unpack_from('<II', data, 0)
+    if magic != TEX_MAGIC:
+        raise ValueError(f"Not a .tex file: {filepath}")
+    if version <= LEGACY_TEX_MAX_VERSION:
+        return _read_legacy_tex_to_dds(data)
+
     (magic, version, width, height, _depth, _image_count, mip_header_size,
      dxgi_fmt, _swizzle_control, _cubemap_marker, _flags,
      _swizzle_h, _swizzle_w, _null1, _seven, _one) = _HEADER_STRUCT.unpack_from(data, 0)
-    if magic != TEX_MAGIC:
-        raise ValueError(f"Not a .tex file: {filepath}")
 
     header_size = _HEADER_STRUCT.size
     mip_count = mip_header_size // MIP_HEADER_SIZE

@@ -119,6 +119,7 @@ class MHW_PT_SuiteSettings(bpy.types.PropertyGroup):
     show_mhrs: bpy.props.BoolProperty(name="MHRS", default=False)
     show_re4: bpy.props.BoolProperty(name="RE4", default=False)
     show_re9: bpy.props.BoolProperty(name="RE9", default=False)
+    show_dmc5: bpy.props.BoolProperty(name="DMC5", default=False)
 
     # Basic tools toggle
     show_basic_tools: bpy.props.BoolProperty(name="Basic Tools", default=True)
@@ -444,6 +445,7 @@ class MHW_PT_MainPanel(bpy.types.Panel):
         row.prop(settings, "show_mhrs", toggle=True, text="MHRS")
         row.prop(settings, "show_re4", toggle=True, text="RE4")
         row.prop(settings, "show_re9", toggle=True, text="RE9")
+        row.prop(settings, "show_dmc5", toggle=True, text="DMC5")
         
         layout.separator()
 
@@ -703,7 +705,8 @@ class MHW_PT_MainPanel(bpy.types.Panel):
                              ("mhws", settings.show_mhws),
                              ("re4",  settings.show_re4),
                              ("mhrs", settings.show_mhrs),
-                             ("re9",  settings.show_re9)):
+                             ("re9",  settings.show_re9),
+                             ("dmc5", settings.show_dmc5)):
             if _shown:
                 game_sections.draw_section(layout, _key)
 # Known Blender dynamic-enum limitation: if the list returned by an items=

@@ -338,6 +338,19 @@ SECTIONS = {
         'physics': [_re_chain('re9')],
         'port': _port('RE9'),
     },
+    'dmc5': {
+        'label': "DMC5 Tools", 'icon': 'GHOST_ENABLED',
+        'io': [_pre_export_check('DMC5')],
+        'rig': [],
+        'material': [
+            # convert_to_packed_shader / mdf_generator 依赖 assets/mdf_presets/dmc5 +
+            # _FAMILY_CONFIG['DMC5'] + mdf_generator(均延后) -- 暂不放进 DMC5 section。
+            op("dmc5.mdf_tex_processor_dialog",
+               "ui.main_panel.btn_mdf_tex_processor", 'TEXTURE'),
+        ],
+        'physics': [],
+        'port': _port('DMC5'),
+    },
 }
 
 
