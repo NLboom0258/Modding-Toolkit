@@ -7,6 +7,7 @@ from ...core.i18n import T
 from ...core.re_mesh_compat import call_re_mesh_op, re_mesh_op_available
 from ...core import console_export
 from ...core import export_prep
+from mathutils import Matrix
 
 
 def _get_export_schemes_dir():
@@ -92,6 +93,28 @@ def _do_export_chain(filepath, collection_name):
     bpy.ops.re_chain.exportfile(filepath=filepath, targetCollection=collection_name)
 
 
+def _do_export_fbxskel(filepath, armature_name):
+    """Export the mod armature's rest pose as an fbxskel.
+
+    RE Mesh Editor's re_fbxskel.exportfile writes the *current pose* (it always
+    passes usePose=True), so we zero every pose bone's matrix_basis first to
+    capture the bind/rest pose -- the mod model's default shape -- then restore
+    the pose afterwards."""
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    arm = bpy.data.objects.get(armature_name)
+    if arm is None or arm.type != 'ARMATURE':
+        raise RuntimeError(f"armature '{armature_name}' not found")
+    saved = {pb.name: pb.matrix_basis.copy() for pb in arm.pose.bones}
+    try:
+        for pb in arm.pose.bones:
+            pb.matrix_basis = Matrix.Identity(4)
+        bpy.ops.re_fbxskel.exportfile(filepath=filepath, targetArmature=armature_name)
+    finally:
+        for pb in arm.pose.bones:
+            if pb.name in saved:
+                pb.matrix_basis = saved[pb.name]
+
+
 def _get_blank_path(filetype, filename=None):
     """Return the path to a blank file in blank_files/dmc5/.
     If filename is given, use that directly; otherwise fall back to blank.<filetype>."""
@@ -162,7 +185,12 @@ class DMC5_OT_BatchExport(bpy.types.Operator):
             if not target or target == "NONE":
                 skip_count += 1
                 return
-            if target not in bpy.data.collections:
+            if func == _do_export_fbxskel:
+                if target not in bpy.data.objects or bpy.data.objects[target].type != 'ARMATURE':
+                    print(f"[DMC5] SKIP {label}: armature '{target}' not found")
+                    skip_count += 1
+                    return
+            elif target not in bpy.data.collections:
                 print(f"[DMC5] SKIP {label}: collection '{target}' not found")
                 skip_count += 1
                 return
@@ -233,6 +261,17 @@ class DMC5_OT_BatchExport(bpy.types.Operator):
                         try_export(_do_export_chain, make_full(entry["chain"], grp_bp), chain_col, f"CHAIN {entry_id}")
                     elif chain_en and use_blank:
                         try_blank("chain", make_full(entry["chain"], grp_bp), f"CHAIN {entry_id}")
+
+        # --- FBXSKEL（手动选 mod armature, 导出 rest 姿势）---
+        fbxskel_raw = scheme.get("fbxskel", "")
+        fbxskel_paths = ([fbxskel_raw] if isinstance(fbxskel_raw, str) else list(fbxskel_raw))
+        fbxskel_paths = [p for p in fbxskel_paths if p]
+        fbx_enabled = _get_enabled(scene, character_id, "_fbxskel", "fbxskel")
+        fbx_arm = _get_binding(scene, character_id, "_fbxskel", "fbxskel")
+        if fbxskel_paths and fbx_enabled and fbx_arm:
+            for fbxskel_path in fbxskel_paths:
+                full = make_full(fbxskel_path)
+                try_export(_do_export_fbxskel, full, fbx_arm, f"FBXSKEL {os.path.basename(fbxskel_path)}")
 
         if fail_count > 0:
             self.report({'WARNING'}, f"Done: {export_count} exported, {fail_count} failed, {skip_count} skipped")

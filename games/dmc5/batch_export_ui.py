@@ -9,6 +9,16 @@ from .batch_export import (
 EXPORTER_WINDOW_WIDTH = 600
 
 
+def _get_armatures():
+    result = []
+    for obj in bpy.data.objects:
+        if obj.type == 'ARMATURE':
+            result.append((obj.name, obj.name, "", 'ARMATURE_DATA', len(result)))
+    if not result:
+        result.append(("NONE", "No armatures", "", "ERROR", 0))
+    return result
+
+
 def _get_filtered_collections(suffix):
     result = []
     type_map = {"mesh": "RE_MESH_COLLECTION", "mdf2": "RE_MDF_COLLECTION", "chain": "RE_CHAIN_COLLECTION"}
@@ -38,6 +48,23 @@ class DMC5_OT_ToggleEntry(bpy.types.Operator):
     def execute(self, context):
         current = _get_enabled(context.scene, self.character_id, self.entry_id, self.suffix)
         _set_enabled(context.scene, self.character_id, self.entry_id, self.suffix, not current)
+        return {'FINISHED'}
+
+
+class DMC5_OT_PickArmature(bpy.types.Operator):
+    bl_idname = "dmc5.pick_armature"
+    bl_label = "Pick Armature"
+    bl_options = {'INTERNAL'}
+    bl_property = "armature_name"
+    character_id: bpy.props.StringProperty()
+    armature_name: bpy.props.EnumProperty(name="Armature",
+        items=lambda self, ctx: _get_armatures())
+    def invoke(self, context, event):
+        context.window_manager.invoke_search_popup(self)
+        return {'RUNNING_MODAL'}
+    def execute(self, context):
+        if self.armature_name != "NONE":
+            _set_binding(context.scene, self.character_id, "_fbxskel", "fbxskel", self.armature_name)
         return {'FINISHED'}
 
 
@@ -130,6 +157,24 @@ class DMC5_OT_BatchExportDialog(bpy.types.Operator):
 
         character_id = scheme["character_id"]
         self._sync_groups(scheme, scheme_file)
+
+        # FBXSKEL
+        fbxskel_raw = scheme.get("fbxskel", "")
+        fbxskel_paths = ([fbxskel_raw] if isinstance(fbxskel_raw, str) else list(fbxskel_raw))
+        fbxskel_paths = [p for p in fbxskel_paths if p]
+        if fbxskel_paths:
+            box = layout.box()
+            row = box.row(align=True)
+            fbx_en = _get_enabled(scene, character_id, "_fbxskel", "fbxskel")
+            op = row.operator("dmc5.toggle_entry", text="",
+                              icon='CHECKBOX_HLT' if fbx_en else 'CHECKBOX_DEHLT', emboss=False)
+            op.character_id = character_id; op.entry_id = "_fbxskel"; op.suffix = "fbxskel"
+            fbx_label = f"FBXSKEL (x{len(fbxskel_paths)})" if len(fbxskel_paths) > 1 else "FBXSKEL"
+            row.label(text=fbx_label, icon='ARMATURE_DATA')
+            cur_arm = _get_binding(scene, character_id, "_fbxskel", "fbxskel")
+            op_p = row.operator("dmc5.pick_armature", text=cur_arm if cur_arm else "Select armature...",
+                                icon='DOWNARROW_HLT')
+            op_p.character_id = character_id
 
         layout.separator()
         layout.prop(settings, "dmc5_use_blank_export", text="Use Blank Model for Unselected", icon='FILE_BLANK')
@@ -225,6 +270,7 @@ class DMC5_OT_BatchExportDialog(bpy.types.Operator):
 classes = [
     DMC5_GroupListItem,
     DMC5_UL_Groups,
+    DMC5_OT_PickArmature,
     DMC5_OT_PickBinding,
     DMC5_OT_ToggleEntry,
     DMC5_OT_BatchExportDialog,

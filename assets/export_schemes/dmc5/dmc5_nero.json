@@ -2,6 +2,7 @@
   "character": "Nero (DMC5)",
   "character_id": "dmc5_nero",
   "base_path": "x64/character/player",
+  "fbxskel": "pl0000_nero/pl0000_body/pl0000.fbxskel.3",
   "groups": [
     {
       "name": "身体(00)",

@@ -2,6 +2,7 @@
   "character": "V (DMC5)",
   "character_id": "dmc5_v",
   "base_path": "x64/character/player",
+  "fbxskel": "pl0200_v/pl0200_body/pl0200.fbxskel.3",
   "groups": [
     {
       "name": "身体(00)",

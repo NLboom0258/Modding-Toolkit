@@ -2,6 +2,7 @@
   "character": "Dante (DMC5)",
   "character_id": "dmc5_dante",
   "base_path": "x64/character/player",
+  "fbxskel": "pl0100_dante/pl0100_body/pl0100.fbxskel.3",
   "groups": [
     {
       "name": "身体(00)",
