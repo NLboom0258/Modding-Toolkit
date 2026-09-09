@@ -94,6 +94,19 @@ class DMC5_OT_PickBinding(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class DMC5_OT_ClearEntryBinding(bpy.types.Operator):
+    bl_idname = "dmc5.clear_entry_binding"
+    bl_label = "Clear Entry Binding"
+    bl_options = {'INTERNAL'}
+    character_id: bpy.props.StringProperty()
+    entry_id: bpy.props.StringProperty()
+    suffix: bpy.props.StringProperty()
+    def execute(self, context):
+        # 清掉该条目的 collection 绑定，回到“未选择”；条目仍启用 -> 走空模型替换逻辑
+        _set_binding(context.scene, self.character_id, self.entry_id, self.suffix, "")
+        return {'FINISHED'}
+
+
 class DMC5_GroupListItem(bpy.types.PropertyGroup):
     group_name: StringProperty()
     entry_count: IntProperty()
@@ -223,6 +236,9 @@ class DMC5_OT_BatchExportDialog(bpy.types.Operator):
                                     text=cur if cur else "Select...", icon='DOWNARROW_HLT')
                 op_p.scope = "ENTRY"; op_p.slot = "mesh"
                 op_p.character_id = character_id; op_p.entry_id = entry_id
+                if cur:
+                    op_c = row.operator("dmc5.clear_entry_binding", text="", icon='X')
+                    op_c.character_id = character_id; op_c.entry_id = entry_id; op_c.suffix = "mesh"
 
             if entry.get("mdf2"):
                 head = entry_box.row(align=True)
@@ -242,6 +258,9 @@ class DMC5_OT_BatchExportDialog(bpy.types.Operator):
                                     text=cur if cur else "Select...", icon='DOWNARROW_HLT')
                 op_p.scope = "ENTRY"; op_p.slot = "mdf2"
                 op_p.character_id = character_id; op_p.entry_id = entry_id
+                if cur:
+                    op_c = row.operator("dmc5.clear_entry_binding", text="", icon='X')
+                    op_c.character_id = character_id; op_c.entry_id = entry_id; op_c.suffix = "mdf2"
 
             if entry.get("chain"):
                 head = entry_box.row(align=True)
@@ -261,6 +280,9 @@ class DMC5_OT_BatchExportDialog(bpy.types.Operator):
                                     text=cur if cur else "Select...", icon='DOWNARROW_HLT')
                 op_p.scope = "ENTRY"; op_p.slot = "chain"
                 op_p.character_id = character_id; op_p.entry_id = entry_id
+                if cur:
+                    op_c = row.operator("dmc5.clear_entry_binding", text="", icon='X')
+                    op_c.character_id = character_id; op_c.entry_id = entry_id; op_c.suffix = "chain"
 
     def execute(self, context):
         bpy.ops.dmc5.batch_export()
@@ -273,6 +295,7 @@ classes = [
     DMC5_OT_PickArmature,
     DMC5_OT_PickBinding,
     DMC5_OT_ToggleEntry,
+    DMC5_OT_ClearEntryBinding,
     DMC5_OT_BatchExportDialog,
 ]
 

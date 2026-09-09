@@ -115,12 +115,20 @@ def _do_export_fbxskel(filepath, armature_name):
                 pb.matrix_basis = saved[pb.name]
 
 
-def _get_blank_path(filetype, filename=None):
-    """Return the path to a blank file in blank_files/dmc5/.
-    If filename is given, use that directly; otherwise fall back to blank.<filetype>."""
+def _get_blank_path_for(rel_path):
+    """Return the path to a blank file in blank_files/dmc5/, mirrored from its
+    original natives/x64-relative path (e.g. 'character/player/pl0100_dante/pl0100_body/pl0100.mesh.1808282334').
+    Storing blanks relative to the natives/x64 root means any directory (character, animation, ...)
+    can hold a blank without hard-coding a per-game folder."""
     addon_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    name = filename if filename else f"blank.{filetype}"
-    return os.path.join(addon_dir, "assets", "blank_files", "dmc5", name)
+    return os.path.join(addon_dir, "assets", "blank_files", "dmc5", rel_path.replace("/", os.sep))
+
+
+def _blank_rels(base_path, rel):
+    """Build the natives/x64-relative path for a blank file: strip the platform
+    segment (e.g. 'x64') out of base_path, then append the entry's own rel path."""
+    segs = [s for s in base_path.split("/") if s and s.lower() != "x64"]
+    return "/".join(segs + [rel]) if segs else rel
 
 
 class DMC5_OT_BatchExport(bpy.types.Operator):
@@ -217,16 +225,16 @@ class DMC5_OT_BatchExport(bpy.types.Operator):
                 print(f"[DMC5] FAILED {label}: {err}")
                 fail_count += 1
 
-        def try_blank(filetype, filepath, label, filename=None):
+        def try_blank_by_path(rel_path, filepath, label):
             nonlocal export_count, skip_count
-            blank_src = _get_blank_path(filetype, filename)
+            blank_src = _get_blank_path_for(rel_path)
             if os.path.isfile(blank_src):
                 os.makedirs(os.path.dirname(filepath), exist_ok=True)
                 shutil.copy2(blank_src, filepath)
                 print(f"[DMC5] {label}: BLANK -> {os.path.basename(filepath)}")
                 export_count += 1
             else:
-                print(f"[DMC5] SKIP blank (file not found): {blank_src}")
+                print(f"[DMC5] SKIP blank (no matching blank file): {rel_path}")
                 skip_count += 1
 
         # --- Per entry (normal mode) ---
@@ -242,7 +250,7 @@ class DMC5_OT_BatchExport(bpy.types.Operator):
                     if mesh_en and mesh_col:
                         try_export(_do_export_mesh, make_full(entry["mesh"], grp_bp), mesh_col, f"MESH {entry_id}")
                     elif mesh_en and use_blank:
-                        try_blank("mesh", make_full(entry["mesh"], grp_bp), f"MESH {entry_id}")
+                        try_blank_by_path(_blank_rels(grp_bp or base_path, entry["mesh"]), make_full(entry["mesh"], grp_bp), f"MESH {entry_id}")
 
                 mdf2_en = _get_enabled(scene, character_id, entry_id, "mdf2")
                 mdf2_col = _get_binding(scene, character_id, entry_id, "mdf2")
@@ -252,7 +260,7 @@ class DMC5_OT_BatchExport(bpy.types.Operator):
                             try_export(_do_export_mdf2, make_full(m, grp_bp), mdf2_col, f"MDF2 {entry_id}")
                     elif mdf2_en and use_blank:
                         for m in entry["mdf2"]:
-                            try_blank("mdf2", make_full(m, grp_bp), f"MDF2 {entry_id}")
+                            try_blank_by_path(_blank_rels(grp_bp or base_path, m), make_full(m, grp_bp), f"MDF2 {entry_id}")
 
                 chain_en = _get_enabled(scene, character_id, entry_id, "chain")
                 chain_col = _get_binding(scene, character_id, entry_id, "chain")
@@ -260,7 +268,7 @@ class DMC5_OT_BatchExport(bpy.types.Operator):
                     if chain_en and chain_col:
                         try_export(_do_export_chain, make_full(entry["chain"], grp_bp), chain_col, f"CHAIN {entry_id}")
                     elif chain_en and use_blank:
-                        try_blank("chain", make_full(entry["chain"], grp_bp), f"CHAIN {entry_id}")
+                        try_blank_by_path(_blank_rels(grp_bp or base_path, entry["chain"]), make_full(entry["chain"], grp_bp), f"CHAIN {entry_id}")
 
         # --- FBXSKEL（手动选 mod armature, 导出 rest 姿势）---
         fbxskel_raw = scheme.get("fbxskel", "")
