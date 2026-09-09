@@ -2,17 +2,119 @@
   "character": "Dante (DMC5)",
   "character_id": "dmc5_dante",
   "base_path": "x64/character/player",
-  "fbxskel": "pl0100_dante/pl0100_body/pl0100.fbxskel.3",
   "groups": [
     {
-      "name": "身体(00)",
+      "name": "身体",
       "entries": [
         {
           "id": "pl0100_body",
           "mesh": "pl0100_dante/pl0100_body/pl0100.mesh.1808282334",
           "mdf2": ["pl0100_dante/pl0100_body/pl0100.mdf2.10"],
           "chain": "pl0100_dante/pl0100_body/pl0100.chain.21",
+          "fbxskel": "pl0100_dante/pl0100_body/pl0100.fbxskel.3",
           "note": "身体"
+        }
+      ]
+    },
+    {
+      "name": "头部",
+      "entries": [
+        {
+          "id": "pl0100_01_head",
+          "mesh": "pl0100_dante/pl0100_01_head/pl0100_01.mesh.1808282334",
+          "mdf2": [
+            "pl0100_dante/pl0100_01_head/pl0100_01.mdf2.10",
+            "pl0100_dante/pl0100_01_head/pl0100_01_blood.mdf2.10",
+            "pl0100_dante/pl0100_01_head/pl0100_01_burn.mdf2.10",
+            "pl0100_dante/pl0100_01_head/pl0100_01_freeze.mdf2.10",
+            "pl0100_dante/pl0100_01_head/pl0100_01_slow.mdf2.10",
+            "pl0100_dante/pl0100_01_head/pl0100_01_trans.mdf2.10",
+            "pl0100_dante/pl0100_01_head/pl0100_01_wet.mdf2.10"
+          ],
+          "fbxskel": "pl0100_dante/pl0100_01_head/pl0100_01.fbxskel.3",
+          "note": "正常头部"
+        },
+        {
+          "id": "pl0100_11",
+          "mesh": "pl0100_dante/pl0100_11_head_event/pl0100_11.mesh.1808282334",
+          "mdf2": [
+            "pl0100_dante/pl0100_11_head_event/pl0100_11.mdf2.10",
+            "pl0100_dante/pl0100_11_head_event/pl0100_11_blood.mdf2.10",
+            "pl0100_dante/pl0100_11_head_event/pl0100_11_scar.mdf2.10",
+            "pl0100_dante/pl0100_11_head_event/pl0100_11_trans.mdf2.10",
+            "pl0100_dante/pl0100_11_head_event/pl0100_11_wet.mdf2.10"
+          ],
+          "note": "过场动画头(11)"
+        },
+        {
+          "id": "pl0100_11_light",
+          "mesh": "pl0100_dante/pl0100_11_head_event/pl0100_11_light.mesh.1808282334",
+          "mdf2": ["pl0100_dante/pl0100_11_head_event/pl0100_11.mdf2.10"],
+          "note": "过场动画头(light, 材质同 11)"
+        },
+        {
+          "id": "pl0100_11_eyelash",
+          "mesh": "pl0100_dante/pl0100_11_head_event/pl0100_11_event_eyelash.mesh.1808282334",
+          "mdf2": ["pl0100_dante/pl0100_11_head_event/pl0100_11_event_eyelash.mdf2.10"],
+          "note": "眼睫毛(主要用于序章的眼部特写)"
+        }
+      ]
+    },
+    {
+      "name": "头发",
+      "entries": [
+        {
+          "id": "pl0100_03_hair",
+          "mesh": "pl0100_dante/pl0100_03_hair/pl0100_03.mesh.1808282334",
+          "mdf2": [
+            "pl0100_dante/pl0100_03_hair/pl0100_03.mdf2.10",
+            "pl0100_dante/pl0100_03_hair/pl0100_03_blood.mdf2.10",
+            "pl0100_dante/pl0100_03_hair/pl0100_03_burn.mdf2.10",
+            "pl0100_dante/pl0100_03_hair/pl0100_03_freeze.mdf2.10",
+            "pl0100_dante/pl0100_03_hair/pl0100_03_slow.mdf2.10",
+            "pl0100_dante/pl0100_03_hair/pl0100_03_tranparent.mdf2.10",
+            "pl0100_dante/pl0100_03_hair/pl0100_03_trans.mdf2.10",
+            "pl0100_dante/pl0100_03_hair/pl0100_03_wet.mdf2.10"
+          ],
+          "chain": "pl0100_dante/pl0100_03_hair/pl0100_03_hair.chain.21",
+          "note": "正常发型"
+        },
+        {
+          "id": "pl0100_04_hair_fausthat",
+          "mesh": "pl0100_dante/pl0100_04_hair_fausthat/pl0100_04.mesh.1808282334",
+          "mdf2": [
+            "pl0100_dante/pl0100_04_hair_fausthat/pl0100_04.mdf2.10",
+            "pl0100_dante/pl0100_04_hair_fausthat/pl0100_04_blood.mdf2.10",
+            "pl0100_dante/pl0100_04_hair_fausthat/pl0100_04_burn.mdf2.10",
+            "pl0100_dante/pl0100_04_hair_fausthat/pl0100_04_freeze.mdf2.10",
+            "pl0100_dante/pl0100_04_hair_fausthat/pl0100_04_slow.mdf2.10",
+            "pl0100_dante/pl0100_04_hair_fausthat/pl0100_04_trans.mdf2.10",
+            "pl0100_dante/pl0100_04_hair_fausthat/pl0100_04_wet.mdf2.10"
+          ],
+          "note": "戴帽子"
+        },
+        {
+          "id": "pl0100_13_hair",
+          "mesh": "pl0100_dante/pl0100_13_hair/pl0100_13.mesh.1808282334",
+          "mdf2": [
+            "pl0100_dante/pl0100_13_hair/pl0100_13.mdf2.10",
+            "pl0100_dante/pl0100_13_hair/pl0100_13_blood.mdf2.10",
+            "pl0100_dante/pl0100_13_hair/pl0100_13_trans.mdf2.10",
+            "pl0100_dante/pl0100_13_hair/pl0100_13_wet.mdf2.10"
+          ],
+          "chain": "pl0100_dante/pl0100_13_hair/pl0100_13.chain.21",
+          "note": "背头发型"
+        },
+        {
+          "id": "pl0100_14_hair_fausthat",
+          "mesh": "pl0100_dante/pl0100_14_hair_fausthat/pl0100_14.mesh.1808282334",
+          "mdf2": [
+            "pl0100_dante/pl0100_14_hair_fausthat/pl0100_14.mdf2.10",
+            "pl0100_dante/pl0100_14_hair_fausthat/pl0100_14_blood.mdf2.10",
+            "pl0100_dante/pl0100_14_hair_fausthat/pl0100_14_trans.mdf2.10",
+            "pl0100_dante/pl0100_14_hair_fausthat/pl0100_14_wet.mdf2.10"
+          ],
+          "note": "背头发型+戴帽子"
         }
       ]
     }

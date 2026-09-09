@@ -270,16 +270,12 @@ class DMC5_OT_BatchExport(bpy.types.Operator):
                     elif chain_en and use_blank:
                         try_blank_by_path(_blank_rels(grp_bp or base_path, entry["chain"]), make_full(entry["chain"], grp_bp), f"CHAIN {entry_id}")
 
-        # --- FBXSKEL（手动选 mod armature, 导出 rest 姿势）---
-        fbxskel_raw = scheme.get("fbxskel", "")
-        fbxskel_paths = ([fbxskel_raw] if isinstance(fbxskel_raw, str) else list(fbxskel_raw))
-        fbxskel_paths = [p for p in fbxskel_paths if p]
-        fbx_enabled = _get_enabled(scene, character_id, "_fbxskel", "fbxskel")
-        fbx_arm = _get_binding(scene, character_id, "_fbxskel", "fbxskel")
-        if fbxskel_paths and fbx_enabled and fbx_arm:
-            for fbxskel_path in fbxskel_paths:
-                full = make_full(fbxskel_path)
-                try_export(_do_export_fbxskel, full, fbx_arm, f"FBXSKEL {os.path.basename(fbxskel_path)}")
+                # --- FBXSKEL（每部位独立：从该 entry 手动选的"无物理骨骨架副本"导出 rest 姿势）---
+                if entry.get("fbxskel"):
+                    fbx_arm = _get_binding(scene, character_id, entry_id, "fbxskel")
+                    if fbx_arm:
+                        try_export(_do_export_fbxskel, make_full(entry["fbxskel"], grp_bp), fbx_arm,
+                                   f"FBXSKEL {os.path.basename(entry['fbxskel'])}")
 
         if fail_count > 0:
             self.report({'WARNING'}, f"Done: {export_count} exported, {fail_count} failed, {skip_count} skipped")
