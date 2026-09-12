@@ -708,6 +708,218 @@
           "id": "m12_pl161_11",
           "mdf2": ["shader_03_cs_pl161_11_50_000.mdf2.10"],
           "note": "短发沾土2头部(M12过场觉醒真魔人-人形态)"
+        },
+        {
+          "id": "m12_weapon_re",
+          "mdf2": ["shader_03_cs_weapon_re_50_000.mdf2.10"],
+          "note": "武器·叛逆(融合)(M12过场觉醒真魔人)"
+        },
+        {
+          "id": "m12_weapon_sb",
+          "mdf2": ["shader_03_cs_weapon_sb_50_000.mdf2.10"],
+          "note": "武器·斯巴达(融合)(M12过场觉醒真魔人)"
+        }
+      ]
+    },
+    {
+      "name": "武器-叛逆",
+      "base_path": "x64/character/weapon",
+      "entries": [
+        {
+          "id": "wp01_000",
+          "mesh": "wp01_000/wp01_000.mesh.1808282334",
+          "mdf2": ["wp01_000/wp01_000.mdf2.10"],
+          "note": "叛逆"
+        }
+      ]
+    },
+    {
+      "name": "武器-黑檀木&白象牙",
+      "base_path": "x64/character/weapon",
+      "entries": [
+        {
+          "id": "wp01_001_00",
+          "mesh": "wp01_001_00/wp01_001_00.mesh.1808282334",
+          "mdf2": ["wp01_001_00/wp01_001_00.mdf2.10"],
+          "note": "黑檀木"
+        },
+        {
+          "id": "wp01_001_01",
+          "mesh": "wp01_001_01/wp01_001_01.mesh.1808282334",
+          "mdf2": ["wp01_001_01/wp01_001_01.mdf2.10"],
+          "note": "白象牙"
+        }
+      ]
+    },
+    {
+      "name": "武器-Coyote-A",
+      "base_path": "x64/character/weapon",
+      "entries": [
+        {
+          "id": "wp01_003",
+          "mesh": "wp01_003/wp01_003.mesh.1808282334",
+          "mdf2": ["wp01_003/wp01_003.mdf2.10"],
+          "note": "野狼-A 霰弹枪"
+        }
+      ]
+    },
+    {
+      "name": "武器-Balrog",
+      "base_path": "x64/character/weapon",
+      "entries": [
+        {
+          "id": "wp01_004",
+          "mesh": "wp01_004/wp01_004.mesh.1808282334",
+          "mdf2": ["wp01_004/wp01_004.mdf2.10"],
+          "note": "巴洛克(拳套/护甲: 护手+护肩+护足一体)"
+        }
+      ]
+    },
+    {
+      "name": "武器-斯巴达",
+      "base_path": "x64/character/weapon",
+      "entries": [
+        {
+          "id": "wp01_005",
+          "mesh": "wp01_005/wp01_005.mesh.1808282334",
+          "mdf2": ["wp01_005/wp01_005.mdf2.10"],
+          "note": "魔剑斯巴达(但丁/Trish共用)"
+        }
+      ]
+    },
+    {
+      "name": "武器-魔剑但丁",
+      "base_path": "x64/character/weapon",
+      "entries": [
+        {
+          "id": "wp01_006_00",
+          "mesh": "wp01_006/wp01_006_00.mesh.1808282334",
+          "mdf2": ["wp01_006/wp01_006_00.mdf2.10"],
+          "note": "魔剑但丁·本体"
+        },
+        {
+          "id": "wp01_006_01",
+          "mesh": "wp01_006/wp01_006_01.mesh.1808282334",
+          "mdf2": ["wp01_006/wp01_006_01.mdf2.10"],
+          "note": "魔剑但丁·幻影剑"
+        }
+      ]
+    },
+    {
+      "name": "武器-King Cerberus",
+      "base_path": "x64/character/weapon",
+      "entries": [
+        {
+          "id": "wp01_007_00",
+          "mesh": "wp01_007/wp01_007_00.mesh.1808282334",
+          "mdf2": ["wp01_007/wp01_007_00.mdf2.10"],
+          "chain": "wp01_007/wp01_007_00.chain.21",
+          "note": "链环形态"
+        },
+        {
+          "id": "wp01_007_01",
+          "mesh": "wp01_007/wp01_007_01.mesh.1808282334",
+          "mdf2": ["wp01_007/wp01_007_01.mdf2.10"],
+          "note": "长棍形态"
+        },
+        {
+          "id": "wp01_007_02",
+          "mesh": "wp01_007/wp01_007_02.mesh.1808282334",
+          "mdf2": ["wp01_007/wp01_007_02.mdf2.10"],
+          "note": "三节棍形态"
+        }
+      ]
+    },
+    {
+      "name": "武器-Kalina Ann",
+      "base_path": "x64/character/weapon",
+      "entries": [
+        {
+          "id": "wp01_008_00",
+          "mesh": "wp01_008_00/wp01_008_00.mesh.1808282334",
+          "mdf2": ["wp01_008_00/wp01_008_00.mdf2.10"],
+          "note": "卡丽娜·安(火箭筒; 但丁/Lady共用)"
+        },
+        {
+          "id": "wp01_008_01",
+          "mesh": "wp01_008_01/wp01_008_01.mesh.1808282334",
+          "mdf2": ["wp01_008_01/wp01_008_01.mdf2.10"],
+          "note": "卡丽娜·安Ⅱ"
+        }
+      ]
+    },
+    {
+      "name": "武器-Cavaliere",
+      "base_path": "x64/character/weapon",
+      "entries": [
+        {
+          "id": "wp01_009_03",
+          "mesh": "wp01_009/wp01_009_03.mesh.1808282334",
+          "mdf2": ["wp01_009/wp01_009_03.mdf2.10"],
+          "chain": "wp01_009/wp01_009_03.chain.21",
+          "note": "护目镜(人形态挂脖/魔人戴眼)"
+        },
+        {
+          "id": "wp01_009_00",
+          "mesh": "wp01_009_00/wp01_009_00.mesh.1808282334",
+          "mdf2": ["wp01_009_00/wp01_009_00.mdf2.10"],
+          "note": "车头"
+        },
+        {
+          "id": "wp01_009_01",
+          "mesh": "wp01_009_01/wp01_009_01.mesh.1808282334",
+          "mdf2": ["wp01_009_01/wp01_009_01.mdf2.10"],
+          "note": "车尾"
+        }
+      ]
+    },
+    {
+      "name": "武器-浮士德帽",
+      "base_path": "x64/character/weapon",
+      "entries": [
+        {
+          "id": "wp01_010",
+          "mesh": "wp01_010/wp01_010.mesh.1808282334",
+          "mdf2": [
+            "wp01_010/wp01_010.mdf2.10",
+            "wp01_010/wp01_010_00.mdf2.10"
+          ],
+          "note": "帽子本体"
+        },
+        {
+          "id": "wp01_010_01",
+          "mesh": "wp01_010/wp01_010_01.mesh.1808282334",
+          "mdf2": [
+            "wp01_010/wp01_010_01.mdf2.10",
+            "wp01_010/wp01_010_01_02.mdf2.10"
+          ],
+          "chain": "wp01_010/wp01_010_01.chain.21",
+          "note": "围巾"
+        },
+        {
+          "id": "wp01_010_02",
+          "mesh": "wp01_010/wp01_010_02.mesh.1808282334",
+          "mdf2": ["wp01_010/wp01_010_02.mdf2.10"],
+          "chain": "wp01_010/wp01_010_02.chain.21",
+          "note": "Magic Hat 小浮士德身体"
+        }
+      ]
+    },
+    {
+      "name": "武器-Cavaliere R",
+      "base_path": "x64/character/weapon",
+      "entries": [
+        {
+          "id": "wp01_011_00",
+          "mesh": "wp01_011_00/wp01_011_00.mesh.1808282334",
+          "mdf2": ["wp01_011_00/wp01_011_00.mdf2.10"],
+          "note": "车头(DLC)"
+        },
+        {
+          "id": "wp01_011_01",
+          "mesh": "wp01_011_01/wp01_011_01.mesh.1808282334",
+          "mdf2": ["wp01_011_01/wp01_011_01.mdf2.10"],
+          "note": "车尾(DLC)"
         }
       ]
     }
