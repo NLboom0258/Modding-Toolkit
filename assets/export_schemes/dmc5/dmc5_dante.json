@@ -601,6 +601,115 @@
           "note": "异色(沾土2)身体(仅材质, 无独立mesh)"
         }
       ]
+    },
+    {
+      "name": "残影-真魔人",
+      "base_path": "x64/vfx/mesh/mesh_character/pl0100",
+      "entries": [
+        {
+          "id": "vfx_pl0100_charge",
+          "mdf2": ["mesh_03_pl0100_charge_000_00_00.mdf2.10"],
+          "note": "真魔人蓄满时残影"
+        },
+        {
+          "id": "vfx_pl0100_warp_body",
+          "mdf2": ["mesh_03_pl0100_warp_000_00_00.mdf2.10"],
+          "note": "真魔人·本体残影"
+        },
+        {
+          "id": "vfx_pl0100_warp_wing",
+          "mdf2": ["mesh_03_pl0100_warp_000_00_01.mdf2.10"],
+          "note": "真魔人·翅膀残影"
+        }
+      ]
+    },
+    {
+      "name": "材质-过场M09",
+      "base_path": "x64/event/mission09/m09_400/shader/material",
+      "entries": [
+        {
+          "id": "m09_pl130_03",
+          "mdf2": ["shader_03_cs_pl130_03_50_000.mdf2.10"],
+          "note": "沾土头发(M09过场沾血)"
+        },
+        {
+          "id": "m09_pl130_11",
+          "mdf2": ["shader_03_cs_pl130_11_50_000.mdf2.10"],
+          "note": "沾土头部(M09过场沾血)"
+        },
+        {
+          "id": "m09_pl130_50",
+          "mdf2": ["shader_03_cs_pl130_50_000.mdf2.10"],
+          "note": "沾土身体(M09过场沾血)"
+        },
+        {
+          "id": "m09_pl130_c00_03",
+          "mdf2": ["shader_03_cs_pl130_c00_03_50_000.mdf2.10"],
+          "note": "沾土头发·异色(M09过场沾血)"
+        },
+        {
+          "id": "m09_pl130_c00_50",
+          "mdf2": ["shader_03_cs_pl130_c00_50_000.mdf2.10"],
+          "note": "沾土身体·异色(M09过场沾血)"
+        },
+        {
+          "id": "m09_pl160_11",
+          "mdf2": ["shader_03_cs_pl160_11_50_000.mdf2.10"],
+          "note": "短发沾土头部(M09过场沾血)"
+        },
+        {
+          "id": "m09_pl100_03",
+          "mdf2": ["shader_03_cs_pl100_03_50_000.mdf2.10"],
+          "note": "人形态头发(M09过场沾血)"
+        },
+        {
+          "id": "m09_pl100_c00_03",
+          "mdf2": ["shader_03_cs_pl100_c00_03_50_000.mdf2.10"],
+          "note": "人形态头发·异色(M09过场沾血)"
+        }
+      ]
+    },
+    {
+      "name": "材质-过场M11",
+      "base_path": "x64/event/mission11/m11_101/shader/material",
+      "entries": [
+        {
+          "id": "m11_ma_scar_body",
+          "mdf2": ["shader_03_cs_ma_scar_50_000.mdf2.10"],
+          "note": "身体·伤疤(M11过场魔人)"
+        },
+        {
+          "id": "m11_ma_scar_body_c00",
+          "mdf2": ["shader_03_cs_ma_scar_50_000_c00.mdf2.10"],
+          "note": "身体·伤疤·异色(M11过场魔人)"
+        }
+      ]
+    },
+    {
+      "name": "材质-过场M12",
+      "base_path": "x64/event/mission12/m12_300/shader/material",
+      "entries": [
+        {
+          "id": "m12_pl131_11",
+          "mdf2": ["shader_03_cs_pl131_11_50_000.mdf2.10"],
+          "note": "沾土2头部(M12过场觉醒真魔人-人形态)"
+        },
+        {
+          "id": "m12_pl131_50",
+          "mdf2": ["shader_03_cs_pl131_50_000.mdf2.10"],
+          "note": "沾土2身体(M12过场觉醒真魔人-人形态)"
+        },
+        {
+          "id": "m12_pl131_c00_50",
+          "mdf2": ["shader_03_cs_pl131_c00_50_000.mdf2.10"],
+          "note": "沾土2身体·异色(M12过场觉醒真魔人-人形态)"
+        },
+        {
+          "id": "m12_pl161_11",
+          "mdf2": ["shader_03_cs_pl161_11_50_000.mdf2.10"],
+          "note": "短发沾土2头部(M12过场觉醒真魔人-人形态)"
+        }
+      ]
     }
   ]
 }
