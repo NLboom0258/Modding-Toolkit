@@ -264,11 +264,16 @@ class DMC5_OT_BatchExport(bpy.types.Operator):
 
                 chain_en = _get_enabled(scene, character_id, entry_id, "chain")
                 chain_col = _get_binding(scene, character_id, entry_id, "chain")
-                if entry.get("chain"):
+                chain_paths = entry.get("chain")
+                if chain_paths:
+                    if isinstance(chain_paths, str):
+                        chain_paths = [chain_paths]
                     if chain_en and chain_col:
-                        try_export(_do_export_chain, make_full(entry["chain"], grp_bp), chain_col, f"CHAIN {entry_id}")
+                        for cp in chain_paths:
+                            try_export(_do_export_chain, make_full(cp, grp_bp), chain_col, f"CHAIN {entry_id}")
                     elif chain_en and use_blank:
-                        try_blank_by_path(_blank_rels(grp_bp or base_path, entry["chain"]), make_full(entry["chain"], grp_bp), f"CHAIN {entry_id}")
+                        for cp in chain_paths:
+                            try_blank_by_path(_blank_rels(grp_bp or base_path, cp), make_full(cp, grp_bp), f"CHAIN {entry_id}")
 
                 # --- FBXSKEL（每部位独立：从该 entry 手动选的"无物理骨骨架副本"导出 rest 姿势）---
                 if entry.get("fbxskel"):

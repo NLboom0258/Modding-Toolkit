@@ -5,7 +5,7 @@
   "fbxskel": "pl0200_v/pl0200_body/pl0200.fbxskel.3",
   "groups": [
     {
-      "name": "身体(00)",
+      "name": "身体",
       "entries": [
         {
           "id": "pl0200_body",

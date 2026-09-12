@@ -257,7 +257,9 @@ class DMC5_OT_BatchExportDialog(bpy.types.Operator):
                     ct = bpy.data.collections[cur].color_tag
                     if ct != "NONE":
                         ic = f"COLLECTION_{ct}"
-                head.label(text="Chain", icon=ic)
+                chain_val = entry["chain"]
+                chain_count = len(chain_val) if isinstance(chain_val, list) else 1
+                head.label(text=(f"Chain x{chain_count}" if chain_count > 1 else "Chain"), icon=ic)
                 row = entry_box.row(align=True)
                 op_p = row.operator("dmc5.pick_binding",
                                     text=cur if cur else "Select...", icon='DOWNARROW_HLT')
