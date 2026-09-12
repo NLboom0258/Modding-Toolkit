@@ -45,8 +45,12 @@ class DMC5_OT_ToggleEntry(bpy.types.Operator):
     character_id: bpy.props.StringProperty()
     entry_id: bpy.props.StringProperty()
     suffix: bpy.props.StringProperty()
+    # 该条目/组默认是否启用（武器组默认 False）。必须与绘制时用同一个默认值，
+    # 否则首次点击会“读到 True 再设成 False”而看着没反应。
+    default_enabled: bpy.props.BoolProperty(default=True)
     def execute(self, context):
-        current = _get_enabled(context.scene, self.character_id, self.entry_id, self.suffix)
+        current = _get_enabled(context.scene, self.character_id, self.entry_id, self.suffix,
+                               self.default_enabled)
         _set_enabled(context.scene, self.character_id, self.entry_id, self.suffix, not current)
         return {'FINISHED'}
 
@@ -194,6 +198,7 @@ class DMC5_OT_BatchExportDialog(bpy.types.Operator):
         layout.label(text=group["name"], icon='FILE_FOLDER')
         for entry in group["entries"]:
             entry_id = entry["id"]
+            entry_default = entry.get("enabled", group.get("default_enabled", True))
             header = entry_id
             note = entry.get("note", "")
             if note:
@@ -203,10 +208,11 @@ class DMC5_OT_BatchExportDialog(bpy.types.Operator):
 
             if entry.get("mesh"):
                 head = entry_box.row(align=True)
-                en = _get_enabled(scene, character_id, entry_id, "mesh")
+                en = _get_enabled(scene, character_id, entry_id, "mesh", entry_default)
                 op = head.operator("dmc5.toggle_entry", text="",
                                    icon='CHECKBOX_HLT' if en else 'CHECKBOX_DEHLT', emboss=False)
                 op.character_id = character_id; op.entry_id = entry_id; op.suffix = "mesh"
+                op.default_enabled = entry_default
                 cur = _get_binding(scene, character_id, entry_id, "mesh")
                 ic = 'OUTLINER_OB_MESH'
                 if cur and cur in bpy.data.collections:
@@ -225,10 +231,11 @@ class DMC5_OT_BatchExportDialog(bpy.types.Operator):
 
             if entry.get("mdf2"):
                 head = entry_box.row(align=True)
-                en = _get_enabled(scene, character_id, entry_id, "mdf2")
+                en = _get_enabled(scene, character_id, entry_id, "mdf2", entry_default)
                 op = head.operator("dmc5.toggle_entry", text="",
                                    icon='CHECKBOX_HLT' if en else 'CHECKBOX_DEHLT', emboss=False)
                 op.character_id = character_id; op.entry_id = entry_id; op.suffix = "mdf2"
+                op.default_enabled = entry_default
                 cur = _get_binding(scene, character_id, entry_id, "mdf2")
                 ic = 'MATERIAL'
                 if cur and cur in bpy.data.collections:
@@ -247,10 +254,11 @@ class DMC5_OT_BatchExportDialog(bpy.types.Operator):
 
             if entry.get("chain"):
                 head = entry_box.row(align=True)
-                en = _get_enabled(scene, character_id, entry_id, "chain")
+                en = _get_enabled(scene, character_id, entry_id, "chain", entry_default)
                 op = head.operator("dmc5.toggle_entry", text="",
                                    icon='CHECKBOX_HLT' if en else 'CHECKBOX_DEHLT', emboss=False)
                 op.character_id = character_id; op.entry_id = entry_id; op.suffix = "chain"
+                op.default_enabled = entry_default
                 cur = _get_binding(scene, character_id, entry_id, "chain")
                 ic = 'CONSTRAINT_BONE'
                 if cur and cur in bpy.data.collections:

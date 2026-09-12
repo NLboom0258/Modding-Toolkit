@@ -59,8 +59,8 @@ def _make_en_key(character_id, entry_id, suffix):
     return key.replace(" ", "_").replace("(", "").replace(")", "")
 
 
-def _get_enabled(scene, character_id, entry_id, suffix):
-    return scene.get(_make_en_key(character_id, entry_id, suffix), True)
+def _get_enabled(scene, character_id, entry_id, suffix, default=True):
+    return scene.get(_make_en_key(character_id, entry_id, suffix), default)
 
 
 def _set_enabled(scene, character_id, entry_id, suffix, value):
@@ -243,8 +243,11 @@ class DMC5_OT_BatchExport(bpy.types.Operator):
             grp_bp = group.get("base_path")
             for entry in group["entries"]:
                 entry_id = entry["id"]
+                # 默认启用状态：条目级 "enabled" 覆盖组级 "default_enabled"（缺省 True）。
+                # 武器组默认 False（不勾），未勾时不导出也不走空模型 -> 游戏用原版武器。
+                entry_default = entry.get("enabled", group.get("default_enabled", True))
 
-                mesh_en = _get_enabled(scene, character_id, entry_id, "mesh")
+                mesh_en = _get_enabled(scene, character_id, entry_id, "mesh", entry_default)
                 mesh_col = _get_binding(scene, character_id, entry_id, "mesh")
                 if entry.get("mesh"):
                     if mesh_en and mesh_col:
@@ -252,7 +255,7 @@ class DMC5_OT_BatchExport(bpy.types.Operator):
                     elif mesh_en and use_blank:
                         try_blank_by_path(_blank_rels(grp_bp or base_path, entry["mesh"]), make_full(entry["mesh"], grp_bp), f"MESH {entry_id}")
 
-                mdf2_en = _get_enabled(scene, character_id, entry_id, "mdf2")
+                mdf2_en = _get_enabled(scene, character_id, entry_id, "mdf2", entry_default)
                 mdf2_col = _get_binding(scene, character_id, entry_id, "mdf2")
                 if entry.get("mdf2"):
                     if mdf2_en and mdf2_col:
@@ -262,7 +265,7 @@ class DMC5_OT_BatchExport(bpy.types.Operator):
                         for m in entry["mdf2"]:
                             try_blank_by_path(_blank_rels(grp_bp or base_path, m), make_full(m, grp_bp), f"MDF2 {entry_id}")
 
-                chain_en = _get_enabled(scene, character_id, entry_id, "chain")
+                chain_en = _get_enabled(scene, character_id, entry_id, "chain", entry_default)
                 chain_col = _get_binding(scene, character_id, entry_id, "chain")
                 chain_paths = entry.get("chain")
                 if chain_paths:

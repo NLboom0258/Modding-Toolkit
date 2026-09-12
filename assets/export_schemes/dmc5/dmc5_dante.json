@@ -724,6 +724,7 @@
     {
       "name": "武器-叛逆",
       "base_path": "x64/character/weapon",
+      "default_enabled": false,
       "entries": [
         {
           "id": "wp01_000",
@@ -736,6 +737,7 @@
     {
       "name": "武器-黑檀木&白象牙",
       "base_path": "x64/character/weapon",
+      "default_enabled": false,
       "entries": [
         {
           "id": "wp01_001_00",
@@ -754,6 +756,7 @@
     {
       "name": "武器-Coyote-A",
       "base_path": "x64/character/weapon",
+      "default_enabled": false,
       "entries": [
         {
           "id": "wp01_003",
@@ -766,6 +769,7 @@
     {
       "name": "武器-Balrog",
       "base_path": "x64/character/weapon",
+      "default_enabled": false,
       "entries": [
         {
           "id": "wp01_004",
@@ -778,6 +782,7 @@
     {
       "name": "武器-斯巴达",
       "base_path": "x64/character/weapon",
+      "default_enabled": false,
       "entries": [
         {
           "id": "wp01_005",
@@ -790,6 +795,7 @@
     {
       "name": "武器-魔剑但丁",
       "base_path": "x64/character/weapon",
+      "default_enabled": false,
       "entries": [
         {
           "id": "wp01_006_00",
@@ -808,6 +814,7 @@
     {
       "name": "武器-King Cerberus",
       "base_path": "x64/character/weapon",
+      "default_enabled": false,
       "entries": [
         {
           "id": "wp01_007_00",
@@ -833,6 +840,7 @@
     {
       "name": "武器-Kalina Ann",
       "base_path": "x64/character/weapon",
+      "default_enabled": false,
       "entries": [
         {
           "id": "wp01_008_00",
@@ -851,6 +859,7 @@
     {
       "name": "武器-Cavaliere",
       "base_path": "x64/character/weapon",
+      "default_enabled": false,
       "entries": [
         {
           "id": "wp01_009_03",
@@ -876,6 +885,7 @@
     {
       "name": "武器-浮士德帽",
       "base_path": "x64/character/weapon",
+      "default_enabled": false,
       "entries": [
         {
           "id": "wp01_010",
@@ -908,18 +918,19 @@
     {
       "name": "武器-Cavaliere R",
       "base_path": "x64/character/weapon",
+      "default_enabled": false,
       "entries": [
         {
           "id": "wp01_011_00",
           "mesh": "wp01_011_00/wp01_011_00.mesh.1808282334",
           "mdf2": ["wp01_011_00/wp01_011_00.mdf2.10"],
-          "note": "车头(DLC)"
+          "note": "车头"
         },
         {
           "id": "wp01_011_01",
           "mesh": "wp01_011_01/wp01_011_01.mesh.1808282334",
           "mdf2": ["wp01_011_01/wp01_011_01.mdf2.10"],
-          "note": "车尾(DLC)"
+          "note": "车尾"
         }
       ]
     }
