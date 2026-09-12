@@ -417,6 +417,190 @@
           "note": "短发沾土2过场头(仅材质)"
         }
       ]
+    },
+    {
+      "name": "身体-异色",
+      "entries": [
+        {
+          "id": "pl0100_c00_body",
+          "mdf2": [
+            "pl0100_c00_dante/pl0100_c00_body/pl0100_c00.mdf2.10",
+            "pl0100_c00_dante/pl0100_c00_body/pl0100_c00_blood.mdf2.10",
+            "pl0100_c00_dante/pl0100_c00_body/pl0100_c00_burn.mdf2.10",
+            "pl0100_c00_dante/pl0100_c00_body/pl0100_c00_freeze.mdf2.10",
+            "pl0100_c00_dante/pl0100_c00_body/pl0100_c00_slow.mdf2.10",
+            "pl0100_c00_dante/pl0100_c00_body/pl0100_c00_trans.mdf2.10",
+            "pl0100_c00_dante/pl0100_c00_body/pl0100_c00_trans_ev.mdf2.10",
+            "pl0100_c00_dante/pl0100_c00_body/pl0100_c00_wet.mdf2.10"
+          ],
+          "note": "异色(人形态)身体(仅材质, 无独立mesh)"
+        }
+      ]
+    },
+    {
+      "name": "头发-异色",
+      "entries": [
+        {
+          "id": "pl0100_c00_03_hair",
+          "mesh": "pl0100_c00_dante/pl0100_c00_03_hair/pl0100_c00_03.mesh.1808282334",
+          "mdf2": [
+            "pl0100_c00_dante/pl0100_c00_03_hair/pl0100_c00_03.mdf2.10",
+            "pl0100_c00_dante/pl0100_c00_03_hair/pl0100_c00_03_blood.mdf2.10",
+            "pl0100_c00_dante/pl0100_c00_03_hair/pl0100_c00_03_burn.mdf2.10",
+            "pl0100_c00_dante/pl0100_c00_03_hair/pl0100_c00_03_freeze.mdf2.10",
+            "pl0100_c00_dante/pl0100_c00_03_hair/pl0100_c00_03_slow.mdf2.10",
+            "pl0100_c00_dante/pl0100_c00_03_hair/pl0100_c00_03_trans.mdf2.10",
+            "pl0100_c00_dante/pl0100_c00_03_hair/pl0100_c00_03_wet.mdf2.10"
+          ],
+          "note": "异色(人形态)头发"
+        },
+        {
+          "id": "pl0100_c00_04_hair_fausthat",
+          "mdf2": [
+            "pl0100_c00_dante/pl0100_c00_04_hair_fausthat/pl0100_c00_04.mdf2.10",
+            "pl0100_c00_dante/pl0100_c00_04_hair_fausthat/pl0100_c00_04_blood.mdf2.10",
+            "pl0100_c00_dante/pl0100_c00_04_hair_fausthat/pl0100_c00_04_burn.mdf2.10",
+            "pl0100_c00_dante/pl0100_c00_04_hair_fausthat/pl0100_c00_04_freeze.mdf2.10",
+            "pl0100_c00_dante/pl0100_c00_04_hair_fausthat/pl0100_c00_04_slow.mdf2.10",
+            "pl0100_c00_dante/pl0100_c00_04_hair_fausthat/pl0100_c00_04_trans.mdf2.10",
+            "pl0100_c00_dante/pl0100_c00_04_hair_fausthat/pl0100_c00_04_wet.mdf2.10"
+          ],
+          "note": "异色(人形态)头发(戴帽, 仅材质)"
+        },
+        {
+          "id": "pl0100_c00_13_hair",
+          "mesh": "pl0100_c00_dante/pl0100_c00_13_hair/pl0100_c00_13.mesh.1808282334",
+          "mdf2": [
+            "pl0100_c00_dante/pl0100_c00_13_hair/pl0100_c00_13.mdf2.10",
+            "pl0100_c00_dante/pl0100_c00_13_hair/pl0100_c00_13_blood.mdf2.10",
+            "pl0100_c00_dante/pl0100_c00_13_hair/pl0100_c00_13_trans.mdf2.10",
+            "pl0100_c00_dante/pl0100_c00_13_hair/pl0100_c00_13_wet.mdf2.10"
+          ],
+          "note": "异色(人形态)头发(背头)"
+        },
+        {
+          "id": "pl0100_c00_14_hair_fausthat",
+          "mdf2": [
+            "pl0100_c00_dante/pl0100_c00_14_hair_fausthat/pl0100_c00_14.mdf2.10",
+            "pl0100_c00_dante/pl0100_c00_14_hair_fausthat/pl0100_c00_14_blood.mdf2.10",
+            "pl0100_c00_dante/pl0100_c00_14_hair_fausthat/pl0100_c00_14_trans.mdf2.10",
+            "pl0100_c00_dante/pl0100_c00_14_hair_fausthat/pl0100_c00_14_wet.mdf2.10"
+          ],
+          "note": "异色(人形态)头发(背头戴帽, 仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "身体-异色魔人",
+      "entries": [
+        {
+          "id": "pl0110_c00_body",
+          "mdf2": [
+            "pl0110_c00_dante_majin/pl0110_c00_body/pl0110_c00.mdf2.10",
+            "pl0110_c00_dante_majin/pl0110_c00_body/pl0110_c00_end_trans.mdf2.10",
+            "pl0110_c00_dante_majin/pl0110_c00_body/pl0110_c00_trans.mdf2.10",
+            "pl0110_c00_dante_majin/pl0110_c00_body/pl0110_c00_trans_ev.mdf2.10"
+          ],
+          "note": "异色(魔人)身体(仅材质, 无独立mesh)"
+        }
+      ]
+    },
+    {
+      "name": "翅膀-异色魔人",
+      "entries": [
+        {
+          "id": "pl0110_c00_04_wingopen",
+          "mdf2": [
+            "pl0110_c00_dante_majin/pl0110_c00_04_wingopen/pl0110_c00_04.mdf2.10",
+            "pl0110_c00_dante_majin/pl0110_c00_04_wingopen/pl0110_c00_04_end_trans.mdf2.10",
+            "pl0110_c00_dante_majin/pl0110_c00_04_wingopen/pl0110_c00_04_trans.mdf2.10",
+            "pl0110_c00_dante_majin/pl0110_c00_04_wingopen/pl0110_c00_04_trans_ev.mdf2.10"
+          ],
+          "note": "异色(魔人)翅膀(展开, 仅材质)"
+        },
+        {
+          "id": "pl0110_c00_05_wingclose",
+          "mdf2": [
+            "pl0110_c00_dante_majin/pl0110_c00_05_wingclose/pl0110_c00_05.mdf2.10",
+            "pl0110_c00_dante_majin/pl0110_c00_05_wingclose/pl0110_c00_05_end_trans.mdf2.10",
+            "pl0110_c00_dante_majin/pl0110_c00_05_wingclose/pl0110_c00_05_trans.mdf2.10",
+            "pl0110_c00_dante_majin/pl0110_c00_05_wingclose/pl0110_c00_05_trans_ev.mdf2.10"
+          ],
+          "note": "异色(魔人)翅膀(收起, 仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "身体-异色沾土",
+      "entries": [
+        {
+          "id": "pl0130_c00_body",
+          "mdf2": [
+            "pl0130_c00_dante_dirt/pl0130_c00_body/pl0130_c00.mdf2.10",
+            "pl0130_c00_dante_dirt/pl0130_c00_body/pl0130_c00_blood.mdf2.10",
+            "pl0130_c00_dante_dirt/pl0130_c00_body/pl0130_c00_burn.mdf2.10",
+            "pl0130_c00_dante_dirt/pl0130_c00_body/pl0130_c00_enemy.mdf2.10",
+            "pl0130_c00_dante_dirt/pl0130_c00_body/pl0130_c00_freeze.mdf2.10",
+            "pl0130_c00_dante_dirt/pl0130_c00_body/pl0130_c00_slow.mdf2.10",
+            "pl0130_c00_dante_dirt/pl0130_c00_body/pl0130_c00_todome.mdf2.10",
+            "pl0130_c00_dante_dirt/pl0130_c00_body/pl0130_c00_trans.mdf2.10",
+            "pl0130_c00_dante_dirt/pl0130_c00_body/pl0130_c00_wet.mdf2.10"
+          ],
+          "note": "异色(沾土)身体(仅材质, 无独立mesh)"
+        }
+      ]
+    },
+    {
+      "name": "头发-异色沾土",
+      "entries": [
+        {
+          "id": "pl0130_c00_03_hair",
+          "mesh": "pl0130_c00_dante_dirt/pl0130_c00_03_hair/pl0130_c00_03.mesh.1808282334",
+          "mdf2": [
+            "pl0130_c00_dante_dirt/pl0130_c00_03_hair/pl0130_c00_03.mdf2.10",
+            "pl0130_c00_dante_dirt/pl0130_c00_03_hair/pl0130_c00_03_blood.mdf2.10",
+            "pl0130_c00_dante_dirt/pl0130_c00_03_hair/pl0130_c00_03_burn.mdf2.10",
+            "pl0130_c00_dante_dirt/pl0130_c00_03_hair/pl0130_c00_03_enemy.mdf2.10",
+            "pl0130_c00_dante_dirt/pl0130_c00_03_hair/pl0130_c00_03_freeze.mdf2.10",
+            "pl0130_c00_dante_dirt/pl0130_c00_03_hair/pl0130_c00_03_slow.mdf2.10",
+            "pl0130_c00_dante_dirt/pl0130_c00_03_hair/pl0130_c00_03_todome.mdf2.10",
+            "pl0130_c00_dante_dirt/pl0130_c00_03_hair/pl0130_c00_03_trans.mdf2.10",
+            "pl0130_c00_dante_dirt/pl0130_c00_03_hair/pl0130_c00_03_wet.mdf2.10"
+          ],
+          "note": "异色(沾土)头发"
+        },
+        {
+          "id": "pl0130_c00_04_hair_fausthat",
+          "mdf2": [
+            "pl0130_c00_dante_dirt/pl0130_c00_04_hair_fausthat/pl0130_c00_04.mdf2.10",
+            "pl0130_c00_dante_dirt/pl0130_c00_04_hair_fausthat/pl0130_c00_04_blood.mdf2.10",
+            "pl0130_c00_dante_dirt/pl0130_c00_04_hair_fausthat/pl0130_c00_04_burn.mdf2.10",
+            "pl0130_c00_dante_dirt/pl0130_c00_04_hair_fausthat/pl0130_c00_04_freeze.mdf2.10",
+            "pl0130_c00_dante_dirt/pl0130_c00_04_hair_fausthat/pl0130_c00_04_slow.mdf2.10",
+            "pl0130_c00_dante_dirt/pl0130_c00_04_hair_fausthat/pl0130_c00_04_trans.mdf2.10",
+            "pl0130_c00_dante_dirt/pl0130_c00_04_hair_fausthat/pl0130_c00_04_wet.mdf2.10"
+          ],
+          "note": "异色(沾土)头发(戴帽, 仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "身体-异色沾土2",
+      "entries": [
+        {
+          "id": "pl0131_c00_body",
+          "mdf2": [
+            "pl0131_c00_dante_middirt/pl0131_c00_body/pl0131_c00.mdf2.10",
+            "pl0131_c00_dante_middirt/pl0131_c00_body/pl0131_c00_blood.mdf2.10",
+            "pl0131_c00_dante_middirt/pl0131_c00_body/pl0131_c00_burn.mdf2.10",
+            "pl0131_c00_dante_middirt/pl0131_c00_body/pl0131_c00_freeze.mdf2.10",
+            "pl0131_c00_dante_middirt/pl0131_c00_body/pl0131_c00_slow.mdf2.10",
+            "pl0131_c00_dante_middirt/pl0131_c00_body/pl0131_c00_trans.mdf2.10",
+            "pl0131_c00_dante_middirt/pl0131_c00_body/pl0131_c00_wet.mdf2.10"
+          ],
+          "note": "异色(沾土2)身体(仅材质, 无独立mesh)"
+        }
+      ]
     }
   ]
 }
