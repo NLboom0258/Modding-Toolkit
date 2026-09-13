@@ -63,33 +63,77 @@
       ]
     },
     {
-      "name": "材质-过场M03",
-      "base_path": "x64/event/mission03/m03_600/shader/material",
+      "name": "身体-裸",
       "entries": [
         {
-          "id": "m03_body_event",
-          "mdf2": ["shader_03_cs_body_event_50_000.mdf2.10"],
-          "note": "身体(M3过场 裸体+黏液)"
-        },
+          "id": "pl0510_body",
+          "mesh": "pl0510_lady_naked/pl0510_body/pl0510.mesh.1808282334",
+          "mdf2": ["pl0510_lady_naked/pl0510_body/pl0510.mdf2.10"],
+          "note": "裸(仅身体)"
+        }
+      ]
+    },
+    {
+      "name": "身体-工装",
+      "entries": [
         {
-          "id": "m03_hair_event",
-          "mdf2": ["shader_03_cs_hair_event_50_000.mdf2.10"],
-          "note": "头发(M3过场)"
-        },
+          "id": "pl0520_body",
+          "mesh": "pl0520_lady_overall/pl0520_body/pl0520.mesh.1808282334",
+          "mdf2": ["pl0520_lady_overall/pl0520_body/pl0520.mdf2.10"],
+          "chain": "pl0520_lady_overall/pl0520_body/pl0520.chain.21",
+          "note": "工装"
+        }
+      ]
+    },
+    {
+      "name": "身体-沾土",
+      "entries": [
         {
-          "id": "m03_hair_c00_event",
-          "mdf2": ["shader_03_cs_hair_c00_event_50_000.mdf2.10"],
-          "note": "头发·异色(M3过场)"
-        },
+          "id": "pl0530_body",
+          "mdf2": ["pl0530_lady_dirt/pl0530_body/pl0530.mdf2.10"],
+          "note": "沾土身体(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "头部-沾土",
+      "entries": [
         {
-          "id": "m03_head_event",
-          "mdf2": ["shader_03_cs_head_event_50_000.mdf2.10"],
-          "note": "头部(M3过场)"
-        },
+          "id": "pl0530_11",
+          "mdf2": ["pl0530_lady_dirt/pl0530_11_head_event/pl0530_11.mdf2.10"],
+          "note": "沾土过场头(11, 仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "身体-沾土布",
+      "entries": [
         {
-          "id": "m03_head_c00_event",
-          "mdf2": ["shader_03_cs_head_c00_event_50_000.mdf2.10"],
-          "note": "头部·异色(M3过场)"
+          "id": "pl0531_body",
+          "mdf2": ["pl0531_lady_dirtcloth/pl0531_body/pl0531.mdf2.10"],
+          "note": "沾土布身体(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "毯子-裹",
+      "entries": [
+        {
+          "id": "pl0540_blanket",
+          "mesh": "pl0540_lady_blanketclose/pl0540_blanket/pl0540.mesh.1808282334",
+          "mdf2": ["pl0540_lady_blanketclose/pl0540_blanket/pl0540.mdf2.10"],
+          "note": "毯子(裹住)"
+        }
+      ]
+    },
+    {
+      "name": "毯子-落",
+      "entries": [
+        {
+          "id": "pl0550_blanket",
+          "mesh": "pl0550_lady_blanketdrop/pl0550_blanket/pl0550.mesh.1808282334",
+          "mdf2": ["pl0550_lady_blanketdrop/pl0550_blanket/pl0550.mdf2.10"],
+          "note": "毯子(掉落)"
         }
       ]
     },
@@ -130,6 +174,69 @@
           "id": "pl0500_c00_13_hair",
           "mdf2": ["pl0500_c00_lady/pl0500_c00_13_hair/pl0500_c00_13.mdf2.10"],
           "note": "异色头发(13, 仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "身体-异色沾土",
+      "entries": [
+        {
+          "id": "pl0530_c00_body",
+          "mdf2": ["pl0530_c00_lady_dirt/pl0530_c00_body/pl0530_c00.mdf2.10"],
+          "note": "异色沾土身体(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "头部-异色沾土",
+      "entries": [
+        {
+          "id": "pl0530_c00_11",
+          "mdf2": ["pl0530_c00_lady_dirt/pl0530_c00_11_head_event/pl0530_c00_11.mdf2.10"],
+          "note": "异色沾土过场头(11, 仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "身体-异色沾土布",
+      "entries": [
+        {
+          "id": "pl0531_c00_body",
+          "mdf2": ["pl0531_c00_lady_dirtcloth/pl0531_c00_body/pl0531_c00.mdf2.10"],
+          "note": "异色沾土布身体(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "过场动画-M03",
+      "base_path": "x64/event/mission03/m03_600/shader",
+      "entries": [
+        {
+          "id": "m03_body",
+          "mesh": "mesh/mesh_03_cs_suv_body_50_000.mesh.1808282334",
+          "mdf2": ["material/shader_03_cs_body_event_50_000.mdf2.10"],
+          "note": "身体(M3过场 裸体+黏液; 模型)"
+        },
+        {
+          "id": "m03_head",
+          "mesh": "mesh/mesh_03_cs_suv_head_50_000.mesh.1808282334",
+          "mdf2": ["material/shader_03_cs_head_event_50_000.mdf2.10"],
+          "note": "头部(M3过场; 模型)"
+        },
+        {
+          "id": "m03_head_c00",
+          "mdf2": ["material/shader_03_cs_head_c00_event_50_000.mdf2.10"],
+          "note": "头部·异色(M3过场; 仅材质)"
+        },
+        {
+          "id": "m03_hair",
+          "mdf2": ["material/shader_03_cs_hair_event_50_000.mdf2.10"],
+          "note": "头发(M3过场; 用主模型, 仅材质)"
+        },
+        {
+          "id": "m03_hair_c00",
+          "mdf2": ["material/shader_03_cs_hair_c00_event_50_000.mdf2.10"],
+          "note": "头发·异色(M3过场; 仅材质)"
         }
       ]
     },

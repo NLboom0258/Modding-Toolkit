@@ -624,7 +624,7 @@
       ]
     },
     {
-      "name": "材质-过场M09",
+      "name": "过场动画-M09",
       "base_path": "x64/event/mission09/m09_400/shader/material",
       "entries": [
         {
@@ -670,7 +670,7 @@
       ]
     },
     {
-      "name": "材质-过场M11",
+      "name": "过场动画-M11",
       "base_path": "x64/event/mission11/m11_101/shader/material",
       "entries": [
         {
@@ -686,7 +686,7 @@
       ]
     },
     {
-      "name": "材质-过场M12",
+      "name": "过场动画-M12",
       "base_path": "x64/event/mission12/m12_300/shader/material",
       "entries": [
         {
