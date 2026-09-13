@@ -1,0 +1,156 @@
+{
+  "character": "Lady (DMC5)",
+  "character_id": "dmc5_lady",
+  "base_path": "x64/character/player",
+  "groups": [
+    {
+      "name": "身体",
+      "entries": [
+        {
+          "id": "pl0500_body",
+          "mesh": "pl0500_lady/pl0500_body/pl0500.mesh.1808282334",
+          "mdf2": ["pl0500_lady/pl0500_body/pl0500.mdf2.10"],
+          "chain": "pl0500_lady/pl0500_body/pl0500.chain.21",
+          "fbxskel": "pl0500_lady/pl0500_body/pl0500.fbxskel.3",
+          "note": "身体"
+        }
+      ]
+    },
+    {
+      "name": "头部",
+      "entries": [
+        {
+          "id": "pl0500_01_head",
+          "mesh": "pl0500_lady/pl0500_01_head/pl0500_01.mesh.1808282334",
+          "mdf2": ["pl0500_lady/pl0500_01_head/pl0500_01.mdf2.10"],
+          "fbxskel": "pl0500_lady/pl0500_01_head/pl0500_01.fbxskel.3",
+          "note": "正常头部"
+        },
+        {
+          "id": "pl0500_11",
+          "mesh": "pl0500_lady/pl0500_11_head_event/pl0500_11.mesh.1808282334",
+          "mdf2": ["pl0500_lady/pl0500_11_head_event/pl0500_11.mdf2.10"],
+          "note": "过场动画头(11)"
+        },
+        {
+          "id": "pl0500_11_light",
+          "mesh": "pl0500_lady/pl0500_11_head_event/pl0500_11_light.mesh.1808282334",
+          "mdf2": ["pl0500_lady/pl0500_11_head_event/pl0500_11.mdf2.10"],
+          "note": "过场动画头(light, 材质同11)"
+        }
+      ]
+    },
+    {
+      "name": "头发",
+      "entries": [
+        {
+          "id": "pl0500_03_hair",
+          "mesh": "pl0500_lady/pl0500_03_hair/pl0500_03.mesh.1808282334",
+          "mdf2": [
+            "pl0500_lady/pl0500_03_hair/pl0500_03.mdf2.10",
+            "pl0500_lady/pl0500_03_hair/pl0500_03_transparent.mdf2.10"
+          ],
+          "chain": "pl0500_lady/pl0500_03_hair/pl0500_03.chain.21",
+          "note": "头发(03)"
+        },
+        {
+          "id": "pl0500_13_hair",
+          "mesh": "pl0500_lady/pl0500_13_hair/pl0500_13.mesh.1808282334",
+          "mdf2": ["pl0500_lady/pl0500_13_hair/pl0500_13.mdf2.10"],
+          "chain": "pl0500_lady/pl0500_13_hair/pl0500_13.chain.21",
+          "note": "头发(13)"
+        }
+      ]
+    },
+    {
+      "name": "材质-过场M03",
+      "base_path": "x64/event/mission03/m03_600/shader/material",
+      "entries": [
+        {
+          "id": "m03_body_event",
+          "mdf2": ["shader_03_cs_body_event_50_000.mdf2.10"],
+          "note": "身体(M3过场 裸体+黏液)"
+        },
+        {
+          "id": "m03_hair_event",
+          "mdf2": ["shader_03_cs_hair_event_50_000.mdf2.10"],
+          "note": "头发(M3过场)"
+        },
+        {
+          "id": "m03_hair_c00_event",
+          "mdf2": ["shader_03_cs_hair_c00_event_50_000.mdf2.10"],
+          "note": "头发·异色(M3过场)"
+        },
+        {
+          "id": "m03_head_event",
+          "mdf2": ["shader_03_cs_head_event_50_000.mdf2.10"],
+          "note": "头部(M3过场)"
+        },
+        {
+          "id": "m03_head_c00_event",
+          "mdf2": ["shader_03_cs_head_c00_event_50_000.mdf2.10"],
+          "note": "头部·异色(M3过场)"
+        }
+      ]
+    },
+    {
+      "name": "身体-异色",
+      "entries": [
+        {
+          "id": "pl0500_c00_body",
+          "mdf2": ["pl0500_c00_lady/pl0500_c00_body/pl0500_c00.mdf2.10"],
+          "note": "异色身体(仅材质, 无独立mesh)"
+        }
+      ]
+    },
+    {
+      "name": "头部-异色",
+      "entries": [
+        {
+          "id": "pl0500_c00_01_head",
+          "mdf2": ["pl0500_c00_lady/pl0500_c00_01_head/pl0500_c00_01.mdf2.10"],
+          "note": "异色头部(仅材质)"
+        },
+        {
+          "id": "pl0500_c00_11",
+          "mdf2": ["pl0500_c00_lady/pl0500_c00_11_head_event/pl0500_c00_11.mdf2.10"],
+          "note": "异色过场头(11, 仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "头发-异色",
+      "entries": [
+        {
+          "id": "pl0500_c00_03_hair",
+          "mdf2": ["pl0500_c00_lady/pl0500_c00_03_hair/pl0500_c00_03.mdf2.10"],
+          "note": "异色头发(03, 仅材质)"
+        },
+        {
+          "id": "pl0500_c00_13_hair",
+          "mdf2": ["pl0500_c00_lady/pl0500_c00_13_hair/pl0500_c00_13.mdf2.10"],
+          "note": "异色头发(13, 仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "武器-卡丽娜·安的带子",
+      "base_path": "x64/character/weapon",
+      "default_enabled": false,
+      "entries": [
+        {
+          "id": "wp05_008_02",
+          "mesh": "wp05_008/wp05_008_02.mesh.1808282334",
+          "mdf2": ["wp05_008/wp05_008_02.mdf2.10"],
+          "note": "肩带(挂肩; 带躯干骨骼链)"
+        },
+        {
+          "id": "wp05_008_03",
+          "mesh": "wp05_008/wp05_008_03.mesh.1808282334",
+          "mdf2": ["wp05_008/wp05_008_03.mdf2.10"],
+          "note": "肩带(单独; root 在原点)"
+        }
+      ]
+    }
+  ]
+}
