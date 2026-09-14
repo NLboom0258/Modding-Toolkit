@@ -524,6 +524,11 @@ class MHW_PT_MainPanel(bpy.types.Panel):
                          text=T("ui.main_panel.btn_separate_by_materials"), icon='MOD_EXPLODE')
             col.operator("mhw.create_outline",
                          text=T("ui.main_panel.btn_create_outline"), icon='MOD_SOLIDIFY')
+            # Normalizes object names into the shape RE Mesh Editor reads back on
+            # import. Nothing about it is game-specific, so it sits here rather
+            # than inside a game's tool box.
+            col.operator("mhw.rename_mesh_re_format",
+                         text=T("ui.main_panel.btn_rename_mesh_re_format"), icon='SORTALPHA')
 
             col.separator(factor=0.8)
             col.label(text=T("ui.main_panel.label_texture_processing"), icon='TEXTURE')

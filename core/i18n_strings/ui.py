@@ -231,18 +231,13 @@ STRINGS = {
     "ui.game_sections.btn_batch_export_mhrs": {"EN": "MHRS Batch Exporter", "ZH": "MHRS 批量导出"},
     "ui.game_sections.btn_batch_export_re9":  {"EN": "RE9 Batch Exporter",  "ZH": "RE9 批量导出"},
     "ui.game_sections.btn_batch_export_dmc5": {"EN": "DMC5 Batch Exporter", "ZH": "DMC5 批量导出"},
-    "ui.game_sections.btn_rename_mesh_re_format": {"EN": "Rename Meshes (RE Format)", "ZH": "重命名网格(RE 格式)"},
     "ui.game_sections.btn_mdf_convert_material": {"EN": "Convert to Another MDF Material", "ZH": "转换为其他MDF材质"},
     "ui.game_sections.btn_mdf_bulk_generate": {"EN": "Generate MDF Materials from Mesh", "ZH": "按网格批量生成 MDF 材质"},
 
-    # ── games/dmc5/mesh_rename.py — RE-format mesh renaming ─────────────────
-    "dmc5.mesh_rename.need_selection": {"EN": "Select at least one mesh object",
-                                        "ZH": "请至少选中一个网格物体"},
-    "dmc5.mesh_rename.multi_collection": {
-        "EN": "The selected meshes belong to different mesh collections; process one collection at a time",
-        "ZH": "选中的网格属于不同的网格集合，请一次只处理一个集合"},
-    "dmc5.mesh_rename.done": {"EN": "Renamed {count} mesh object(s)",
-                              "ZH": "已重命名 {count} 个网格物体"},
+    # ── games/dmc5/mdf_tex_processor_ui.py ────────────────────────────────
+    "dmc5.mdf_tex_processor_ui.dialog_desc": {
+        "EN": "Process textures on top of an existing MDF2 material for the selected meshes",
+        "ZH": "在已有 MDF2 材质的基础上处理选中网格的贴图"},
 
     # ── games/dmc5/mdf_bulk_generate.py — 从模板材质批量生成 ────────────────
     "dmc5.mdf_bulk.need_template": {"EN": "Select an MDF material object as the template first",
@@ -313,6 +308,15 @@ STRINGS = {
     "ui.main_panel.btn_create_re_chain":          {"EN": "One-Click Create RE Chain", "ZH": "一键创建 RE Chain"},
     "ui.main_panel.btn_gen_fakebone":             {"EN": "Generate Fake Bones", "ZH": "生成假骨骼"},
     "ui.main_panel.btn_sync_child_orientation":   {"EN": "Sync Child Orientation & Roll", "ZH": "同步子级朝向及扭转"},
+
+    # ── MHW_OT_RenameMeshREFormat ────────────────────────────────────────────
+    "ui.main_panel.btn_rename_mesh_re_format":    {"EN": "Rename Meshes (RE Format)", "ZH": "重命名网格(RE 格式)"},
+    "ui.main_panel.mesh_rename_need_selection":  {"EN": "Select at least one mesh object", "ZH": "请至少选中一个网格物体"},
+    "ui.main_panel.mesh_rename_multi_collection": {
+        "EN": "The selected meshes belong to different mesh collections; process one collection at a time",
+        "ZH": "选中的网格属于不同的网格集合，请一次只处理一个集合"},
+    "ui.main_panel.mesh_rename_done":            {"EN": "Renamed {count} mesh object(s)",
+                                                  "ZH": "已重命名 {count} 个网格物体"},
 
     # ── MHW_OT_ShapeKeyToWeights ─────────────────────────────────────────────────
     "ui.main_panel.sk_sign_pos":                  {"EN": "+ (positive)", "ZH": "+（正向）"},

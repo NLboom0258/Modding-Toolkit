@@ -20,7 +20,7 @@ is what "rebuild the material list from this one" means.
 import bpy
 
 from ...core.i18n import T
-from .mesh_rename import material_name_of
+from ...core.mesh_utils import material_name_of
 
 
 _mesh_collection_items_cache = []

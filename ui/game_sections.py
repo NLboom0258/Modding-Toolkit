@@ -341,15 +341,10 @@ SECTIONS = {
     'dmc5': {
         'label': "DMC5 Tools", 'icon': 'GHOST_ENABLED',
         'io': [_pre_export_check('DMC5'), _batch_export('dmc5', "ui.game_sections.btn_batch_export_dmc5")],
-        'rig': [
-            # RE Engine mesh files store no object name -- only the group number,
-            # submesh index and material name -- so this just normalizes the
-            # Group_<N>_Sub_<M>__<material> name RE Mesh Editor reads back.  It
-            # replaces Modder Batch Tool's copy, which numbered by selection
-            # order; this one numbers by object name, so it is reproducible.
-            op("dmc5.rename_mesh_re_format",
-               "ui.game_sections.btn_rename_mesh_re_format", 'SORTALPHA'),
-        ],
+        # The RE-format mesh rename moved to Basic Tools > Mesh (core/mesh_ops.py,
+        # mhw.rename_mesh_re_format): it only normalizes a name the game never
+        # reads, so there is nothing DMC5-specific about it.
+        'rig': [],
         'material': [
             # convert_to_packed_shader / mdf_generator 依赖 assets/mdf_presets/dmc5 +
             # _FAMILY_CONFIG['DMC5'] + mdf_generator(均延后) -- 暂不放进 DMC5 section。

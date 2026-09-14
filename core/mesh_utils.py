@@ -17,6 +17,8 @@ order in the armature's ``['CUSTOM']`` property, which nothing in this addon
 reads.
 """
 
+import re
+
 import numpy as np
 
 _TEMP_PREFIX = "__mtk_split_"
@@ -339,3 +341,94 @@ def create_outline_shell(context, objects, vertex_group_name="", thickness=0.001
         added += 1
 
     return added, missing_vg, not_baked
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# RE-format mesh naming: ``Group_<N>_Sub_<M>__<material>``
+#
+# RE Engine's mesh file stores no object names at all -- only a viscon group
+# number, a submesh index and a material-name string.  RE Mesh Editor rebuilds
+# ``Group_<N>_Sub_<M>__<material>`` out of those three on import, and parses the
+# same shape back on export -- where only ``Group_<N>`` (the group) and the text
+# after ``__`` (the material) are read; the ``Sub`` number is ignored there.
+#
+# So renaming only normalizes the *name*, under two rules:
+#
+# * objects are sorted by their **current name** -- the order the Outliner shows
+#   with "Sort Alphabetically" enabled.  That is stable; the collection's internal
+#   object order is not, since it changes whenever an object is added or removed.
+# * ``Sub`` is numbered from 0 within each ``Group_<N>`` (objects with no
+#   ``Group_`` in their name count as group 0).
+#
+# No zero padding: RE Mesh Editor itself writes ``Sub_0``/``Sub_1``/... on import
+# and the community follows the same shape, and the game never reads this string.
+#
+# Names must stay ASCII.  RE Mesh Editor's ``read_string`` decodes the mesh name
+# table one byte at a time as UTF-8, so a multi-byte (Japanese/Chinese) bone,
+# vertex-group or material name makes the exported mesh impossible to re-import.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_GROUP_RE = re.compile(r"Group_(\d+)")
+_NO_MATERIAL = "NO_MATERIAL"
+
+
+def parse_group_id(name):
+    """Return the ``Group_<N>`` number in *name*, or 0 when it carries none."""
+    match = _GROUP_RE.search(name)
+    return int(match.group(1)) if match else 0
+
+
+def material_name_of(obj):
+    """Material name for *obj*.
+
+    Same precedence RE Mesh Editor applies on export, in the same order: the
+    text after ``__`` in the object name first, its first Blender material as
+    the fallback, and a placeholder when neither is usable.
+    """
+    if "__" in obj.name:
+        tail = obj.name.split("__", 1)[1].split(".")[0].strip()
+        if tail:
+            return tail
+    if obj.data.materials:
+        material = obj.data.materials[0]
+        if material is not None:
+            head = material.name.split(".")[0].strip()
+            if head:
+                return head
+    return _NO_MATERIAL
+
+
+def build_rename_plan(objects):
+    """Return ``[(obj, new_name)]`` for *objects*, sorted by name, numbered per group."""
+    counters = {}
+    plan = []
+    for obj in sorted(objects, key=lambda o: o.name):
+        group_id = parse_group_id(obj.name)
+        sub = counters.get(group_id, 0)
+        counters[group_id] = sub + 1
+        plan.append((obj, f"Group_{group_id}_Sub_{sub}__{material_name_of(obj)}"))
+    return plan
+
+
+def rename_mesh_objects(objects):
+    """Apply :func:`build_rename_plan` in two passes and return the plan.
+
+    The first pass parks every object on a unique temporary name, so a target
+    name can never collide with an object that has not been renamed yet --
+    Blender object names are unique, and a plan can legitimately reuse a name
+    another object still holds.
+    """
+    plan = build_rename_plan(objects)
+    for index, (obj, _new_name) in enumerate(plan):
+        obj.name = f"__mtk_rename_tmp_{index}"
+    for obj, new_name in plan:
+        obj.name = new_name
+    return plan
+
+
+def mesh_collection_of(obj):
+    """Return the ``RE_MESH_COLLECTION`` *obj* belongs to, or None."""
+    for coll in obj.users_collection:
+        if coll.get("~TYPE") == "RE_MESH_COLLECTION":
+            return coll
+    return None

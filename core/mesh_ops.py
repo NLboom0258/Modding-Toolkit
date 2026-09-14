@@ -19,6 +19,7 @@ import re
 
 from .i18n import T, get_lang
 from . import weight_utils
+from .mesh_utils import mesh_collection_of, rename_mesh_objects
 
 
 def _face_normal_origin_items(self, context):
@@ -791,6 +792,59 @@ Groups whose suffixed name matches a real bone in the bound armature are skipped
         return {'FINISHED'}
 
 
+# ── RE-format mesh renaming ───────────────────────────────────────────────────
+#
+# RE Engine's mesh file stores no object names at all -- only a viscon group
+# number, a submesh index and a material-name string.  RE Mesh Editor rebuilds
+# ``Group_<N>_Sub_<M>__<material>`` out of those three on import, and parses the
+# same shape back on export -- where only ``Group_<N>`` (the group) and the text
+# after ``__`` (the material) are read; the ``Sub`` number is ignored there.
+#
+# So renaming only normalizes the *name*, under two rules:
+#
+# * objects are sorted by their **current name** -- the order the Outliner shows
+#   with "Sort Alphabetically" enabled.  That is stable; the collection's internal
+#   object order is not, since it changes whenever an object is added or removed.
+# * ``Sub`` is numbered from 0 within each ``Group_<N>`` (objects with no
+#   ``Group_`` in their name count as group 0).
+#
+# No zero padding: RE Mesh Editor itself writes ``Sub_0``/``Sub_1``/... on import
+# and the community follows the same shape, and the game never reads this string.
+#
+# Names must stay ASCII.  RE Mesh Editor's ``read_string`` decodes the mesh name
+# table one byte at a time as UTF-8, so a multi-byte (Japanese/Chinese) bone,
+# vertex-group or material name makes the exported mesh impossible to re-import.
+
+class MHW_OT_RenameMeshREFormat(bpy.types.Operator):
+    """Rename selected meshes to Group_<N>_Sub_<M>__<material>: sorted by object name, numbered from Sub_0 within each Group_<N>, matching the names RE Mesh Editor writes on import. All selected meshes must be in one mesh collection, and object/bone/material names must stay ASCII."""
+
+    bl_idname = "mhw.rename_mesh_re_format"
+    bl_label = "Rename Meshes (RE Format)"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return any(obj.type == 'MESH' for obj in context.selected_objects)
+
+    def execute(self, context):
+        meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
+        if not meshes:
+            self.report({'ERROR'}, T("ui.main_panel.mesh_rename_need_selection"))
+            return {'CANCELLED'}
+
+        # One collection at a time.  Numbering restarts per group, so two
+        # collections would both emit Group_0_Sub_0__..., and Blender's unique
+        # object names would silently force a ".001" suffix onto the second.
+        collections = {mesh_collection_of(obj) for obj in meshes}
+        if len(collections) > 1:
+            self.report({'ERROR'}, T("ui.main_panel.mesh_rename_multi_collection"))
+            return {'CANCELLED'}
+
+        plan = rename_mesh_objects(meshes)
+        self.report({'INFO'}, T("ui.main_panel.mesh_rename_done").format(count=len(plan)))
+        return {'FINISHED'}
+
+
 # ── register / unregister ─────────────────────────────────────────────────────
 
 classes = [
@@ -803,6 +857,7 @@ classes = [
     MHW_OT_SeparateByMaterials,
     MHW_OT_CreateOutline,
     MHW_OT_MergeRenamedVGroups,
+    MHW_OT_RenameMeshREFormat,
 ]
 
 
