@@ -233,6 +233,7 @@ STRINGS = {
     "ui.game_sections.btn_batch_export_dmc5": {"EN": "DMC5 Batch Exporter", "ZH": "DMC5 批量导出"},
     "ui.game_sections.btn_rename_mesh_re_format": {"EN": "Rename Meshes (RE Format)", "ZH": "重命名网格(RE 格式)"},
     "ui.game_sections.btn_mdf_convert_material": {"EN": "Convert to Another MDF Material", "ZH": "转换为其他MDF材质"},
+    "ui.game_sections.btn_mdf_bulk_generate": {"EN": "Generate MDF Materials from Mesh", "ZH": "按网格批量生成 MDF 材质"},
 
     # ── games/dmc5/mesh_rename.py — RE-format mesh renaming ─────────────────
     "dmc5.mesh_rename.need_selection": {"EN": "Select at least one mesh object",
@@ -242,6 +243,20 @@ STRINGS = {
         "ZH": "选中的网格属于不同的网格集合，请一次只处理一个集合"},
     "dmc5.mesh_rename.done": {"EN": "Renamed {count} mesh object(s)",
                               "ZH": "已重命名 {count} 个网格物体"},
+
+    # ── games/dmc5/mdf_bulk_generate.py — 从模板材质批量生成 ────────────────
+    "dmc5.mdf_bulk.need_template": {"EN": "Select an MDF material object as the template first",
+                                    "ZH": "请先选中一个 MDF 材质对象作为模板"},
+    "dmc5.mdf_bulk.no_mdf_collection": {"EN": "The template material is not inside an MDF collection",
+                                        "ZH": "模板材质不在任何 MDF 集合内"},
+    "dmc5.mdf_bulk.need_mesh_collection": {"EN": "Choose a mesh collection",
+                                           "ZH": "请选择一个网格集合"},
+    "dmc5.mdf_bulk.no_collection_item": {"EN": "(no mesh collection)",
+                                        "ZH": "（没有网格集合）"},
+    "dmc5.mdf_bulk.no_meshes": {"EN": "That mesh collection has no mesh objects",
+                                "ZH": "该网格集合里没有网格物体"},
+    "dmc5.mdf_bulk.done": {"EN": "Generated {count} MDF material(s)",
+                           "ZH": "已生成 {count} 个 MDF 材质"},
 
     "ui.main_panel.btn_convert_packed_shader":    {"EN": "Convert Selected to Packed Shader",
                                                    "ZH": "选中物体转为打包着色器"},

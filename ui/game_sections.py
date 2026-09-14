@@ -355,6 +355,10 @@ SECTIONS = {
             # _FAMILY_CONFIG['DMC5'] + mdf_generator(均延后) -- 暂不放进 DMC5 section。
             op("dmc5.mdf_tex_processor_dialog",
                "ui.main_panel.btn_mdf_tex_processor", 'TEXTURE'),
+            # Below the processor: the processor fills textures into the material list,
+            # this builds that list from one template material per mesh material name.
+            op("dmc5.mdf_bulk_generate",
+               "ui.game_sections.btn_mdf_bulk_generate", 'DUPLICATE'),
         ],
         'physics': [],
         'port': _port('DMC5'),

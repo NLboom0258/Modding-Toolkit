@@ -1,4 +1,4 @@
-from . import shader_defs, mdf_tex_processor, mdf_tex_processor_ui, batch_export, batch_export_ui, mesh_rename
+from . import shader_defs, mdf_tex_processor, mdf_tex_processor_ui, batch_export, batch_export_ui, mesh_rename, mdf_bulk_generate
 
 
 def register():
@@ -7,9 +7,11 @@ def register():
     batch_export.register()
     batch_export_ui.register()
     mesh_rename.register()
+    mdf_bulk_generate.register()
 
 
 def unregister():
+    mdf_bulk_generate.unregister()
     mesh_rename.unregister()
     batch_export_ui.unregister()
     batch_export.unregister()
