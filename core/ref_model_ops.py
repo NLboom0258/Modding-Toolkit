@@ -252,9 +252,13 @@ class MODDER_OT_ImportReferenceModel(bpy.types.Operator):
             layout.prop(self, "model", text=T("core.ref_model_ops.model"))
 
         if game not in ref_model.OPTIONLESS_GAMES:
-            col = layout.column(align=True)
-            col.prop(self, "to_tpose", text=T("core.ref_model_ops.to_tpose"))
-            col.prop(self, "merge_facial", text=T("core.ref_model_ops.merge_facial"))
+            layout.prop(self, "to_tpose", text=T("core.ref_model_ops.to_tpose"))
+
+            facial = layout.row()
+            facial.enabled = ref_model.has_facial_rig(game)
+            facial.prop(self, "merge_facial", text=T("core.ref_model_ops.merge_facial"))
+            if not facial.enabled:
+                layout.label(text=T("core.ref_model_ops.no_facial_rig"), icon='INFO')
 
             aux = layout.row()
             aux.enabled = ref_model.load_base_bones(game) is not None

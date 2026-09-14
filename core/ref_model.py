@@ -12,6 +12,7 @@ MHWS  assets/reference_skeletons/mhws/       Blender's FBX importer
 MHRS  assets/mhrs/shadow/                    RE Mesh Editor's mesh importer
 RE4   assets/reference_skeletons/re4/        Blender's FBX importer
 RE9   assets/reference_skeletons/re9/        Blender's FBX importer
+DMC5  assets/dmc5/reference_models/          RE Mesh Editor's mesh importer
 ===== ====================================== ===========================================
 
 Only MHWS/RE4/RE9 are FBX.  MHWI and MHRS are the games' own native model files,
@@ -27,6 +28,19 @@ export never reads them, and the importer synthesises the tail from the head.
 So the dependency for these two is on the *importer*, never on another addon for
 the model itself.  MHWI users already need MHW Model Editor to export their mods,
 so this costs them nothing and drops the previous dependency on Modder Batch Tool.
+
+DMC5 is the other native-file case, for the opposite reason: its player bodies are
+``.mesh`` and RE Mesh Editor already reads the whole thing -- mesh, armature and
+all -- so there is nothing to convert and no second addon to depend on either.
+These are the four playable characters' own bodies, bundled as the game ships them
+(byte-identical to the unpacked originals, verified by hash).
+
+The two merges do not apply to DMC5.  Its facial rig is a *separate head skeleton*,
+not a subtree of the body, so there is nothing on this rig for the facial merge to
+collapse (``has_facial_rig``); and no native skeleton is bundled for it, so the
+auxiliary merge is drawn disabled with its reason, as it already is for MHWI.  The
+T-pose switch *is* live: ``core/pose_ops.py`` already carries a DMC5 bone list, so
+this costs nothing here and belongs to that module's business, not this one's.
 
 MHWI and MHRS get no post-import options: their bodies have no facial rig and no
 auxiliary bones, and both ship in T-pose, so every switch below would be a no-op.
@@ -104,6 +118,18 @@ MODELS = {
         ("leon", None, "fbx", ("re9", "leon.fbx")),
         ("grace", None, "fbx", ("re9", "grace.fbx")),
     ],
+    # The four playable characters, straight from the game's natives folder.  No
+    # label keys: these are character names and ``ident.capitalize()`` already
+    # spells them ("Dante", "Nero", "V", "Vergil"), so nothing needs translating.
+    #
+    # Single versions only, unlike the rest of the games here -- these are the
+    # bodies the game ships, there is no second spelling to choose between.
+    "DMC5": [
+        ("dante", None, "remesh", "assets/dmc5/reference_models/pl0100.mesh.1808282334"),
+        ("nero", None, "remesh", "assets/dmc5/reference_models/pl0000.mesh.1808282334"),
+        ("v", None, "remesh", "assets/dmc5/reference_models/pl0200.mesh.1808282334"),
+        ("vergil", None, "remesh", "assets/dmc5/reference_models/pl0800.mesh.1808282334"),
+    ],
 }
 
 #: Root of the facial rig per game.  Everything **below** it merges into it.
@@ -112,6 +138,18 @@ FACIAL_ROOTS = {
     "RE4": "FacialDef_Face",
     "RE9": "FacialJnt_Face",
 }
+
+
+def has_facial_rig(game_code):
+    """Whether the facial merge means anything for this game's reference body.
+
+    MHWilds is listed by name because its facial bones are an explicit list rather
+    than one clean subtree (see the module docstring), and the rest answer through
+    ``FACIAL_ROOTS``.  A game with neither -- DMC5, whose face is a separate head
+    skeleton -- would otherwise get a checkbox that runs, finds nothing and reports
+    success, which is the thing this module refuses to do.
+    """
+    return game_code == "MHWS" or game_code in FACIAL_ROOTS
 
 #: Games whose reference model needs no post-import options at all, so the dialog
 #: shows none.  Neither body carries a facial rig, and both are authored in T-pose

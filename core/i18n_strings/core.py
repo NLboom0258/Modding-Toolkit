@@ -1581,6 +1581,10 @@ STRINGS = {
         "EN": "No native skeleton is bundled for this game, so auxiliary bones "
               "cannot be told apart from base ones",
         "ZH": "本游戏未内置原生骨架，无法区分辅助骨与基础骨"},
+    "core.ref_model_ops.no_facial_rig": {
+        "EN": "This game's facial rig is a separate head skeleton, so the "
+              "reference body carries no facial bones to merge",
+        "ZH": "本游戏的表情骨架是独立的头部骨架，参考模型的身体骨架上没有可合并的表情骨"},
     "core.ref_model_ops.no_model": {
         "EN": "No reference model registered for this game",
         "ZH": "本游戏未登记参考模型"},

@@ -340,7 +340,8 @@ SECTIONS = {
     },
     'dmc5': {
         'label': "DMC5 Tools", 'icon': 'GHOST_ENABLED',
-        'io': [_pre_export_check('DMC5'), _batch_export('dmc5', "ui.game_sections.btn_batch_export_dmc5")],
+        'io': [_ref_model('DMC5'), _pre_export_check('DMC5'),
+               _batch_export('dmc5', "ui.game_sections.btn_batch_export_dmc5")],
         # The RE-format mesh rename moved to Basic Tools > Mesh (core/mesh_ops.py,
         # mhw.rename_mesh_re_format): it only normalizes a name the game never
         # reads, so there is nothing DMC5-specific about it.
