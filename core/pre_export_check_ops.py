@@ -195,10 +195,12 @@ def _reason_text(codes):
 def _check_textures(materials, cfg, natives_root):
     """``[entry]`` for the texture half. Empty when nothing is wrong."""
     tex_version = cfg["tex_version"]
+    # NOT always native root/natives/STM: DMC5 keeps its data under natives/x64.
+    platform = cfg.get("platform_segment", "STM")
     vanilla = _load_vanilla_art_paths(cfg["vanilla_asset_rel"])
 
     def exists(path):
-        return os.path.isfile(pc.resolve_disk_path(natives_root, path, tex_version))
+        return os.path.isfile(pc.resolve_disk_path(natives_root, path, tex_version, platform))
 
     n_found = 0
     missing = []   # (obj, material name, slot, path)
@@ -248,7 +250,7 @@ def _check_textures(materials, cfg, natives_root):
             'objects': [o.name for o, _m, _s, _p in missing],
         })
 
-    entries += _check_tex_sizes(found, natives_root, tex_version)
+    entries += _check_tex_sizes(found, natives_root, tex_version, platform)
 
     if empty:
         entries.append({
@@ -262,7 +264,7 @@ def _check_textures(materials, cfg, natives_root):
     return entries
 
 
-def _check_tex_sizes(found, natives_root, tex_version):
+def _check_tex_sizes(found, natives_root, tex_version, platform):
     """``[entry]`` for the shape of the texture files that did resolve.
 
     Only the custom ones can be checked at all: a vanilla path lives inside the
@@ -275,7 +277,7 @@ def _check_tex_sizes(found, natives_root, tex_version):
     bad_size = []      # (obj, path, width, height)
     unreadable = []    # (obj, path)
     for path, objs in found.items():
-        size = read_tex_size(pc.resolve_disk_path(natives_root, path, tex_version))
+        size = read_tex_size(pc.resolve_disk_path(natives_root, path, tex_version, platform))
         verdict = pc.classify_tex_size(size)
         if verdict == pc.TEXF_NOT_POW2:
             bad_size.append((objs[0], path, size[0], size[1]))

@@ -305,11 +305,16 @@ def duplicate_material_names(material_names):
     return dupes
 
 
-def resolve_disk_path(natives_root, mdf_path, tex_version):
+def resolve_disk_path(natives_root, mdf_path, tex_version, platform='STM'):
     """Where a binding's ``.tex`` should sit under the user's mod root.
 
     Mirrors ``core/mdf_port_tex.resolve_source_disk_path``; kept as its own
     small function so this module does not pull the port in.
+
+    *platform* is the game's own ``natives/<platform>/`` segment: STM for every
+    RE game here except DMC5, which ships under ``natives/x64``.  Hardcoding STM
+    made every custom DMC5 texture look missing -- the paths were assembled under
+    a directory that game never reads.
     """
     rel = (mdf_path or '').replace('\\', '/').lstrip('/')
-    return os.path.join(natives_root, 'natives', 'STM', *rel.split('/')) + f'.{tex_version}'
+    return os.path.join(natives_root, 'natives', platform, *rel.split('/')) + f'.{tex_version}'

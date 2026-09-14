@@ -194,7 +194,15 @@ def register():
         path_fixed_prefix="",   # TODO(待确认)
         null_tex_by_type=DMC5_NULL_TEX_BY_TYPE,
         natives_root_key="dmc5_natives_root",
-        vanilla_asset_rel="assets/dmc5/vanilla_tex_paths.txt",   # (t9 建)
+        # Built from REE-Lib's cached DMC5 file list, which that tool reconstructs
+        # from the game exe + pak contents and validates by hashing (DMC5's pak
+        # carries no path table of its own). Spelling matches what mdf bindings
+        # store: no natives/x64/ prefix, no .11 suffix, lowercase.
+        vanilla_asset_rel="assets/dmc5/vanilla_tex_paths.txt",
+        # natives/<platform>/ -- DMC5 uses x64, not the STM every other RE game
+        # here uses. The pre-export check resolves texture paths through this,
+        # so leaving it at the STM default made every custom texture look missing.
+        platform_segment="x64",
     )
 
 

@@ -37,7 +37,9 @@ _GAME_TEX_CONFIG = {}
 
 def register_game_tex_config(game_code, **cfg):
     """cfg keys: abbrev_map, channel_maps, tex_version, use_art_prefix,
-    path_fixed_prefix, null_tex_by_type, natives_root_key, vanilla_asset_rel."""
+    path_fixed_prefix, null_tex_by_type, natives_root_key, vanilla_asset_rel,
+    platform_segment (the game's ``natives/<platform>/`` segment -- 'STM'
+    everywhere except DMC5, which ships under ``natives/x64``)."""
     _GAME_TEX_CONFIG[game_code] = cfg
 
 
