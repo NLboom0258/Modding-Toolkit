@@ -35,12 +35,15 @@ all -- so there is nothing to convert and no second addon to depend on either.
 These are the four playable characters' own bodies, bundled as the game ships them
 (byte-identical to the unpacked originals, verified by hash).
 
-The two merges do not apply to DMC5.  Its facial rig is a *separate head skeleton*,
-not a subtree of the body, so there is nothing on this rig for the facial merge to
-collapse (``has_facial_rig``); and no native skeleton is bundled for it, so the
-auxiliary merge is drawn disabled with its reason, as it already is for MHWI.  The
-T-pose switch *is* live: ``core/pose_ops.py`` already carries a DMC5 bone list, so
-this costs nothing here and belongs to that module's business, not this one's.
+The facial merge does not apply to DMC5: its facial rig is a *separate head
+skeleton*, not a subtree of the body, so there is nothing on this rig for it to
+collapse (``has_facial_rig``).  The auxiliary merge does apply, and DMC5 is the one
+game here where it is genuinely destructive: its ``fbxskel`` carries the joint
+skeleton only (64 bones on pl0100, against MHWilds' close-to-full-body 224), so on
+an imported vanilla body every cloth, hair and physics bone counts as auxiliary.
+``assets/native_skeletons/base_bones.json`` carries that warning on the entry
+itself, and the option stays off by default.  The T-pose switch is live too:
+``core/pose_ops.py`` already carries a DMC5 bone list, so this costs nothing here.
 
 MHWI and MHRS get no post-import options: their bodies have no facial rig and no
 auxiliary bones, and both ship in T-pose, so every switch below would be a no-op.
