@@ -4,6 +4,7 @@ import re
 from ..core.i18n import T, draw_language_toggle, get_lang
 from ..core import bone_utils, ui_config
 from . import game_sections
+from . import name_cleanup
 from ..core.mdf_generator_base import MHW_OT_SetChannelSize, MHW_OT_SetShaderSource
 from ..core.bone_utils import get_import_presets_callback, get_target_presets_callback
 from ..core.pose_ops import get_pose_presets_callback
@@ -173,6 +174,10 @@ class MHW_PT_SuiteSettings(bpy.types.PropertyGroup):
 
     # Pose convert section
     show_pose_convert: bpy.props.BoolProperty(name="Pose Convert", default=False)
+
+    # Non-ASCII bone / vertex group name cleanup (collapsed by default)
+    show_name_cleanup: bpy.props.BoolProperty(name="Non-ASCII Name Cleanup", default=False)
+    name_cleanup_filter: bpy.props.StringProperty(name="Filter")
 
     # Pose-convert-only preset (independent of the standard converter's X/Y presets)
     pose_import_preset_enum: bpy.props.EnumProperty(
@@ -711,6 +716,21 @@ class MHW_PT_MainPanel(bpy.types.Panel):
             row.scale_y = 1.3
             row.operator("modder.apply_transform_forward", text=T("ui.main_panel.btn_apply_forward"), icon='PLAY')
             row.operator("modder.apply_transform_inverse", text=T("ui.main_panel.btn_apply_inverse"), icon='LOOP_BACK')
+
+        layout.separator()
+
+        # =========================================
+        # 4b. Non-ASCII name cleanup
+        # =========================================
+        cleanup_box = layout.box()
+        row = cleanup_box.row()
+        row.prop(settings, "show_name_cleanup",
+                 icon="TRIA_DOWN" if settings.show_name_cleanup else "TRIA_RIGHT",
+                 icon_only=True, emboss=False)
+        row.label(text=T("ui.main_panel.name_cleanup_header"), icon='SORTALPHA')
+
+        if settings.show_name_cleanup:
+            name_cleanup.draw_name_cleanup(cleanup_box, context)
 
         layout.separator()
 

@@ -1,9 +1,11 @@
 from . import main_panel
 from . import editor_panel
+from . import name_cleanup
 
 modules = [
     main_panel,
     editor_panel,
+    name_cleanup,
 ]
 
 def register():
