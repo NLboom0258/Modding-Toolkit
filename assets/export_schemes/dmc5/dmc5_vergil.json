@@ -1,0 +1,667 @@
+{
+  "character": "Vergil (DMC5)",
+  "character_id": "dmc5_vergil",
+  "base_path": "x64/character/player",
+  "groups": [
+    {
+      "name": "身体",
+      "entries": [
+        {
+          "id": "pl0300_body",
+          "mesh": "pl0300_vergil/pl0300_body/pl0300.mesh.1808282334",
+          "mdf2": [
+            "pl0300_vergil/pl0300_body/pl0300.mdf2.10",
+            "pl0300_vergil/pl0300_body/pl0300_todome.mdf2.10",
+            "pl0300_vergil/pl0300_body/pl0300_trans.mdf2.10",
+            "pl0300_vergil/pl0300_body/pl0300_vanish.mdf2.10"
+          ],
+          "chain": "pl0300_vergil/pl0300_body/pl0300.chain.21",
+          "fbxskel": "pl0300_vergil/pl0300_body/pl0300.fbxskel.3",
+          "note": "身体(bossV, M19/M20)；fbxskel 只带 1 根 WeaponConst"
+        }
+      ]
+    },
+    {
+      "name": "头部",
+      "entries": [
+        {
+          "id": "pl0300_01_head",
+          "mesh": "pl0300_vergil/pl0300_01_head/pl0300_01.mesh.1808282334",
+          "mdf2": [
+            "pl0300_vergil/pl0300_01_head/pl0300_01.mdf2.10",
+            "pl0300_vergil/pl0300_01_head/pl0300_01_todome.mdf2.10",
+            "pl0300_vergil/pl0300_01_head/pl0300_01_vanish.mdf2.10"
+          ],
+          "note": "关卡内调用(M19/M20 的 bossV)"
+        },
+        {
+          "id": "pl0300_11",
+          "mesh": "pl0300_vergil/pl0300_11_head_event/pl0300_11.mesh.1808282334",
+          "mdf2": [
+            "pl0300_vergil/pl0300_11_head_event/pl0300_11.mdf2.10",
+            "pl0300_vergil/pl0300_11_head_event/pl0300_11_trans.mdf2.10"
+          ],
+          "note": "主菜单/过场/角色报告等非关卡内调用(11)"
+        },
+        {
+          "id": "pl0300_11_light",
+          "mesh": "pl0300_vergil/pl0300_11_head_event/pl0300_11_light.mesh.1808282334",
+          "mdf2": [
+            "pl0300_vergil/pl0300_11_head_event/pl0300_11.mdf2.10"
+          ],
+          "note": "过场头(light, 材质同 11)"
+        }
+      ]
+    },
+    {
+      "name": "头发",
+      "entries": [
+        {
+          "id": "pl0300_03_hair",
+          "mesh": "pl0300_vergil/pl0300_03_hair/pl0300_03.mesh.1808282334",
+          "mdf2": [
+            "pl0300_vergil/pl0300_03_hair/pl0300_03.mdf2.10",
+            "pl0300_vergil/pl0300_03_hair/pl0300_03_todome.mdf2.10",
+            "pl0300_vergil/pl0300_03_hair/pl0300_03_trans.mdf2.10",
+            "pl0300_vergil/pl0300_03_hair/pl0300_03_transparent.mdf2.10",
+            "pl0300_vergil/pl0300_03_hair/pl0300_03_vanish.mdf2.10"
+          ],
+          "chain": "pl0300_vergil/pl0300_03_hair/pl0300_03.chain.21",
+          "note": "头发(03)"
+        }
+      ]
+    },
+    {
+      "name": "身体-真魔人",
+      "entries": [
+        {
+          "id": "pl0310_body",
+          "mesh": "pl0310_vergil_majin/pl0310_body/pl0310.mesh.1808282334",
+          "mdf2": [
+            "pl0310_vergil_majin/pl0310_body/pl0310.mdf2.10",
+            "pl0310_vergil_majin/pl0310_body/pl0310_trans.mdf2.10"
+          ],
+          "chain": "pl0310_vergil_majin/pl0310_body/pl0310.chain.21",
+          "note": "真魔人身体"
+        }
+      ]
+    },
+    {
+      "name": "翅膀-真魔人",
+      "entries": [
+        {
+          "id": "pl0310_04_wingopen",
+          "mesh": "pl0310_vergil_majin/pl0310_04_wingopen/pl0310_04.mesh.1808282334",
+          "mdf2": [
+            "pl0310_vergil_majin/pl0310_04_wingopen/pl0310_04.mdf2.10",
+            "pl0310_vergil_majin/pl0310_04_wingopen/pl0310_04_trans.mdf2.10"
+          ],
+          "chain": "pl0310_vergil_majin/pl0310_04_wingopen/pl0310_04.chain.21",
+          "note": "翅膀(张开)"
+        },
+        {
+          "id": "pl0310_05_wingclose",
+          "mesh": "pl0310_vergil_majin/pl0310_05_wingclose/pl0310_05.mesh.1808282334",
+          "mdf2": [
+            "pl0310_vergil_majin/pl0310_05_wingclose/pl0310_05.mdf2.10",
+            "pl0310_vergil_majin/pl0310_05_wingclose/pl0310_05_trans.mdf2.10"
+          ],
+          "chain": "pl0310_vergil_majin/pl0310_05_wingclose/pl0310_05.chain.21",
+          "note": "翅膀(闭合)"
+        }
+      ]
+    },
+    {
+      "name": "尾巴-真魔人",
+      "entries": [
+        {
+          "id": "pl0310_06_tail",
+          "mesh": "pl0310_vergil_majin/pl0310_06_tail/pl0310_06.mesh.1808282334",
+          "mdf2": [
+            "pl0310_vergil_majin/pl0310_06_tail/pl0310_06.mdf2.10",
+            "pl0310_vergil_majin/pl0310_06_tail/pl0310_06_trans.mdf2.10"
+          ],
+          "chain": "pl0310_vergil_majin/pl0310_06_tail/pl0310_06.chain.21",
+          "note": "尾巴"
+        }
+      ]
+    },
+    {
+      "name": "身体-分身",
+      "entries": [
+        {
+          "id": "pl0311_body",
+          "mdf2": [
+            "pl0311_vergil_majin_bunshin/pl0311_body/pl0311.mdf2.10"
+          ],
+          "note": "分身身体(仅材质, 共用真魔人的网格)"
+        },
+        {
+          "id": "pl0311_04_wingopen",
+          "mdf2": [
+            "pl0311_vergil_majin_bunshin/pl0311_04_wingopen/pl0311_04.mdf2.10"
+          ],
+          "note": "分身翅膀(张开, 仅材质)"
+        },
+        {
+          "id": "pl0311_05_wingclose",
+          "mdf2": [
+            "pl0311_vergil_majin_bunshin/pl0311_05_wingclose/pl0311_05.mdf2.10"
+          ],
+          "note": "分身翅膀(闭合, 仅材质)"
+        },
+        {
+          "id": "pl0311_06_tail",
+          "mdf2": [
+            "pl0311_vergil_majin_bunshin/pl0311_06_tail/pl0311_06.mdf2.10"
+          ],
+          "note": "分身尾巴(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "身体-沾土",
+      "entries": [
+        {
+          "id": "pl0330_body",
+          "mesh": "pl0330_vergil_dirt/pl0330_body/pl0330.mesh.1808282334",
+          "mdf2": [
+            "pl0330_vergil_dirt/pl0330_body/pl0330.mdf2.10"
+          ],
+          "note": "沾土身体(M19/M20 的 bossV)"
+        }
+      ]
+    },
+    {
+      "name": "头部-沾土",
+      "entries": [
+        {
+          "id": "pl0330_11",
+          "mdf2": [
+            "pl0330_vergil_dirt/pl0330_11_head_event/pl0330_11.mdf2.10"
+          ],
+          "note": "沾土过场头(11, 仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "长袍-沾土",
+      "entries": [
+        {
+          "id": "pl0330_20_robe",
+          "mesh": "pl0330_vergil_dirt/pl0330_20_robe/pl0330_20.mesh.1808282334",
+          "mdf2": [
+            "pl0330_vergil_dirt/pl0330_20_robe/pl0330_20.mdf2.10"
+          ],
+          "note": "长袍(M1 拿手好戏、M12 自剖调用)"
+        }
+      ]
+    },
+    {
+      "name": "身体-沾土2",
+      "entries": [
+        {
+          "id": "pl0331_body",
+          "mdf2": [
+            "pl0331_vergil_dirt_nocracked/pl0331_body/pl0331.mdf2.10",
+            "pl0331_vergil_dirt_nocracked/pl0331_body/pl0331_trans.mdf2.10"
+          ],
+          "note": "沾土2身体(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "头部-沾土2",
+      "entries": [
+        {
+          "id": "pl0331_01_head",
+          "mdf2": [
+            "pl0331_vergil_dirt_nocracked/pl0331_01_head/pl0331_01.mdf2.10",
+            "pl0331_vergil_dirt_nocracked/pl0331_01_head/pl0331_01_trans.mdf2.10"
+          ],
+          "note": "沾土2头部(仅材质)"
+        },
+        {
+          "id": "pl0331_11",
+          "mdf2": [
+            "pl0331_vergil_dirt_nocracked/pl0331_11_head_event/pl0331_11.mdf2.10",
+            "pl0331_vergil_dirt_nocracked/pl0331_11_head_event/pl0331_11_beaten.mdf2.10",
+            "pl0331_vergil_dirt_nocracked/pl0331_11_head_event/pl0331_11_beaten_trans.mdf2.10",
+            "pl0331_vergil_dirt_nocracked/pl0331_11_head_event/pl0331_11_trans.mdf2.10"
+          ],
+          "note": "沾土2过场头(11, 仅材质, 含 beaten)"
+        }
+      ]
+    },
+    {
+      "name": "身体-异色",
+      "entries": [
+        {
+          "id": "pl0300_c00_body",
+          "mdf2": [
+            "pl0300_c00_vergil/pl0300_c00_body/pl0300_c00.mdf2.10",
+            "pl0300_c00_vergil/pl0300_c00_body/pl0300_c00_todome.mdf2.10",
+            "pl0300_c00_vergil/pl0300_c00_body/pl0300_c00_trans.mdf2.10",
+            "pl0300_c00_vergil/pl0300_c00_body/pl0300_c00_vanish.mdf2.10"
+          ],
+          "note": "异色(人形态)身体(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "身体-异色沾土",
+      "entries": [
+        {
+          "id": "pl0330_c00_body",
+          "mdf2": [
+            "pl0330_c00_vergil_dirt/pl0330_c00_body/pl0330_c00.mdf2.10"
+          ],
+          "note": "异色(沾土)身体(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "身体-异色沾土2",
+      "entries": [
+        {
+          "id": "pl0331_c00_body",
+          "mdf2": [
+            "pl0331_c00_vergil_dirt_nocracked/pl0331_c00_body/pl0331_c00.mdf2.10",
+            "pl0331_c00_vergil_dirt_nocracked/pl0331_c00_body/pl0331_c00_trans.mdf2.10"
+          ],
+          "note": "异色(沾土2)身体(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "身体-玩家人形态",
+      "entries": [
+        {
+          "id": "pl0800_body",
+          "mesh": "pl0800_vergilpl/pl0800_body/pl0800.mesh.1808282334",
+          "mdf2": [
+            "pl0800_vergilpl/pl0800_body/pl0800.mdf2.10",
+            "pl0800_vergilpl/pl0800_body/pl0800_blood.mdf2.10",
+            "pl0800_vergilpl/pl0800_body/pl0800_burn.mdf2.10",
+            "pl0800_vergilpl/pl0800_body/pl0800_freeze.mdf2.10",
+            "pl0800_vergilpl/pl0800_body/pl0800_slow.mdf2.10",
+            "pl0800_vergilpl/pl0800_body/pl0800_trans.mdf2.10",
+            "pl0800_vergilpl/pl0800_body/pl0800_vmode.mdf2.10",
+            "pl0800_vergilpl/pl0800_body/pl0800_wet.mdf2.10"
+          ],
+          "chain": "pl0300_vergil/pl0300_body/pl0300.chain.21",
+          "fbxskel": "pl0800_vergilpl/pl0800_body/pl0800.fbxskel.3",
+          "note": "玩家人形态身体；物理共用 pl0300.chain，fbxskel 带 2 根 WeaponConst"
+        }
+      ]
+    },
+    {
+      "name": "头部-玩家人形态",
+      "entries": [
+        {
+          "id": "pl0800_01_head",
+          "mdf2": [
+            "pl0800_vergilpl/pl0800_01_head/pl0800_01.mdf2.10",
+            "pl0800_vergilpl/pl0800_01_head/pl0800_01_blood.mdf2.10",
+            "pl0800_vergilpl/pl0800_01_head/pl0800_01_burn.mdf2.10",
+            "pl0800_vergilpl/pl0800_01_head/pl0800_01_freeze.mdf2.10",
+            "pl0800_vergilpl/pl0800_01_head/pl0800_01_slow.mdf2.10",
+            "pl0800_vergilpl/pl0800_01_head/pl0800_01_trans.mdf2.10",
+            "pl0800_vergilpl/pl0800_01_head/pl0800_01_vmode.mdf2.10",
+            "pl0800_vergilpl/pl0800_01_head/pl0800_01_wet.mdf2.10"
+          ],
+          "note": "仅材质；模型与 bossV 共用 pl0300_01 那份"
+        }
+      ]
+    },
+    {
+      "name": "头发-玩家人形态",
+      "entries": [
+        {
+          "id": "pl0800_03_hair",
+          "mdf2": [
+            "pl0800_vergilpl/pl0800_03_hair/pl0800_03.mdf2.10",
+            "pl0800_vergilpl/pl0800_03_hair/pl0800_03_blood.mdf2.10",
+            "pl0800_vergilpl/pl0800_03_hair/pl0800_03_burn.mdf2.10",
+            "pl0800_vergilpl/pl0800_03_hair/pl0800_03_freeze.mdf2.10",
+            "pl0800_vergilpl/pl0800_03_hair/pl0800_03_slow.mdf2.10",
+            "pl0800_vergilpl/pl0800_03_hair/pl0800_03_trans.mdf2.10",
+            "pl0800_vergilpl/pl0800_03_hair/pl0800_03_vmode.mdf2.10",
+            "pl0800_vergilpl/pl0800_03_hair/pl0800_03_wet.mdf2.10"
+          ],
+          "note": "仅材质；模型与物理都与 bossV 共用(pl0300_03)"
+        }
+      ]
+    },
+    {
+      "name": "身体-玩家真魔人",
+      "entries": [
+        {
+          "id": "pl0810_body",
+          "mesh": "pl0810_vergil_majinpl/pl0810_body/pl0810.mesh.1808282334",
+          "mdf2": [
+            "pl0810_vergil_majinpl/pl0810_body/pl0810.mdf2.10",
+            "pl0810_vergil_majinpl/pl0810_body/pl0810_trans.mdf2.10"
+          ],
+          "note": "玩家真魔人身体(EMV 中显示为 pl0820)"
+        }
+      ]
+    },
+    {
+      "name": "翅膀-玩家真魔人",
+      "entries": [
+        {
+          "id": "pl0810_04_wingopen",
+          "mdf2": [
+            "pl0810_vergil_majinpl/pl0810_04_wingopen/pl0810_04.mdf2.10",
+            "pl0810_vergil_majinpl/pl0810_04_wingopen/pl0810_04_trans.mdf2.10"
+          ],
+          "note": "仅材质；模型与物理共用 bossV(pl0310_04)"
+        },
+        {
+          "id": "pl0810_05_wingclose",
+          "mdf2": [
+            "pl0810_vergil_majinpl/pl0810_05_wingclose/pl0810_05.mdf2.10",
+            "pl0810_vergil_majinpl/pl0810_05_wingclose/pl0810_05_trans.mdf2.10"
+          ],
+          "note": "仅材质；共用 bossV(pl0310_05)"
+        }
+      ]
+    },
+    {
+      "name": "尾巴-玩家真魔人",
+      "entries": [
+        {
+          "id": "pl0810_06_tail",
+          "mdf2": [
+            "pl0810_vergil_majinpl/pl0810_06_tail/pl0810_06.mdf2.10",
+            "pl0810_vergil_majinpl/pl0810_06_tail/pl0810_06_trans.mdf2.10"
+          ],
+          "note": "仅材质；共用 bossV(pl0310_06)"
+        }
+      ]
+    },
+    {
+      "name": "头部-玩家沾土",
+      "entries": [
+        {
+          "id": "pl0831_01_head",
+          "mdf2": [
+            "pl0831_vergilpl/pl0831_01_head/pl0831_01.mdf2.10",
+            "pl0831_vergilpl/pl0831_01_head/pl0831_01_blood.mdf2.10",
+            "pl0831_vergilpl/pl0831_01_head/pl0831_01_burn.mdf2.10",
+            "pl0831_vergilpl/pl0831_01_head/pl0831_01_freeze.mdf2.10",
+            "pl0831_vergilpl/pl0831_01_head/pl0831_01_slow.mdf2.10",
+            "pl0831_vergilpl/pl0831_01_head/pl0831_01_trans.mdf2.10",
+            "pl0831_vergilpl/pl0831_01_head/pl0831_01_vmode.mdf2.10",
+            "pl0831_vergilpl/pl0831_01_head/pl0831_01_wet.mdf2.10"
+          ],
+          "note": "玩家沾土头部(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "身体-玩家沾土",
+      "entries": [
+        {
+          "id": "pl0831_body",
+          "mdf2": [
+            "pl0831_vergilpl/pl0831_body/pl0831.mdf2.10",
+            "pl0831_vergilpl/pl0831_body/pl0831_blood.mdf2.10",
+            "pl0831_vergilpl/pl0831_body/pl0831_burn.mdf2.10",
+            "pl0831_vergilpl/pl0831_body/pl0831_freeze.mdf2.10",
+            "pl0831_vergilpl/pl0831_body/pl0831_slow.mdf2.10",
+            "pl0831_vergilpl/pl0831_body/pl0831_trans.mdf2.10",
+            "pl0831_vergilpl/pl0831_body/pl0831_vmode.mdf2.10",
+            "pl0831_vergilpl/pl0831_body/pl0831_wet.mdf2.10"
+          ],
+          "note": "玩家沾土身体(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "身体-异色玩家人形态",
+      "entries": [
+        {
+          "id": "pl0800_c00_body",
+          "mdf2": [
+            "pl0800_c00_vergilpl/pl0800_c00_body/pl0800_c00.mdf2.10",
+            "pl0800_c00_vergilpl/pl0800_c00_body/pl0800_c00_blood.mdf2.10",
+            "pl0800_c00_vergilpl/pl0800_c00_body/pl0800_c00_burn.mdf2.10",
+            "pl0800_c00_vergilpl/pl0800_c00_body/pl0800_c00_freeze.mdf2.10",
+            "pl0800_c00_vergilpl/pl0800_c00_body/pl0800_c00_slow.mdf2.10",
+            "pl0800_c00_vergilpl/pl0800_c00_body/pl0800_c00_trans.mdf2.10",
+            "pl0800_c00_vergilpl/pl0800_c00_body/pl0800_c00_vmode.mdf2.10",
+            "pl0800_c00_vergilpl/pl0800_c00_body/pl0800_c00_wet.mdf2.10"
+          ],
+          "note": "异色玩家人形态身体(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "身体-异色玩家沾土",
+      "entries": [
+        {
+          "id": "pl0831_c00_body",
+          "mdf2": [
+            "pl0831_c00_vergilpl/pl0831_c00_body/pl0831_c00.mdf2.10",
+            "pl0831_c00_vergilpl/pl0831_c00_body/pl0831_c00_blood.mdf2.10",
+            "pl0831_c00_vergilpl/pl0831_c00_body/pl0831_c00_burn.mdf2.10",
+            "pl0831_c00_vergilpl/pl0831_c00_body/pl0831_c00_freeze.mdf2.10",
+            "pl0831_c00_vergilpl/pl0831_c00_body/pl0831_c00_slow.mdf2.10",
+            "pl0831_c00_vergilpl/pl0831_c00_body/pl0831_c00_trans.mdf2.10",
+            "pl0831_c00_vergilpl/pl0831_c00_body/pl0831_c00_vmode.mdf2.10",
+            "pl0831_c00_vergilpl/pl0831_c00_body/pl0831_c00_wet.mdf2.10"
+          ],
+          "note": "异色玩家沾土身体(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "残影-bossV",
+      "base_path": "x64/vfx/mesh/mesh_character/pl0300",
+      "entries": [
+        {
+          "id": "vfx_pl0300_warp_body",
+          "mdf2": [
+            "mesh_03_pl0300_warp_000_00_00.mdf2.10"
+          ],
+          "note": "身体残影"
+        },
+        {
+          "id": "vfx_pl0300_warp_head",
+          "mdf2": [
+            "mesh_03_pl0300_warp_000_00_01.mdf2.10"
+          ],
+          "note": "头部残影"
+        },
+        {
+          "id": "vfx_pl0300_warp_hair",
+          "mdf2": [
+            "mesh_03_pl0300_warp_000_00_02.mdf2.10"
+          ],
+          "note": "头发残影"
+        },
+        {
+          "id": "vfx_pl0300_warp_majin",
+          "mdf2": [
+            "mesh_03_pl0300_warp_000_00_10.mdf2.10"
+          ],
+          "note": "真魔人残影"
+        },
+        {
+          "id": "vfx_pl0300_warp_tail",
+          "mdf2": [
+            "mesh_03_pl0300_warp_000_00_11.mdf2.10"
+          ],
+          "note": "尾巴残影"
+        },
+        {
+          "id": "vfx_pl0300_warp_wing",
+          "mdf2": [
+            "mesh_03_pl0300_warp_000_00_12.mdf2.10"
+          ],
+          "note": "翅膀残影"
+        }
+      ]
+    },
+    {
+      "name": "残影-玩家Vergil",
+      "base_path": "x64/vfx/mesh/mesh_character/pl0800",
+      "entries": [
+        {
+          "id": "vfx_pl0800_charge",
+          "mdf2": [
+            "mesh_03_pl0800_charge_000_00_00.mdf2.10"
+          ],
+          "note": "真魔人蓄满时产生的残影"
+        },
+        {
+          "id": "vfx_pl0800_warp_yamato",
+          "mdf2": [
+            "mesh_03_pl0800_warp_000_00_00.mdf2.10",
+            "mesh_03_pl0800_warp_000_00_03.mdf2.10"
+          ],
+          "note": "阎魔刀残影(两版)"
+        },
+        {
+          "id": "vfx_pl0800_warp_mirage",
+          "mdf2": [
+            "mesh_03_pl0800_warp_000_00_01.mdf2.10",
+            "mesh_03_pl0800_warp_000_00_04.mdf2.10"
+          ],
+          "note": "幻影剑/魅影刃残影(两版)"
+        },
+        {
+          "id": "vfx_pl0800_warp_beowulf",
+          "mdf2": [
+            "mesh_03_pl0800_warp_000_00_02.mdf2.10",
+            "mesh_03_pl0800_warp_000_00_05.mdf2.10"
+          ],
+          "note": "贝奥武夫残影(两版)"
+        },
+        {
+          "id": "vfx_pl0800_warp_body",
+          "mdf2": [
+            "mesh_03_pl0800_warp_000_01_00.mdf2.10",
+            "mesh_03_pl0800_warp_000_01_03.mdf2.10"
+          ],
+          "note": "身体残影(两版)"
+        },
+        {
+          "id": "vfx_pl0800_warp_hair",
+          "mdf2": [
+            "mesh_03_pl0800_warp_000_01_01.mdf2.10",
+            "mesh_03_pl0800_warp_000_01_04.mdf2.10"
+          ],
+          "note": "头发残影(两版)"
+        },
+        {
+          "id": "vfx_pl0800_warp_head",
+          "mdf2": [
+            "mesh_03_pl0800_warp_000_01_02.mdf2.10",
+            "mesh_03_pl0800_warp_000_01_05.mdf2.10"
+          ],
+          "note": "头部残影(两版)"
+        },
+        {
+          "id": "vfx_pl0800_warp_majin",
+          "mdf2": [
+            "mesh_03_pl0800_warp_000_02_00.mdf2.10",
+            "mesh_03_pl0800_warp_000_02_04.mdf2.10"
+          ],
+          "note": "真魔人残影(两版)"
+        },
+        {
+          "id": "vfx_pl0800_warp_wing",
+          "mdf2": [
+            "mesh_03_pl0800_warp_000_02_01.mdf2.10",
+            "mesh_03_pl0800_warp_000_02_05.mdf2.10"
+          ],
+          "note": "翅膀残影(两版)"
+        },
+        {
+          "id": "vfx_pl0800_warp_tail",
+          "mdf2": [
+            "mesh_03_pl0800_warp_000_02_02.mdf2.10",
+            "mesh_03_pl0800_warp_000_02_06.mdf2.10"
+          ],
+          "note": "尾巴残影(两版)"
+        }
+      ]
+    },
+    {
+      "name": "武器-阎魔刀",
+      "base_path": "x64/character/weapon",
+      "default_enabled": false,
+      "entries": [
+        {
+          "id": "wp03_000",
+          "mesh": "wp03_000/wp03_000.mesh.1808282334",
+          "mdf2": [
+            "wp03_000/wp03_000.mdf2.10",
+            "wp03_000/wp03_000_astral.mdf2.10",
+            "wp03_000/wp03_000_event_m12_100.mdf2.10",
+            "wp03_000/wp03_000_todome.mdf2.10",
+            "wp03_000/wp03_000_vmode.mdf2.10"
+          ],
+          "chain": "wp03_000/wp03_000.chain.21",
+          "note": "阎魔刀(prefab 名 wp03_000_yamato)"
+        }
+      ]
+    },
+    {
+      "name": "武器-魅影刃",
+      "base_path": "x64/character/weapon",
+      "default_enabled": false,
+      "entries": [
+        {
+          "id": "wp08_001",
+          "mesh": "wp08_001/wp08_001.mesh.1808282334",
+          "mdf2": [
+            "wp08_001/wp08_001_astral.mdf2.10"
+          ],
+          "note": "魅影刃(prefab 名 wp08_001_forceedge)"
+        },
+        {
+          "id": "wp08_001_00",
+          "mesh": "wp08_001/wp08_001_00.mesh.1808282334",
+          "mdf2": [
+            "wp08_001/wp08_001_astral.mdf2.10"
+          ],
+          "note": "魅影刃的另一个网格(同目录)；该目录没有主材质, 只有 astral"
+        }
+      ]
+    },
+    {
+      "name": "武器-贝奥武夫",
+      "base_path": "x64/character/weapon",
+      "default_enabled": false,
+      "entries": [
+        {
+          "id": "wp08_002",
+          "mesh": "wp08_002/wp08_002.mesh.1808282334",
+          "mdf2": [
+            "wp08_002/wp08_002.mdf2.10"
+          ],
+          "note": "贝奥武夫(prefab 名 wp08_002_beowulf)"
+        }
+      ]
+    },
+    {
+      "name": "幻影剑",
+      "base_path": "x64/character/shell",
+      "default_enabled": false,
+      "entries": [
+        {
+          "id": "shl03_000",
+          "mesh": "shl03_000/shl03_000.mesh.1808282334",
+          "mdf2": [
+            "shl03_000/shl03_000.mdf2.10"
+          ],
+          "note": "次元斩的幻影剑(wp03_000 的召唤剑)"
+        }
+      ]
+    }
+  ]
+}
