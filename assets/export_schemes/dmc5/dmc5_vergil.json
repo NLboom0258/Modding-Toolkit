@@ -46,10 +46,8 @@
         {
           "id": "pl0300_11_light",
           "mesh": "pl0300_vergil/pl0300_11_head_event/pl0300_11_light.mesh.1808282334",
-          "mdf2": [
-            "pl0300_vergil/pl0300_11_head_event/pl0300_11.mdf2.10"
-          ],
-          "note": "过场头(light, 材质同 11)"
+          "mdf2": [],
+          "note": "过场头(light)；材质与 11 共用，不在这里重复"
         }
       ]
     },
@@ -289,9 +287,8 @@
             "pl0800_vergilpl/pl0800_body/pl0800_vmode.mdf2.10",
             "pl0800_vergilpl/pl0800_body/pl0800_wet.mdf2.10"
           ],
-          "chain": "pl0300_vergil/pl0300_body/pl0300.chain.21",
           "fbxskel": "pl0800_vergilpl/pl0800_body/pl0800.fbxskel.3",
-          "note": "玩家人形态身体；物理共用 pl0300.chain，fbxskel 带 2 根 WeaponConst"
+          "note": "玩家人形态身体；物理链与 bossV 共用 pl0300.chain（挂在那条上，不在这里重复），fbxskel 带 2 根 WeaponConst"
         }
       ]
     },
@@ -626,10 +623,8 @@
         {
           "id": "wp08_001_00",
           "mesh": "wp08_001/wp08_001_00.mesh.1808282334",
-          "mdf2": [
-            "wp08_001/wp08_001_astral.mdf2.10"
-          ],
-          "note": "魅影刃的另一个网格(同目录)；该目录没有主材质, 只有 astral"
+          "mdf2": [],
+          "note": "魅影刃的另一个网格(同目录)；该目录没有主材质, 只有 astral；wp08_001_astral.mdf2.10 与 武器-魅影刃/wp08_001 共用，不在本条重复"
         }
       ]
     },

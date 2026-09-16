@@ -141,11 +141,7 @@
         {
           "id": "pl0000_11_light",
           "mesh": "pl0000_nero/pl0000_11_head_event/pl0000_11_light.mesh.1808282334",
-          "mdf2": [
-            "pl0000_nero/pl0000_11_head_event/pl0000_11.mdf2.10",
-            "pl0000_nero/pl0000_11_head_event/pl0000_11_blood.mdf2.10",
-            "pl0000_nero/pl0000_11_head_event/pl0000_11_wet.mdf2.10"
-          ],
+          "mdf2": [],
           "note": "主菜单/过场/角色报告等非关卡内调用；该目录有 2 个 mesh"
         }
       ]
@@ -1053,7 +1049,6 @@
           "mdf2": [
             "wp00_022/wp00_022_10.mdf2.10"
           ],
-          "chain": "wp00_022/wp00_022.chain.21",
           "note": "MonkeyBusiness 香蕉手(DLC 恶搞手)；目录含本体与 _10 掉落物状态，各成一条"
         }
       ]

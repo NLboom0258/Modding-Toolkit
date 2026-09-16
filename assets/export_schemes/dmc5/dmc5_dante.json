@@ -58,10 +58,8 @@
         {
           "id": "pl0100_11_light",
           "mesh": "pl0100_dante/pl0100_11_head_event/pl0100_11_light.mesh.1808282334",
-          "mdf2": [
-            "pl0100_dante/pl0100_11_head_event/pl0100_11.mdf2.10"
-          ],
-          "note": "过场动画头(light, 材质同 11)"
+          "mdf2": [],
+          "note": "过场动画头(light, 材质同 11)；pl0100_11.mdf2.10 与 头部/pl0100_11 共用，不在本条重复"
         },
         {
           "id": "pl0100_11_eyelash",
@@ -272,10 +270,8 @@
         {
           "id": "pl0130_11_light",
           "mesh": "pl0130_dante_dirt/pl0130_11_head_event/pl0130_11_light.mesh.1808282334",
-          "mdf2": [
-            "pl0130_dante_dirt/pl0130_11_head_event/pl0130_11.mdf2.10"
-          ],
-          "note": "沾土状态过场头(light, 材质同11)"
+          "mdf2": [],
+          "note": "沾土状态过场头(light, 材质同11)；pl0130_11.mdf2.10 与 头部-沾土状态/pl0130_11 共用，不在本条重复"
         }
       ]
     },
