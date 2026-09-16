@@ -458,7 +458,7 @@
       ]
     },
     {
-      "name": "残影-bossV",
+      "name": "特效-bossV残影",
       "base_path": "x64/vfx/mesh/mesh_character/pl0300",
       "entries": [
         {
@@ -506,7 +506,7 @@
       ]
     },
     {
-      "name": "残影-玩家Vergil",
+      "name": "特效-玩家Vergil残影",
       "base_path": "x64/vfx/mesh/mesh_character/pl0800",
       "entries": [
         {

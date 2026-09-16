@@ -178,6 +178,7 @@ class DMC5_OT_BatchExportDialog(bpy.types.Operator):
 
         layout.separator()
         layout.prop(settings, "dmc5_use_blank_export", text="Use Blank Model for Unselected", icon='FILE_BLANK')
+        layout.prop(settings, "dmc5_note_wrap", text="Note Width", slider=True)
 
         layout.separator()
         split = layout.split(factor=0.35)
@@ -199,12 +200,20 @@ class DMC5_OT_BatchExportDialog(bpy.types.Operator):
         for entry in group["entries"]:
             entry_id = entry["id"]
             entry_default = entry.get("enabled", group.get("default_enabled", True))
-            header = entry_id
-            note = entry.get("note", "")
-            if note:
-                header += f"  [{note}]"
             entry_box = layout.box()
-            entry_box.label(text=header)
+            note = entry.get("note", "")
+            if not note:
+                entry_box.label(text=entry_id)
+            else:
+                # 备注按字符数折行：弹窗宽度由内容决定，不折行的长备注会超出屏幕被裁掉
+                # （宽度由设置里的 Note Width 控制）。
+                _w = max(20, int(getattr(scene, "dmc5_note_wrap", 60) or 60))
+                lines = [note[i:i + _w] for i in range(0, len(note), _w)]
+                for _i, _ln in enumerate(lines):
+                    if _i == 0:
+                        entry_box.label(text=f"{entry_id}  [{_ln}" + ("]" if len(lines) == 1 else ""))
+                    else:
+                        entry_box.label(text="    " + _ln + ("]" if _i == len(lines) - 1 else ""))
 
             if entry.get("mesh"):
                 head = entry_box.row(align=True)
