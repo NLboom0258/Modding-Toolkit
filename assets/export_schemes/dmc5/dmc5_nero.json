@@ -2,17 +2,1190 @@
   "character": "Nero (DMC5)",
   "character_id": "dmc5_nero",
   "base_path": "x64/character/player",
-  "fbxskel": "pl0000_nero/pl0000_body/pl0000.fbxskel.3",
   "groups": [
     {
-      "name": "身体",
+      "name": "身体-人形态",
       "entries": [
         {
           "id": "pl0000_body",
           "mesh": "pl0000_nero/pl0000_body/pl0000.mesh.1808282334",
-          "mdf2": ["pl0000_nero/pl0000_body/pl0000.mdf2.10"],
+          "mdf2": [
+            "pl0000_nero/pl0000_body/pl0000.mdf2.10",
+            "pl0000_nero/pl0000_body/pl0000_blood.mdf2.10",
+            "pl0000_nero/pl0000_body/pl0000_burn.mdf2.10",
+            "pl0000_nero/pl0000_body/pl0000_freeze.mdf2.10",
+            "pl0000_nero/pl0000_body/pl0000_slow.mdf2.10",
+            "pl0000_nero/pl0000_body/pl0000_trans.mdf2.10",
+            "pl0000_nero/pl0000_body/pl0000_trans_ev.mdf2.10",
+            "pl0000_nero/pl0000_body/pl0000_wet.mdf2.10"
+          ],
           "chain": "pl0000_nero/pl0000_body/pl0000.chain.21",
-          "note": "身体"
+          "fbxskel": "pl0000_nero/pl0000_body/pl0000.fbxskel.3",
+          "note": "人形态身体；目录含 chain 与 fbxskel"
+        }
+      ]
+    },
+    {
+      "name": "头部-人形态",
+      "entries": [
+        {
+          "id": "pl0000_01_head",
+          "mesh": "pl0000_nero/pl0000_01_head/pl0000_01.mesh.1808282334",
+          "mdf2": [
+            "pl0000_nero/pl0000_01_head/pl0000_01.mdf2.10",
+            "pl0000_nero/pl0000_01_head/pl0000_01_blood.mdf2.10",
+            "pl0000_nero/pl0000_01_head/pl0000_01_burn.mdf2.10",
+            "pl0000_nero/pl0000_01_head/pl0000_01_freeze.mdf2.10",
+            "pl0000_nero/pl0000_01_head/pl0000_01_slow.mdf2.10",
+            "pl0000_nero/pl0000_01_head/pl0000_01_trans.mdf2.10",
+            "pl0000_nero/pl0000_01_head/pl0000_01_wet.mdf2.10"
+          ],
+          "note": "关卡内调用"
+        }
+      ]
+    },
+    {
+      "name": "头发-人形态",
+      "entries": [
+        {
+          "id": "pl0000_03_hair",
+          "mesh": "pl0000_nero/pl0000_03_hair/pl0000_03.mesh.1808282334",
+          "mdf2": [
+            "pl0000_nero/pl0000_03_hair/pl0000_03.mdf2.10",
+            "pl0000_nero/pl0000_03_hair/pl0000_03_blood.mdf2.10",
+            "pl0000_nero/pl0000_03_hair/pl0000_03_burn.mdf2.10",
+            "pl0000_nero/pl0000_03_hair/pl0000_03_freeze.mdf2.10",
+            "pl0000_nero/pl0000_03_hair/pl0000_03_slow.mdf2.10",
+            "pl0000_nero/pl0000_03_hair/pl0000_03_trans.mdf2.10",
+            "pl0000_nero/pl0000_03_hair/pl0000_03_transparent.mdf2.10",
+            "pl0000_nero/pl0000_03_hair/pl0000_03_wet.mdf2.10"
+          ],
+          "chain": "pl0000_nero/pl0000_03_hair/pl0000_03_hair.chain.21",
+          "note": "头发(03)"
+        }
+      ]
+    },
+    {
+      "name": "手臂",
+      "entries": [
+        {
+          "id": "pl0000_05",
+          "mesh": "pl0000_nero/pl0000_05_devilarm/pl0000_05.mesh.1808282334",
+          "mdf2": [
+            "pl0000_nero/pl0000_05_devilarm/pl0000_05.mdf2.10",
+            "pl0000_nero/pl0000_05_devilarm/pl0000_05_item.mdf2.10"
+          ],
+          "note": "真鬼手(M1 拿手好戏过场)；该目录 2 个 mesh：本体与 _item 道具状态"
+        },
+        {
+          "id": "pl0000_05_item",
+          "mesh": "pl0000_nero/pl0000_05_devilarm/pl0000_05_item.mesh.1808282334",
+          "mdf2": [
+            "pl0000_nero/pl0000_05_devilarm/pl0000_05.mdf2.10",
+            "pl0000_nero/pl0000_05_devilarm/pl0000_05_item.mdf2.10"
+          ],
+          "note": "真鬼手(M1 拿手好戏过场)；该目录 2 个 mesh：本体与 _item 道具状态"
+        },
+        {
+          "id": "pl0000_06_cuttingarm",
+          "mesh": "pl0000_nero/pl0000_06_cuttingarm/pl0000_06.mesh.1808282334",
+          "mdf2": [
+            "pl0000_nero/pl0000_06_cuttingarm/pl0000_06.mdf2.10"
+          ],
+          "note": "被扯断的半截手臂(M1 过场)"
+        },
+        {
+          "id": "pl0000_07_bandagearm",
+          "mesh": "pl0000_nero/pl0000_07_bandagearm/pl0000_07.mesh.1808282334",
+          "mdf2": [
+            "pl0000_nero/pl0000_07_bandagearm/pl0000_07.mdf2.10",
+            "pl0000_nero/pl0000_07_bandagearm/pl0000_07_slow.mdf2.10",
+            "pl0000_nero/pl0000_07_bandagearm/pl0000_07_trans.mdf2.10"
+          ],
+          "note": "包扎绷带的半截手臂(序章无机械手)"
+        },
+        {
+          "id": "pl0000_08_humanarm",
+          "mesh": "pl0000_nero/pl0000_08_humanarm/pl0000_08.mesh.1808282334",
+          "mdf2": [
+            "pl0000_nero/pl0000_08_humanarm/pl0000_08.mdf2.10",
+            "pl0000_nero/pl0000_08_humanarm/pl0000_08_blood.mdf2.10",
+            "pl0000_nero/pl0000_08_humanarm/pl0000_08_burn.mdf2.10",
+            "pl0000_nero/pl0000_08_humanarm/pl0000_08_freeze.mdf2.10",
+            "pl0000_nero/pl0000_08_humanarm/pl0000_08_slow.mdf2.10",
+            "pl0000_nero/pl0000_08_humanarm/pl0000_08_wet.mdf2.10"
+          ],
+          "note": "M20 新生手臂；首通后不装机械手也会调用(目录含 jcns)"
+        },
+        {
+          "id": "pl0000_09_astralarm",
+          "mesh": "pl0000_nero/pl0000_09_astralarm/pl0000_09.mesh.1808282334",
+          "mdf2": [
+            "pl0000_nero/pl0000_09_astralarm/pl0000_09.mdf2.10"
+          ],
+          "note": "M20 过场手臂(长出时的过渡)"
+        }
+      ]
+    },
+    {
+      "name": "头部-过场",
+      "entries": [
+        {
+          "id": "pl0000_11",
+          "mesh": "pl0000_nero/pl0000_11_head_event/pl0000_11.mesh.1808282334",
+          "mdf2": [
+            "pl0000_nero/pl0000_11_head_event/pl0000_11.mdf2.10",
+            "pl0000_nero/pl0000_11_head_event/pl0000_11_blood.mdf2.10",
+            "pl0000_nero/pl0000_11_head_event/pl0000_11_wet.mdf2.10"
+          ],
+          "note": "主菜单/过场/角色报告等非关卡内调用；该目录有 2 个 mesh"
+        },
+        {
+          "id": "pl0000_11_light",
+          "mesh": "pl0000_nero/pl0000_11_head_event/pl0000_11_light.mesh.1808282334",
+          "mdf2": [
+            "pl0000_nero/pl0000_11_head_event/pl0000_11.mdf2.10",
+            "pl0000_nero/pl0000_11_head_event/pl0000_11_blood.mdf2.10",
+            "pl0000_nero/pl0000_11_head_event/pl0000_11_wet.mdf2.10"
+          ],
+          "note": "主菜单/过场/角色报告等非关卡内调用；该目录有 2 个 mesh"
+        }
+      ]
+    },
+    {
+      "name": "头发-兜帽",
+      "entries": [
+        {
+          "id": "pl0000_13_hairhood",
+          "mesh": "pl0000_nero/pl0000_13_hairhood/pl0000_13.mesh.1808282334",
+          "mdf2": [
+            "pl0000_nero/pl0000_13_hairhood/pl0000_13.mdf2.10",
+            "pl0000_nero/pl0000_13_hairhood/pl0000_13_blood.mdf2.10",
+            "pl0000_nero/pl0000_13_hairhood/pl0000_13_wet.mdf2.10"
+          ],
+          "note": "戴上兜帽后的头发(血宫嘲讽/某个普通嘲讽会先戴兜帽)"
+        }
+      ]
+    },
+    {
+      "name": "头部-血宫",
+      "entries": [
+        {
+          "id": "pl0000_21_bloodypalacehead",
+          "mdf2": [
+            "pl0000_nero/pl0000_21_bloodypalacehead/pl0000_21.mdf2.10",
+            "pl0000_nero/pl0000_21_bloodypalacehead/pl0000_21_blood_event.mdf2.10",
+            "pl0000_nero/pl0000_21_bloodypalacehead/pl0000_21_event.mdf2.10",
+            "pl0000_nero/pl0000_21_bloodypalacehead/pl0000_21_wet_event.mdf2.10"
+          ],
+          "note": "血宫通关后的头部(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "身体-魔人",
+      "entries": [
+        {
+          "id": "pl0010_body",
+          "mesh": "pl0010_nero_majin/pl0010_body/pl0010.mesh.1808282334",
+          "mdf2": [
+            "pl0010_nero_majin/pl0010_body/pl0010.mdf2.10",
+            "pl0010_nero_majin/pl0010_body/pl0010_trans.mdf2.10"
+          ],
+          "note": "魔人身体；该目录无 chain、无 fbxskel"
+        }
+      ]
+    },
+    {
+      "name": "头发-魔人",
+      "entries": [
+        {
+          "id": "pl0010_03_hair",
+          "mesh": "pl0010_nero_majin/pl0010_03_hair/pl0010_03.mesh.1808282334",
+          "mdf2": [
+            "pl0010_nero_majin/pl0010_03_hair/pl0010_03.mdf2.10",
+            "pl0010_nero_majin/pl0010_03_hair/pl0010_03_trans.mdf2.10"
+          ],
+          "chain": "pl0010_nero_majin/pl0010_03_hair/pl0010_03_hair.chain.21",
+          "note": "魔人头发(03)"
+        },
+        {
+          "id": "pl0010_13_hair",
+          "mesh": "pl0010_nero_majin/pl0010_13_hair/pl0010_13.mesh.1808282334",
+          "mdf2": [
+            "pl0010_nero_majin/pl0010_13_hair/pl0010_13.mdf2.10",
+            "pl0010_nero_majin/pl0010_13_hair/pl0010_13_trans.mdf2.10"
+          ],
+          "note": "魔人头发(13)"
+        }
+      ]
+    },
+    {
+      "name": "翅膀-魔人",
+      "entries": [
+        {
+          "id": "pl0010_04_wingr",
+          "mesh": "pl0010_nero_majin/pl0010_04_wingr/pl0010_04.mesh.1808282334",
+          "mdf2": [
+            "pl0010_nero_majin/pl0010_04_wingr/pl0010_04.mdf2.10",
+            "pl0010_nero_majin/pl0010_04_wingr/pl0010_04_trans.mdf2.10"
+          ],
+          "note": "右翅(尾端五指张开)"
+        },
+        {
+          "id": "pl0010_05_wingl",
+          "mesh": "pl0010_nero_majin/pl0010_05_wingl/pl0010_05.mesh.1808282334",
+          "mdf2": [
+            "pl0010_nero_majin/pl0010_05_wingl/pl0010_05.mdf2.10",
+            "pl0010_nero_majin/pl0010_05_wingl/pl0010_05_trans.mdf2.10"
+          ],
+          "note": "左翅(尾端五指张开)"
+        },
+        {
+          "id": "pl0010_06_wingr",
+          "mesh": "pl0010_nero_majin/pl0010_06_wingr/pl0010_06.mesh.1808282334",
+          "mdf2": [
+            "pl0010_nero_majin/pl0010_06_wingr/pl0010_06.mdf2.10",
+            "pl0010_nero_majin/pl0010_06_wingr/pl0010_06_trans.mdf2.10"
+          ],
+          "chain": "pl0010_nero_majin/pl0010_06_wingr/pl0010_06_wingr.chain.21",
+          "note": "右翅(纯翅膀)"
+        },
+        {
+          "id": "pl0010_07_wingl",
+          "mesh": "pl0010_nero_majin/pl0010_07_wingl/pl0010_07.mesh.1808282334",
+          "mdf2": [
+            "pl0010_nero_majin/pl0010_07_wingl/pl0010_07.mdf2.10",
+            "pl0010_nero_majin/pl0010_07_wingl/pl0010_07_trans.mdf2.10"
+          ],
+          "chain": "pl0010_nero_majin/pl0010_07_wingl/pl0010_07_wingl.chain.21",
+          "note": "左翅(纯翅膀)"
+        }
+      ]
+    },
+    {
+      "name": "鬼手-魔人",
+      "entries": [
+        {
+          "id": "pl0010_08_wirer",
+          "mesh": "pl0010_nero_majin/pl0010_08_wirer/pl0010_08.mesh.1808282334",
+          "mdf2": [
+            "pl0010_nero_majin/pl0010_08_wirer/pl0010_08.mdf2.10"
+          ],
+          "note": "右侧鬼手(抓取时)"
+        },
+        {
+          "id": "pl0010_09_wirel",
+          "mesh": "pl0010_nero_majin/pl0010_09_wirel/pl0010_09.mesh.1808282334",
+          "mdf2": [
+            "pl0010_nero_majin/pl0010_09_wirel/pl0010_09.mdf2.10"
+          ],
+          "note": "左侧鬼手(抓取时)"
+        },
+        {
+          "id": "pl0010_20_busterarmr",
+          "mesh": "pl0010_nero_majin/pl0010_20_busterarmr/pl0010_20.mesh.1808282334",
+          "mdf2": [
+            "pl0010_nero_majin/pl0010_20_busterarmr/pl0010_20.mdf2.10"
+          ],
+          "note": "右侧鬼手/蓝拳"
+        },
+        {
+          "id": "pl0010_21_busterarml",
+          "mesh": "pl0010_nero_majin/pl0010_21_busterarml/pl0010_21.mesh.1808282334",
+          "mdf2": [
+            "pl0010_nero_majin/pl0010_21_busterarml/pl0010_21.mdf2.10"
+          ],
+          "note": "左侧鬼手/蓝拳"
+        }
+      ]
+    },
+    {
+      "name": "身体-沾土",
+      "entries": [
+        {
+          "id": "pl0030_body",
+          "mdf2": [
+            "pl0030_nero_dirt/pl0030_body/pl0030.mdf2.10",
+            "pl0030_nero_dirt/pl0030_body/pl0030_blood.mdf2.10",
+            "pl0030_nero_dirt/pl0030_body/pl0030_burn.mdf2.10",
+            "pl0030_nero_dirt/pl0030_body/pl0030_freeze.mdf2.10",
+            "pl0030_nero_dirt/pl0030_body/pl0030_slow.mdf2.10",
+            "pl0030_nero_dirt/pl0030_body/pl0030_trans.mdf2.10",
+            "pl0030_nero_dirt/pl0030_body/pl0030_wet.mdf2.10"
+          ],
+          "note": "沾土身体(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "头部-沾土",
+      "entries": [
+        {
+          "id": "pl0030_01_head",
+          "mdf2": [
+            "pl0030_nero_dirt/pl0030_01_head/pl0030_01.mdf2.10",
+            "pl0030_nero_dirt/pl0030_01_head/pl0030_01_blood.mdf2.10",
+            "pl0030_nero_dirt/pl0030_01_head/pl0030_01_burn.mdf2.10",
+            "pl0030_nero_dirt/pl0030_01_head/pl0030_01_freeze.mdf2.10",
+            "pl0030_nero_dirt/pl0030_01_head/pl0030_01_slow.mdf2.10",
+            "pl0030_nero_dirt/pl0030_01_head/pl0030_01_trans.mdf2.10",
+            "pl0030_nero_dirt/pl0030_01_head/pl0030_01_wet.mdf2.10"
+          ],
+          "note": "沾土头部(仅材质)"
+        },
+        {
+          "id": "pl0030_11",
+          "mdf2": [
+            "pl0030_nero_dirt/pl0030_11_head_event/pl0030_11.mdf2.10",
+            "pl0030_nero_dirt/pl0030_11_head_event/pl0030_11_beaten.mdf2.10",
+            "pl0030_nero_dirt/pl0030_11_head_event/pl0030_11_beaten_trans.mdf2.10",
+            "pl0030_nero_dirt/pl0030_11_head_event/pl0030_11_blood.mdf2.10",
+            "pl0030_nero_dirt/pl0030_11_head_event/pl0030_11_trans.mdf2.10",
+            "pl0030_nero_dirt/pl0030_11_head_event/pl0030_11_wet.mdf2.10"
+          ],
+          "note": "沾土过场头(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "手臂-沾土",
+      "entries": [
+        {
+          "id": "pl0030_08_humanarm",
+          "mdf2": [
+            "pl0030_nero_dirt/pl0030_08_humanarm/pl0030_08.mdf2.10",
+            "pl0030_nero_dirt/pl0030_08_humanarm/pl0030_08_blood.mdf2.10",
+            "pl0030_nero_dirt/pl0030_08_humanarm/pl0030_08_burn.mdf2.10",
+            "pl0030_nero_dirt/pl0030_08_humanarm/pl0030_08_freeze.mdf2.10",
+            "pl0030_nero_dirt/pl0030_08_humanarm/pl0030_08_slow.mdf2.10",
+            "pl0030_nero_dirt/pl0030_08_humanarm/pl0030_08_wet.mdf2.10"
+          ],
+          "note": "沾土新生手臂(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "身体-沾土2",
+      "entries": [
+        {
+          "id": "pl0031_body",
+          "mdf2": [
+            "pl0031_nero_middirt/pl0031_body/pl0031.mdf2.10",
+            "pl0031_nero_middirt/pl0031_body/pl0031_blood.mdf2.10",
+            "pl0031_nero_middirt/pl0031_body/pl0031_burn.mdf2.10",
+            "pl0031_nero_middirt/pl0031_body/pl0031_freeze.mdf2.10",
+            "pl0031_nero_middirt/pl0031_body/pl0031_slow.mdf2.10",
+            "pl0031_nero_middirt/pl0031_body/pl0031_trans.mdf2.10",
+            "pl0031_nero_middirt/pl0031_body/pl0031_wet.mdf2.10"
+          ],
+          "note": "沾土2身体(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "头部-沾土2",
+      "entries": [
+        {
+          "id": "pl0031_01_head",
+          "mdf2": [
+            "pl0031_nero_middirt/pl0031_01_head/pl0031_01.mdf2.10",
+            "pl0031_nero_middirt/pl0031_01_head/pl0031_01_blood.mdf2.10",
+            "pl0031_nero_middirt/pl0031_01_head/pl0031_01_burn.mdf2.10",
+            "pl0031_nero_middirt/pl0031_01_head/pl0031_01_freeze.mdf2.10",
+            "pl0031_nero_middirt/pl0031_01_head/pl0031_01_slow.mdf2.10",
+            "pl0031_nero_middirt/pl0031_01_head/pl0031_01_trans.mdf2.10",
+            "pl0031_nero_middirt/pl0031_01_head/pl0031_01_wet.mdf2.10"
+          ],
+          "note": "沾土2头部(仅材质)"
+        },
+        {
+          "id": "pl0031_11",
+          "mdf2": [
+            "pl0031_nero_middirt/pl0031_11_head_event/pl0031_11.mdf2.10",
+            "pl0031_nero_middirt/pl0031_11_head_event/pl0031_11_blood.mdf2.10",
+            "pl0031_nero_middirt/pl0031_11_head_event/pl0031_11_wet.mdf2.10"
+          ],
+          "note": "沾土2过场头(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "手臂-沾土2",
+      "entries": [
+        {
+          "id": "pl0031_08_humanarm",
+          "mdf2": [
+            "pl0031_nero_middirt/pl0031_08_humanarm/pl0031_08.mdf2.10",
+            "pl0031_nero_middirt/pl0031_08_humanarm/pl0031_08_blood.mdf2.10",
+            "pl0031_nero_middirt/pl0031_08_humanarm/pl0031_08_burn.mdf2.10",
+            "pl0031_nero_middirt/pl0031_08_humanarm/pl0031_08_freeze.mdf2.10",
+            "pl0031_nero_middirt/pl0031_08_humanarm/pl0031_08_slow.mdf2.10",
+            "pl0031_nero_middirt/pl0031_08_humanarm/pl0031_08_wet.mdf2.10"
+          ],
+          "note": "沾土2新生手臂(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "身体-异色",
+      "entries": [
+        {
+          "id": "pl0000_c00_body",
+          "mdf2": [
+            "pl0000_c00_nero/pl0000_c00_body/pl0000_c00.mdf2.10",
+            "pl0000_c00_nero/pl0000_c00_body/pl0000_c00_blood.mdf2.10",
+            "pl0000_c00_nero/pl0000_c00_body/pl0000_c00_burn.mdf2.10",
+            "pl0000_c00_nero/pl0000_c00_body/pl0000_c00_freeze.mdf2.10",
+            "pl0000_c00_nero/pl0000_c00_body/pl0000_c00_slow.mdf2.10",
+            "pl0000_c00_nero/pl0000_c00_body/pl0000_c00_trans.mdf2.10",
+            "pl0000_c00_nero/pl0000_c00_body/pl0000_c00_trans_ev.mdf2.10",
+            "pl0000_c00_nero/pl0000_c00_body/pl0000_c00_wet.mdf2.10"
+          ],
+          "note": "异色人形态身体(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "头发-异色",
+      "entries": [
+        {
+          "id": "pl0000_c00_03_hair",
+          "mdf2": [
+            "pl0000_c00_nero/pl0000_c00_03_hair/pl0000_c00_03.mdf2.10",
+            "pl0000_c00_nero/pl0000_c00_03_hair/pl0000_c00_03_blood.mdf2.10",
+            "pl0000_c00_nero/pl0000_c00_03_hair/pl0000_c00_03_burn.mdf2.10",
+            "pl0000_c00_nero/pl0000_c00_03_hair/pl0000_c00_03_freeze.mdf2.10",
+            "pl0000_c00_nero/pl0000_c00_03_hair/pl0000_c00_03_slow.mdf2.10",
+            "pl0000_c00_nero/pl0000_c00_03_hair/pl0000_c00_03_trans.mdf2.10",
+            "pl0000_c00_nero/pl0000_c00_03_hair/pl0000_c00_03_wet.mdf2.10"
+          ],
+          "note": "异色头发(03, 仅材质)"
+        },
+        {
+          "id": "pl0000_c00_13_hairhood",
+          "mdf2": [
+            "pl0000_c00_nero/pl0000_c00_13_hairhood/pl0000_c00_13.mdf2.10",
+            "pl0000_c00_nero/pl0000_c00_13_hairhood/pl0000_c00_13_blood.mdf2.10",
+            "pl0000_c00_nero/pl0000_c00_13_hairhood/pl0000_c00_13_trans.mdf2.10",
+            "pl0000_c00_nero/pl0000_c00_13_hairhood/pl0000_c00_13_wet.mdf2.10"
+          ],
+          "note": "异色戴上兜帽后的头发(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "身体-异色魔人",
+      "entries": [
+        {
+          "id": "pl0010_c00_body",
+          "mdf2": [
+            "pl0010_c00_nero_majin/pl0010_c00_body/pl0010_c00.mdf2.10",
+            "pl0010_c00_nero_majin/pl0010_c00_body/pl0010_c00_trans.mdf2.10"
+          ],
+          "note": "异色魔人身体(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "身体-异色沾土",
+      "entries": [
+        {
+          "id": "pl0030_c00_body",
+          "mdf2": [
+            "pl0030_c00_nero_dirt/pl0030_c00_body/pl0030_c00.mdf2.10",
+            "pl0030_c00_nero_dirt/pl0030_c00_body/pl0030_c00_blood.mdf2.10",
+            "pl0030_c00_nero_dirt/pl0030_c00_body/pl0030_c00_burn.mdf2.10",
+            "pl0030_c00_nero_dirt/pl0030_c00_body/pl0030_c00_freeze.mdf2.10",
+            "pl0030_c00_nero_dirt/pl0030_c00_body/pl0030_c00_slow.mdf2.10",
+            "pl0030_c00_nero_dirt/pl0030_c00_body/pl0030_c00_trans.mdf2.10",
+            "pl0030_c00_nero_dirt/pl0030_c00_body/pl0030_c00_wet.mdf2.10"
+          ],
+          "note": "异色沾土身体(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "身体-异色沾土2",
+      "entries": [
+        {
+          "id": "pl0031_c00_body",
+          "mdf2": [
+            "pl0031_c00_nero_middirt/pl0031_c00_body/pl0031_c00.mdf2.10",
+            "pl0031_c00_nero_middirt/pl0031_c00_body/pl0031_c00_blood.mdf2.10",
+            "pl0031_c00_nero_middirt/pl0031_c00_body/pl0031_c00_burn.mdf2.10",
+            "pl0031_c00_nero_middirt/pl0031_c00_body/pl0031_c00_freeze.mdf2.10",
+            "pl0031_c00_nero_middirt/pl0031_c00_body/pl0031_c00_slow.mdf2.10",
+            "pl0031_c00_nero_middirt/pl0031_c00_body/pl0031_c00_trans.mdf2.10",
+            "pl0031_c00_nero_middirt/pl0031_c00_body/pl0031_c00_wet.mdf2.10"
+          ],
+          "note": "异色沾土2身体(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "材质-过场M01",
+      "base_path": "x64/event/mission01/m01_501/shader/material",
+      "entries": [
+        {
+          "id": "cs_m01_pl000_body",
+          "mdf2": [
+            "shader_03_cs_pl000_bloodbody_50_000.mdf2.10"
+          ],
+          "note": "拔手后倒地的身体"
+        },
+        {
+          "id": "cs_m01_pl000_hair",
+          "mdf2": [
+            "shader_03_cs_pl000_bloodhair_50_002.mdf2.10"
+          ],
+          "note": "拔手后倒地的头发"
+        },
+        {
+          "id": "cs_m01_pl000_head",
+          "mdf2": [
+            "shader_03_cs_pl000_bloodhead_50_001.mdf2.10"
+          ],
+          "note": "拔手后倒地的头部"
+        },
+        {
+          "id": "cs_m01_pl000_c00_body",
+          "mdf2": [
+            "shader_03_cs_pl000_c00_bloodbody_50_000.mdf2.10"
+          ],
+          "note": "倒地身体(异色 c00；表里没有, 按目录补)"
+        },
+        {
+          "id": "cs_m01_pl000_c00_hair",
+          "mdf2": [
+            "shader_03_cs_pl000_c00_bloodhair_50_002.mdf2.10"
+          ],
+          "note": "倒地头发(异色 c00；表里没有, 按目录补)"
+        }
+      ]
+    },
+    {
+      "name": "材质-过场M20",
+      "base_path": "x64/event/mission20/m20_100/shader/material",
+      "entries": [
+        {
+          "id": "cs_m20_pl0000_08",
+          "mdf2": [
+            "shader_03_cs_pl0000_08_50_000.mdf2.10"
+          ],
+          "note": "M20 新生手臂的过场材质(整个目录表里都没写)"
+        }
+      ]
+    },
+    {
+      "name": "残影-尼禄",
+      "base_path": "x64/vfx/mesh/mesh_character/pl0000",
+      "entries": [
+        {
+          "id": "vfx_pl0000_maximumbet",
+          "mdf2": [
+            "mesh_03_pl0000_maximumbet_0000_00_00.mdf2.10"
+          ],
+          "note": "Maximum Bet 的材质(表里没写尼禄的残影, 按目录补)"
+        },
+        {
+          "id": "vfx_pl0000_yamato",
+          "mesh": "mesh_03_pl0000_yamato.mesh.1808282334",
+          "mdf2": [],
+          "note": "该 vfx 目录里唯一的 mesh(命名 yamato, 用途待确认; 无骨架)"
+        }
+      ]
+    },
+    {
+      "name": "武器-湛蓝玫瑰",
+      "base_path": "x64/character/weapon",
+      "default_enabled": false,
+      "entries": [
+        {
+          "id": "wp00_000",
+          "mesh": "wp00_000/wp00_000.mesh.1808282334",
+          "mdf2": [
+            "wp00_000/wp00_000.mdf2.10"
+          ],
+          "note": "湛蓝玫瑰 Blue Rose(左轮手枪)"
+        }
+      ]
+    },
+    {
+      "name": "武器-绯红女王",
+      "base_path": "x64/character/weapon",
+      "default_enabled": false,
+      "entries": [
+        {
+          "id": "wp00_001",
+          "mesh": "wp00_001/wp00_001.mesh.1808282334",
+          "mdf2": [
+            "wp00_001/wp00_001.mdf2.10"
+          ],
+          "note": "绯红女王 Red Queen(油门剑)"
+        }
+      ]
+    },
+    {
+      "name": "武器-机械手钩爪",
+      "base_path": "x64/character/weapon",
+      "default_enabled": false,
+      "entries": [
+        {
+          "id": "wp00_002",
+          "mesh": "wp00_002/wp00_002.mesh.1808282334",
+          "mdf2": [
+            "wp00_002/wp00_002.mdf2.10"
+          ],
+          "note": "机械手发射的钩爪"
+        }
+      ]
+    },
+    {
+      "name": "武器-机械手连接器",
+      "base_path": "x64/character/weapon",
+      "default_enabled": false,
+      "entries": [
+        {
+          "id": "wp00_003",
+          "mesh": "wp00_003/wp00_003.mesh.1808282334",
+          "mdf2": [
+            "wp00_003/wp00_003.mdf2.10",
+            "wp00_003/wp00_003_slow.mdf2.10",
+            "wp00_003/wp00_003_trans.mdf2.10"
+          ],
+          "note": "机械手底座(常规；有机械手时用)"
+        },
+        {
+          "id": "wp00_007",
+          "mesh": "wp00_007/wp00_007.mesh.1808282334",
+          "mdf2": [
+            "wp00_007/wp00_007.mdf2.10",
+            "wp00_007/wp00_007_slow.mdf2.10",
+            "wp00_007/wp00_007_trans.mdf2.10"
+          ],
+          "note": "机械手底座(新手臂版：M20 后用, 多一段绑带)"
+        }
+      ]
+    },
+    {
+      "name": "武器-机械手挂架",
+      "base_path": "x64/character/weapon",
+      "default_enabled": false,
+      "entries": [
+        {
+          "id": "wp00_004",
+          "mesh": "wp00_004/wp00_004.mesh.1808282334",
+          "mdf2": [
+            "wp00_004/wp00_004.mdf2.10",
+            "wp00_004/wp00_004_slow.mdf2.10"
+          ],
+          "chain": "wp00_004/wp00_004.chain.21",
+          "note": "腰上挂机械手的架子(待确认)"
+        }
+      ]
+    },
+    {
+      "name": "武器-对讲机",
+      "base_path": "x64/character/weapon",
+      "default_enabled": false,
+      "entries": [
+        {
+          "id": "wp00_006",
+          "mesh": "wp00_006/wp00_006.mesh.1808282334",
+          "mdf2": [
+            "wp00_006/wp00_006.mdf2.10"
+          ],
+          "note": "对讲机(用途待确认)"
+        }
+      ]
+    },
+    {
+      "name": "武器-幻影剑",
+      "base_path": "x64/character/weapon",
+      "default_enabled": false,
+      "entries": [
+        {
+          "id": "wp00_030",
+          "mesh": "wp00_030/wp00_030.mesh.1808282334",
+          "mdf2": [
+            "wp00_030/wp00_030.mdf2.10"
+          ],
+          "note": "幻影剑 Summoned Swords(魔人形态远程追加攻击)"
+        }
+      ]
+    },
+    {
+      "name": "武器-机械手-Overture",
+      "base_path": "x64/character/weapon",
+      "default_enabled": false,
+      "entries": [
+        {
+          "id": "wp00_010",
+          "mesh": "wp00_010/wp00_010.mesh.1808282334",
+          "mdf2": [
+            "wp00_010/wp00_010.mdf2.10",
+            "wp00_010/wp00_010_10.mdf2.10",
+            "wp00_010/wp00_010_title.mdf2.10"
+          ],
+          "note": "Overture 电手/雷手；目录含本体与 _10 掉落物状态，各成一条"
+        },
+        {
+          "id": "wp00_010_10",
+          "mesh": "wp00_010/wp00_010_10.mesh.1808282334",
+          "mdf2": [
+            "wp00_010/wp00_010.mdf2.10",
+            "wp00_010/wp00_010_10.mdf2.10",
+            "wp00_010/wp00_010_title.mdf2.10"
+          ],
+          "note": "Overture 电手/雷手；目录含本体与 _10 掉落物状态，各成一条"
+        }
+      ]
+    },
+    {
+      "name": "武器-机械手-Ragtime",
+      "base_path": "x64/character/weapon",
+      "default_enabled": false,
+      "entries": [
+        {
+          "id": "wp00_011",
+          "mesh": "wp00_011/wp00_011.mesh.1808282334",
+          "mdf2": [
+            "wp00_011/wp00_011.mdf2.10",
+            "wp00_011/wp00_011_10.mdf2.10",
+            "wp00_011/wp00_011_shop.mdf2.10"
+          ],
+          "note": "Ragtime 时停手；目录含本体与 _10 掉落物状态，各成一条"
+        },
+        {
+          "id": "wp00_011_10",
+          "mesh": "wp00_011/wp00_011_10.mesh.1808282334",
+          "mdf2": [
+            "wp00_011/wp00_011.mdf2.10",
+            "wp00_011/wp00_011_10.mdf2.10",
+            "wp00_011/wp00_011_shop.mdf2.10"
+          ],
+          "note": "Ragtime 时停手；目录含本体与 _10 掉落物状态，各成一条"
+        }
+      ]
+    },
+    {
+      "name": "武器-机械手-HelterSkelter",
+      "base_path": "x64/character/weapon",
+      "default_enabled": false,
+      "entries": [
+        {
+          "id": "wp00_012",
+          "mesh": "wp00_012/wp00_012.mesh.1808282334",
+          "mdf2": [
+            "wp00_012/wp00_012.mdf2.10",
+            "wp00_012/wp00_012_10.mdf2.10"
+          ],
+          "note": "HelterSkelter 钻头手；目录含本体与 _10 掉落物状态，各成一条"
+        },
+        {
+          "id": "wp00_012_10",
+          "mesh": "wp00_012/wp00_012_10.mesh.1808282334",
+          "mdf2": [
+            "wp00_012/wp00_012.mdf2.10",
+            "wp00_012/wp00_012_10.mdf2.10"
+          ],
+          "note": "HelterSkelter 钻头手；目录含本体与 _10 掉落物状态，各成一条"
+        }
+      ]
+    },
+    {
+      "name": "武器-机械手-Gerbera",
+      "base_path": "x64/character/weapon",
+      "default_enabled": false,
+      "entries": [
+        {
+          "id": "wp00_013",
+          "mesh": "wp00_013/wp00_013.mesh.1808282334",
+          "mdf2": [
+            "wp00_013/wp00_013.mdf2.10",
+            "wp00_013/wp00_013_10.mdf2.10",
+            "wp00_013/wp00_013_shop.mdf2.10"
+          ],
+          "note": "Gerbera 冲击手；目录含本体与 _10 掉落物状态，各成一条"
+        },
+        {
+          "id": "wp00_013_10",
+          "mesh": "wp00_013/wp00_013_10.mesh.1808282334",
+          "mdf2": [
+            "wp00_013/wp00_013.mdf2.10",
+            "wp00_013/wp00_013_10.mdf2.10",
+            "wp00_013/wp00_013_shop.mdf2.10"
+          ],
+          "note": "Gerbera 冲击手；目录含本体与 _10 掉落物状态，各成一条"
+        }
+      ]
+    },
+    {
+      "name": "武器-机械手-PunchLine",
+      "base_path": "x64/character/weapon",
+      "default_enabled": false,
+      "entries": [
+        {
+          "id": "wp00_014",
+          "mesh": "wp00_014/wp00_014.mesh.1808282334",
+          "mdf2": [
+            "wp00_014/wp00_014.mdf2.10",
+            "wp00_014/wp00_014_10.mdf2.10",
+            "wp00_014/wp00_014_shop.mdf2.10"
+          ],
+          "note": "PunchLine 火箭手；目录含本体与 _10 掉落物状态，各成一条"
+        },
+        {
+          "id": "wp00_014_10",
+          "mesh": "wp00_014/wp00_014_10.mesh.1808282334",
+          "mdf2": [
+            "wp00_014/wp00_014.mdf2.10",
+            "wp00_014/wp00_014_10.mdf2.10",
+            "wp00_014/wp00_014_shop.mdf2.10"
+          ],
+          "note": "PunchLine 火箭手；目录含本体与 _10 掉落物状态，各成一条"
+        }
+      ]
+    },
+    {
+      "name": "武器-机械手-BusterArm",
+      "base_path": "x64/character/weapon",
+      "default_enabled": false,
+      "entries": [
+        {
+          "id": "wp00_015",
+          "mesh": "wp00_015/wp00_015.mesh.1808282334",
+          "mdf2": [
+            "wp00_015/wp00_015.mdf2.10",
+            "wp00_015/wp00_015_01.mdf2.10",
+            "wp00_015/wp00_015_01_shop.mdf2.10",
+            "wp00_015/wp00_015_02.mdf2.10",
+            "wp00_015/wp00_015_03.mdf2.10",
+            "wp00_015/wp00_015_10.mdf2.10",
+            "wp00_015/wp00_015_shop.mdf2.10"
+          ],
+          "note": "BusterArm 投技手(另有 _01/_02/_03 绳索件)；目录含本体与 _10 掉落物状态，各成一条"
+        },
+        {
+          "id": "wp00_015_01",
+          "mesh": "wp00_015/wp00_015_01.mesh.1808282334",
+          "mdf2": [
+            "wp00_015/wp00_015.mdf2.10",
+            "wp00_015/wp00_015_01.mdf2.10",
+            "wp00_015/wp00_015_01_shop.mdf2.10",
+            "wp00_015/wp00_015_02.mdf2.10",
+            "wp00_015/wp00_015_03.mdf2.10",
+            "wp00_015/wp00_015_10.mdf2.10",
+            "wp00_015/wp00_015_shop.mdf2.10"
+          ],
+          "note": "BusterArm 投技手(另有 _01/_02/_03 绳索件)；目录含本体与 _10 掉落物状态，各成一条"
+        },
+        {
+          "id": "wp00_015_02",
+          "mesh": "wp00_015/wp00_015_02.mesh.1808282334",
+          "mdf2": [
+            "wp00_015/wp00_015.mdf2.10",
+            "wp00_015/wp00_015_01.mdf2.10",
+            "wp00_015/wp00_015_01_shop.mdf2.10",
+            "wp00_015/wp00_015_02.mdf2.10",
+            "wp00_015/wp00_015_03.mdf2.10",
+            "wp00_015/wp00_015_10.mdf2.10",
+            "wp00_015/wp00_015_shop.mdf2.10"
+          ],
+          "note": "BusterArm 投技手(另有 _01/_02/_03 绳索件)；目录含本体与 _10 掉落物状态，各成一条"
+        },
+        {
+          "id": "wp00_015_03",
+          "mesh": "wp00_015/wp00_015_03.mesh.1808282334",
+          "mdf2": [
+            "wp00_015/wp00_015.mdf2.10",
+            "wp00_015/wp00_015_01.mdf2.10",
+            "wp00_015/wp00_015_01_shop.mdf2.10",
+            "wp00_015/wp00_015_02.mdf2.10",
+            "wp00_015/wp00_015_03.mdf2.10",
+            "wp00_015/wp00_015_10.mdf2.10",
+            "wp00_015/wp00_015_shop.mdf2.10"
+          ],
+          "note": "BusterArm 投技手(另有 _01/_02/_03 绳索件)；目录含本体与 _10 掉落物状态，各成一条"
+        },
+        {
+          "id": "wp00_015_10",
+          "mesh": "wp00_015/wp00_015_10.mesh.1808282334",
+          "mdf2": [
+            "wp00_015/wp00_015.mdf2.10",
+            "wp00_015/wp00_015_01.mdf2.10",
+            "wp00_015/wp00_015_01_shop.mdf2.10",
+            "wp00_015/wp00_015_02.mdf2.10",
+            "wp00_015/wp00_015_03.mdf2.10",
+            "wp00_015/wp00_015_10.mdf2.10",
+            "wp00_015/wp00_015_shop.mdf2.10"
+          ],
+          "note": "BusterArm 投技手(另有 _01/_02/_03 绳索件)；目录含本体与 _10 掉落物状态，各成一条"
+        }
+      ]
+    },
+    {
+      "name": "武器-机械手-Rawhide",
+      "base_path": "x64/character/weapon",
+      "default_enabled": false,
+      "entries": [
+        {
+          "id": "wp00_016_00",
+          "mesh": "wp00_016/wp00_016_00.mesh.1808282334",
+          "mdf2": [
+            "wp00_016/wp00_016_00.mdf2.10",
+            "wp00_016/wp00_016_01.mdf2.10",
+            "wp00_016/wp00_016_02.mdf2.10",
+            "wp00_016/wp00_016_10.mdf2.10"
+          ],
+          "note": "Rawhide 鞭子手(_00 本体/_01 鞭子/_02 鞭子开头)；目录含本体与 _10 掉落物状态，各成一条"
+        },
+        {
+          "id": "wp00_016_01",
+          "mesh": "wp00_016/wp00_016_01.mesh.1808282334",
+          "mdf2": [
+            "wp00_016/wp00_016_00.mdf2.10",
+            "wp00_016/wp00_016_01.mdf2.10",
+            "wp00_016/wp00_016_02.mdf2.10",
+            "wp00_016/wp00_016_10.mdf2.10"
+          ],
+          "note": "Rawhide 鞭子手(_00 本体/_01 鞭子/_02 鞭子开头)；目录含本体与 _10 掉落物状态，各成一条"
+        },
+        {
+          "id": "wp00_016_02",
+          "mesh": "wp00_016/wp00_016_02.mesh.1808282334",
+          "mdf2": [
+            "wp00_016/wp00_016_00.mdf2.10",
+            "wp00_016/wp00_016_01.mdf2.10",
+            "wp00_016/wp00_016_02.mdf2.10",
+            "wp00_016/wp00_016_10.mdf2.10"
+          ],
+          "note": "Rawhide 鞭子手(_00 本体/_01 鞭子/_02 鞭子开头)；目录含本体与 _10 掉落物状态，各成一条"
+        },
+        {
+          "id": "wp00_016_10",
+          "mesh": "wp00_016/wp00_016_10.mesh.1808282334",
+          "mdf2": [
+            "wp00_016/wp00_016_00.mdf2.10",
+            "wp00_016/wp00_016_01.mdf2.10",
+            "wp00_016/wp00_016_02.mdf2.10",
+            "wp00_016/wp00_016_10.mdf2.10"
+          ],
+          "note": "Rawhide 鞭子手(_00 本体/_01 鞭子/_02 鞭子开头)；目录含本体与 _10 掉落物状态，各成一条"
+        }
+      ]
+    },
+    {
+      "name": "武器-机械手-Tomboy",
+      "base_path": "x64/character/weapon",
+      "default_enabled": false,
+      "entries": [
+        {
+          "id": "wp00_017",
+          "mesh": "wp00_017/wp00_017.mesh.1808282334",
+          "mdf2": [
+            "wp00_017/wp00_017.mdf2.10",
+            "wp00_017/wp00_017_10.mdf2.10",
+            "wp00_017/wp00_017_shop.mdf2.10"
+          ],
+          "note": "Tomboy 红刀手/强化手；目录含本体与 _10 掉落物状态，各成一条"
+        },
+        {
+          "id": "wp00_017_10",
+          "mesh": "wp00_017/wp00_017_10.mesh.1808282334",
+          "mdf2": [
+            "wp00_017/wp00_017.mdf2.10",
+            "wp00_017/wp00_017_10.mdf2.10",
+            "wp00_017/wp00_017_shop.mdf2.10"
+          ],
+          "note": "Tomboy 红刀手/强化手；目录含本体与 _10 掉落物状态，各成一条"
+        }
+      ]
+    },
+    {
+      "name": "武器-机械手-MegaBuster",
+      "base_path": "x64/character/weapon",
+      "default_enabled": false,
+      "entries": [
+        {
+          "id": "wp00_018",
+          "mesh": "wp00_018/wp00_018.mesh.1808282334",
+          "mdf2": [
+            "wp00_018/wp00_018.mdf2.10",
+            "wp00_018/wp00_018_10.mdf2.10",
+            "wp00_018/wp00_018_shop.mdf2.10"
+          ],
+          "note": "MegaBuster 洛克炮(DLC)；目录含本体与 _10 掉落物状态，各成一条"
+        },
+        {
+          "id": "wp00_018_10",
+          "mesh": "wp00_018/wp00_018_10.mesh.1808282334",
+          "mdf2": [
+            "wp00_018/wp00_018.mdf2.10",
+            "wp00_018/wp00_018_10.mdf2.10",
+            "wp00_018/wp00_018_shop.mdf2.10"
+          ],
+          "note": "MegaBuster 洛克炮(DLC)；目录含本体与 _10 掉落物状态，各成一条"
+        }
+      ]
+    },
+    {
+      "name": "武器-机械手-GerberaGP01",
+      "base_path": "x64/character/weapon",
+      "default_enabled": false,
+      "entries": [
+        {
+          "id": "wp00_019",
+          "mesh": "wp00_019/wp00_019.mesh.1808282334",
+          "mdf2": [
+            "wp00_019/wp00_019.mdf2.10",
+            "wp00_019/wp00_019_10.mdf2.10",
+            "wp00_019/wp00_019_shop.mdf2.10"
+          ],
+          "note": "GerberaGP01 红冲击手(DLC)；目录含本体与 _10 掉落物状态，各成一条"
+        },
+        {
+          "id": "wp00_019_10",
+          "mesh": "wp00_019/wp00_019_10.mesh.1808282334",
+          "mdf2": [
+            "wp00_019/wp00_019.mdf2.10",
+            "wp00_019/wp00_019_10.mdf2.10",
+            "wp00_019/wp00_019_shop.mdf2.10"
+          ],
+          "note": "GerberaGP01 红冲击手(DLC)；目录含本体与 _10 掉落物状态，各成一条"
+        }
+      ]
+    },
+    {
+      "name": "武器-机械手-PastaBreaker",
+      "base_path": "x64/character/weapon",
+      "default_enabled": false,
+      "entries": [
+        {
+          "id": "wp00_020",
+          "mesh": "wp00_020/wp00_020.mesh.1808282334",
+          "mdf2": [
+            "wp00_020/wp00_020.mdf2.10",
+            "wp00_020/wp00_020_10.mdf2.10",
+            "wp00_020/wp00_020_shop.mdf2.10"
+          ],
+          "note": "PastaBreaker 叉子手(DLC 恶搞手)；目录含本体与 _10 掉落物状态，各成一条"
+        },
+        {
+          "id": "wp00_020_10",
+          "mesh": "wp00_020/wp00_020_10.mesh.1808282334",
+          "mdf2": [
+            "wp00_020/wp00_020.mdf2.10",
+            "wp00_020/wp00_020_10.mdf2.10",
+            "wp00_020/wp00_020_shop.mdf2.10"
+          ],
+          "note": "PastaBreaker 叉子手(DLC 恶搞手)；目录含本体与 _10 掉落物状态，各成一条"
+        }
+      ]
+    },
+    {
+      "name": "武器-机械手-SweetSurrender",
+      "base_path": "x64/character/weapon",
+      "default_enabled": false,
+      "entries": [
+        {
+          "id": "wp00_021",
+          "mesh": "wp00_021/wp00_021.mesh.1808282334",
+          "mdf2": [
+            "wp00_021/wp00_021.mdf2.10",
+            "wp00_021/wp00_021_10.mdf2.10",
+            "wp00_021/wp00_021_shop.mdf2.10"
+          ],
+          "note": "SweetSurrender 按摩手(DLC 恶搞手)；目录含本体与 _10 掉落物状态，各成一条"
+        },
+        {
+          "id": "wp00_021_10",
+          "mesh": "wp00_021/wp00_021_10.mesh.1808282334",
+          "mdf2": [
+            "wp00_021/wp00_021.mdf2.10",
+            "wp00_021/wp00_021_10.mdf2.10",
+            "wp00_021/wp00_021_shop.mdf2.10"
+          ],
+          "note": "SweetSurrender 按摩手(DLC 恶搞手)；目录含本体与 _10 掉落物状态，各成一条"
+        }
+      ]
+    },
+    {
+      "name": "武器-机械手-MonkeyBusiness",
+      "base_path": "x64/character/weapon",
+      "default_enabled": false,
+      "entries": [
+        {
+          "id": "wp00_022",
+          "mesh": "wp00_022/wp00_022.mesh.1808282334",
+          "mdf2": [
+            "wp00_022/wp00_022.mdf2.10",
+            "wp00_022/wp00_022_10.mdf2.10"
+          ],
+          "chain": "wp00_022/wp00_022.chain.21",
+          "note": "MonkeyBusiness 香蕉手(DLC 恶搞手)；目录含本体与 _10 掉落物状态，各成一条"
+        },
+        {
+          "id": "wp00_022_10",
+          "mesh": "wp00_022/wp00_022_10.mesh.1808282334",
+          "mdf2": [
+            "wp00_022/wp00_022.mdf2.10",
+            "wp00_022/wp00_022_10.mdf2.10"
+          ],
+          "chain": "wp00_022/wp00_022.chain.21",
+          "note": "MonkeyBusiness 香蕉手(DLC 恶搞手)；目录含本体与 _10 掉落物状态，各成一条"
+        }
+      ]
+    },
+    {
+      "name": "投射物-湛蓝玫瑰的子弹",
+      "base_path": "x64/character/shell",
+      "default_enabled": false,
+      "entries": [
+        {
+          "id": "shl00_000",
+          "mesh": "shl00_000/shl00_000.mesh.1808282334",
+          "mdf2": [
+            "shl00_000/shl00_000.mdf2.10",
+            "shl00_000/shl00_000_00.mdf2.10",
+            "shl00_000/shl00_000_01.mdf2.10",
+            "shl00_000/shl00_000_02.mdf2.10"
+          ],
+          "note": "湛蓝玫瑰的子弹；目录有 4 个 mesh，各成一条(空弹/普通/一级蓄力/二级蓄力)"
+        },
+        {
+          "id": "shl00_000_00",
+          "mesh": "shl00_000/shl00_000_00.mesh.1808282334",
+          "mdf2": [
+            "shl00_000/shl00_000.mdf2.10",
+            "shl00_000/shl00_000_00.mdf2.10",
+            "shl00_000/shl00_000_01.mdf2.10",
+            "shl00_000/shl00_000_02.mdf2.10"
+          ],
+          "note": "湛蓝玫瑰的子弹；目录有 4 个 mesh，各成一条(空弹/普通/一级蓄力/二级蓄力)"
+        },
+        {
+          "id": "shl00_000_01",
+          "mesh": "shl00_000/shl00_000_01.mesh.1808282334",
+          "mdf2": [
+            "shl00_000/shl00_000.mdf2.10",
+            "shl00_000/shl00_000_00.mdf2.10",
+            "shl00_000/shl00_000_01.mdf2.10",
+            "shl00_000/shl00_000_02.mdf2.10"
+          ],
+          "note": "湛蓝玫瑰的子弹；目录有 4 个 mesh，各成一条(空弹/普通/一级蓄力/二级蓄力)"
+        },
+        {
+          "id": "shl00_000_02",
+          "mesh": "shl00_000/shl00_000_02.mesh.1808282334",
+          "mdf2": [
+            "shl00_000/shl00_000.mdf2.10",
+            "shl00_000/shl00_000_00.mdf2.10",
+            "shl00_000/shl00_000_01.mdf2.10",
+            "shl00_000/shl00_000_02.mdf2.10"
+          ],
+          "note": "湛蓝玫瑰的子弹；目录有 4 个 mesh，各成一条(空弹/普通/一级蓄力/二级蓄力)"
         }
       ]
     }

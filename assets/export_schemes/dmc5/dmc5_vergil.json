@@ -649,7 +649,7 @@
       ]
     },
     {
-      "name": "幻影剑",
+      "name": "投射物-幻影剑",
       "base_path": "x64/character/shell",
       "default_enabled": false,
       "entries": [
@@ -659,7 +659,7 @@
           "mdf2": [
             "shl03_000/shl03_000.mdf2.10"
           ],
-          "note": "次元斩的幻影剑(wp03_000 的召唤剑)"
+          "note": "次元斩的幻影剑(shell 目录=投射物类; 属 wp03_000 套装)"
         }
       ]
     }
