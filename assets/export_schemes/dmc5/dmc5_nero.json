@@ -72,8 +72,7 @@
           "id": "pl0000_05",
           "mesh": "pl0000_nero/pl0000_05_devilarm/pl0000_05.mesh.1808282334",
           "mdf2": [
-            "pl0000_nero/pl0000_05_devilarm/pl0000_05.mdf2.10",
-            "pl0000_nero/pl0000_05_devilarm/pl0000_05_item.mdf2.10"
+            "pl0000_nero/pl0000_05_devilarm/pl0000_05.mdf2.10"
           ],
           "note": "真鬼手(M1 拿手好戏过场)；该目录 2 个 mesh：本体与 _item 道具状态"
         },
