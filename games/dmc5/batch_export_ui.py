@@ -35,6 +35,28 @@ def _wrap_by_units(text, max_units):
     return lines
 
 
+def _wrap_note(note, first_units, rest_units):
+    """备注折行：首行按 first_units（前面还有 id 前缀），其余行按 rest_units。
+
+    续行不缩进（顶格），所以能用满详情列的宽度。
+    """
+    out, rest, limit = [], note, first_units
+    while rest:
+        w, cut = 0, 0
+        for ch in rest:
+            cw = 2 if ord(ch) > 0x2E7F else 1
+            if w + cw > limit:
+                break
+            w += cw
+            cut += 1
+        if cut == 0:        # 一个字符都放不下时硬吞一个，避免死循环
+            cut = 1
+        out.append(rest[:cut])
+        rest = rest[cut:]
+        limit = rest_units
+    return out or [""]
+
+
 def _ui_scale(context):
     """界面缩放：高 DPI 下字体与像素同步放大，宽度估算要跟着走。"""
     prefs = getattr(context, "preferences", None)
@@ -246,24 +268,22 @@ class DMC5_OT_BatchExportDialog(bpy.types.Operator):
             else:
                 # label 不会自动换行、弹窗宽度也是固定的，超宽会被直接裁掉，所以在这里
                 # 按详情列的实际可用宽度折行（中文按 2 个单位算）。
+                # 续行不缩进（顶格）、用满宽度；行尾要补 "]"，所以每行再让出 1 个单位。
                 avail = self._note_units(getattr(self, "_ui_scale", 1.0))
+                limit_rest = max(8, avail - 1)
                 prefix = f"{entry_id}  ["
-                # 末尾要补一个 "]"；折行时先把它扣掉，否则那一行会多出 1 个单位被裁。
-                per_line = avail - _display_units(prefix) - 1
-                if per_line < 8:
+                limit_first = avail - _display_units(prefix) - 1
+                if limit_first < 8:
                     # 窗口窄 + id 长：一行塞不下 "id  [" 和备注，让 id 单独成行
                     entry_box.label(text=entry_id)
-                    for _ln in _wrap_by_units(note, max(8, avail - 6)):
-                        entry_box.label(text="    " + _ln)
+                    lines = _wrap_by_units(note, limit_rest)
+                    first_prefix = ""
                 else:
-                    lines = _wrap_by_units(note, per_line)
-                    for _i, _ln in enumerate(lines):
-                        if _i == 0:
-                            entry_box.label(text=f"{prefix}{_ln}"
-                                            + ("]" if len(lines) == 1 else ""))
-                        else:
-                            entry_box.label(text="    " + _ln
-                                            + ("]" if _i == len(lines) - 1 else ""))
+                    lines = _wrap_note(note, limit_first, limit_rest)
+                    first_prefix = prefix
+                for _i, _ln in enumerate(lines):
+                    entry_box.label(text=(first_prefix if _i == 0 else "") + _ln
+                                    + ("]" if _i == len(lines) - 1 else ""))
 
             if entry.get("mesh"):
                 head = entry_box.row(align=True)
