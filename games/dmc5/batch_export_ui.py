@@ -10,20 +10,35 @@ EXPORTER_WINDOW_WIDTH = 600
 
 # 备注折行用。Blender 的 invoke_props_dialog 宽度只由 width 参数决定（内容超宽只会被
 # 裁、不会把弹窗撑开），所以窗口宽度固定，靠折行保证每条备注都显示得下。
-# 字宽是 blf 实测值（blf.size(0, 11)）：'n'/'0'=7、'中'=11、空格=3 —— 不能按
-# “CJK 记 2 个单位”估，那会高估两三成、每行都提前换行。
-_PX_CJK = 11
-_PX_HALF = 7
-_PX_SPACE = 3
+# 下面是 blf 实测的字符宽度表（Blender 默认 UI 字体，blf.size(0, 11)）：半角字符
+# 宽度并不一致（l/i=3、s/_=6、0/h=7、A=8、M=10、W=11），按固定值估会整体偏宽 ——
+# 那样每行会提前换行，靠“空格拼接”的缩进也会多出几像素。
+_CHAR_PX = {
+    " ": 3, "!": 3, '"': 5, "#": 7, "$": 7, "%": 11, "&": 7, "'": 3,
+    "(": 4, ")": 4, "*": 7, "+": 7, ",": 3, "-": 7, ".": 3, "/": 4,
+    "0": 7, "1": 7, "2": 7, "3": 7, "4": 7, "5": 7, "6": 7, "7": 7,
+    "8": 7, "9": 7, ":": 3, ";": 3, "<": 7, "=": 7, ">": 7, "?": 6,
+    "@": 11, "A": 8, "B": 7, "C": 8, "D": 8, "E": 7, "F": 7, "G": 8,
+    "H": 8, "I": 5, "J": 6, "K": 8, "L": 6, "M": 10, "N": 8, "O": 8,
+    "P": 7, "Q": 8, "R": 7, "S": 7, "T": 7, "U": 8, "V": 8, "W": 11,
+    "X": 8, "Y": 8, "Z": 7, "[": 4, "\\": 4, "]": 4, "^": 5, "_": 6,
+    "`": 4, "a": 6, "b": 7, "c": 6, "d": 7, "e": 6, "f": 4, "g": 7,
+    "h": 7, "i": 3, "j": 4, "k": 6, "l": 3, "m": 10, "n": 7, "o": 7,
+    "p": 7, "q": 7, "r": 4, "s": 6, "t": 4, "u": 7, "v": 6, "w": 9,
+    "x": 6, "y": 6, "z": 6, "{": 4, "|": 4, "}": 4, "~": 7,
+}
+_PX_CJK = 11              # CJK/全角字符（实测基本等宽 11）
+_PX_FALLBACK = 7          # 表里没有的字符（生僻半角/其他）按这个估
 _DETAIL_PX = 340          # ui_scale=1 时详情列可用于文本的像素宽（600*0.65 - 余量）
 _LIST_FACTOR = 0.35       # 左侧组列表占比（与 draw 里的 split factor 一致）
 
 
 def _char_px(ch):
-    """单个字符的估算像素宽度（按 Blender 默认 UI 字号的实测字宽）。"""
-    if ch == " ":
-        return _PX_SPACE
-    return _PX_CJK if ord(ch) > 0x2E7F else _PX_HALF
+    """单个字符的像素宽度（查实测字宽表）。"""
+    px = _CHAR_PX.get(ch)
+    if px is not None:
+        return px
+    return _PX_CJK if ord(ch) > 0x2E7F else _PX_FALLBACK
 
 
 def _text_px(text):
@@ -263,7 +278,7 @@ class DMC5_OT_BatchExportDialog(bpy.types.Operator):
                     indent, first_prefix = "", ""
                 else:
                     lines = _wrap_px(note, body)
-                    indent = " " * max(1, int(indent_px / _PX_SPACE))
+                    indent = " " * max(1, int(indent_px / _CHAR_PX[" "]))
                     first_prefix = prefix
                 for _i, _ln in enumerate(lines):
                     entry_box.label(text=(first_prefix if _i == 0 else indent) + _ln)
