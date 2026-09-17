@@ -1,5 +1,3 @@
-import math
-
 import bpy
 from bpy.props import CollectionProperty, IntProperty, StringProperty
 
@@ -8,13 +6,12 @@ from .batch_export import (
     _get_enabled, _set_enabled,
 )
 
-# 弹窗宽度估算用。Blender 的 invoke_props_dialog 宽度完全由 width 参数决定：
-# 内容超宽只会被直接裁掉，不会把弹窗撑开（Toolkit 其它游戏的导出对话框也都是固定宽度），
-# 所以长备注必须按内容自己算宽度（见 _calc_width）。
+EXPORTER_WINDOW_WIDTH = 600
+
+# 备注折行用。Blender 的 invoke_props_dialog 宽度完全由 width 参数决定（内容超宽只会被
+# 裁、不会把弹窗撑开），所以窗口宽度保持固定，靠折行保证每条备注都显示得下。
 _PX_PER_UNIT = 7          # 一个半角字符的估算像素宽度（CJK 按 2 个单位算）
-_DETAIL_BASE_PX = 150     # 详情列里除文本外要留给图标/按钮/滚动条的余量
-_MIN_WIDTH = 460
-_MAX_WIDTH_RATIO = 0.9    # 最多占窗口宽度的比例，避免弹窗跑出屏幕
+_DETAIL_BASE_PX = 100     # 详情列里除文本外要留给图标/内边距的余量
 _LIST_FACTOR = 0.35       # 左侧组列表占比（与 draw 里的 split factor 一致）
 
 
@@ -170,36 +167,12 @@ class DMC5_OT_BatchExportDialog(bpy.types.Operator):
 
     def invoke(self, context, event):
         self._ui_scale = _ui_scale(context)
-        self._dialog_width = self._calc_width(context, self._ui_scale)
-        return context.window_manager.invoke_props_dialog(self, width=self._dialog_width)
-
-    def _calc_width(self, context, scale):
-        """按方案里最长的一条备注算弹窗宽度。
-
-        详情列只占 (1 - _LIST_FACTOR)，所以文本需要的宽度要折算回整个弹窗宽度；
-        上限取窗口宽度的 _MAX_WIDTH_RATIO，保证弹窗不会跑出屏幕。
-        """
-        settings = context.scene.mhw_suite_settings
-        scheme_file = settings.dmc5_export_scheme
-        longest = 0
-        if scheme_file and scheme_file != 'NONE':
-            scheme = _load_scheme(scheme_file)
-            if scheme:
-                for group in scheme["groups"]:
-                    for entry in group["entries"]:
-                        line = f'{entry["id"]}  [{entry.get("note", "")}]'
-                        longest = max(longest, _display_units(line))
-        need = (longest * _PX_PER_UNIT + _DETAIL_BASE_PX) * scale / (1.0 - _LIST_FACTOR)
-        win_w = getattr(context.window, "width", 0) or 1920
-        # 向上取整并多留一个字符：弹窗宽度最终要 int() 上报，不补余量的话反推出来的
-        # 可用宽度会比最长行少 1 个单位，那一行就会被裁掉。
-        limit = min(need + _PX_PER_UNIT * scale, win_w * _MAX_WIDTH_RATIO)
-        return int(max(_MIN_WIDTH, math.ceil(limit)))
+        return context.window_manager.invoke_props_dialog(self, width=EXPORTER_WINDOW_WIDTH)
 
     @staticmethod
-    def _note_units(width, scale=1.0):
-        """详情列里一行最多能放下的显示单位数（与 _calc_width 同一套估算）。"""
-        usable = width * (1.0 - _LIST_FACTOR) - _DETAIL_BASE_PX * scale
+    def _note_units(scale=1.0):
+        """详情列里一行最多能放下的显示单位数（按固定窗口宽度估算）。"""
+        usable = EXPORTER_WINDOW_WIDTH * (1.0 - _LIST_FACTOR) - _DETAIL_BASE_PX * scale
         return max(16, int(usable / (_PX_PER_UNIT * scale)))
 
     def _sync_groups(self, scheme, scheme_file):
@@ -271,19 +244,26 @@ class DMC5_OT_BatchExportDialog(bpy.types.Operator):
             if not note:
                 entry_box.label(text=entry_id)
             else:
-                # 弹窗宽度是算出来的（见 _calc_width），这里按详情列的实际可用宽度折行。
-                # label 不会自动换行，超宽会被直接裁掉。
-                avail = self._note_units(getattr(self, "_dialog_width", _MIN_WIDTH),
-                                         getattr(self, "_ui_scale", 1.0))
+                # label 不会自动换行、弹窗宽度也是固定的，超宽会被直接裁掉，所以在这里
+                # 按详情列的实际可用宽度折行（中文按 2 个单位算）。
+                avail = self._note_units(getattr(self, "_ui_scale", 1.0))
                 prefix = f"{entry_id}  ["
-                # 末尾要补一个 "]"，折行时先把它扣掉，否则单段那一行会多出 1 个单位被裁。
-                per_line = max(8, avail - _display_units(prefix) - 1)
-                lines = _wrap_by_units(note, per_line)
-                for _i, _ln in enumerate(lines):
-                    if _i == 0:
-                        entry_box.label(text=f"{prefix}{_ln}" + ("]" if len(lines) == 1 else ""))
-                    else:
-                        entry_box.label(text="    " + _ln + ("]" if _i == len(lines) - 1 else ""))
+                # 末尾要补一个 "]"；折行时先把它扣掉，否则那一行会多出 1 个单位被裁。
+                per_line = avail - _display_units(prefix) - 1
+                if per_line < 8:
+                    # 窗口窄 + id 长：一行塞不下 "id  [" 和备注，让 id 单独成行
+                    entry_box.label(text=entry_id)
+                    for _ln in _wrap_by_units(note, max(8, avail - 6)):
+                        entry_box.label(text="    " + _ln)
+                else:
+                    lines = _wrap_by_units(note, per_line)
+                    for _i, _ln in enumerate(lines):
+                        if _i == 0:
+                            entry_box.label(text=f"{prefix}{_ln}"
+                                            + ("]" if len(lines) == 1 else ""))
+                        else:
+                            entry_box.label(text="    " + _ln
+                                            + ("]" if _i == len(lines) - 1 else ""))
 
             if entry.get("mesh"):
                 head = entry_box.row(align=True)
