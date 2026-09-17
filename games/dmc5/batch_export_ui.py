@@ -8,53 +8,42 @@ from .batch_export import (
 
 EXPORTER_WINDOW_WIDTH = 600
 
-# 备注折行用。Blender 的 invoke_props_dialog 宽度完全由 width 参数决定（内容超宽只会被
-# 裁、不会把弹窗撑开），所以窗口宽度保持固定，靠折行保证每条备注都显示得下。
-_PX_PER_UNIT = 7          # 一个半角字符的估算像素宽度（CJK 按 2 个单位算）
-_DETAIL_BASE_PX = 100     # 详情列里除文本外要留给图标/内边距的余量
+# 备注折行用。Blender 的 invoke_props_dialog 宽度只由 width 参数决定（内容超宽只会被
+# 裁、不会把弹窗撑开），所以窗口宽度固定，靠折行保证每条备注都显示得下。
+# 字宽是 blf 实测值（blf.size(0, 11)）：'n'/'0'=7、'中'=11、空格=3 —— 不能按
+# “CJK 记 2 个单位”估，那会高估两三成、每行都提前换行。
+_PX_CJK = 11
+_PX_HALF = 7
+_PX_SPACE = 3
+_DETAIL_PX = 340          # ui_scale=1 时详情列可用于文本的像素宽（600*0.65 - 余量）
 _LIST_FACTOR = 0.35       # 左侧组列表占比（与 draw 里的 split factor 一致）
 
 
-def _display_units(text):
-    """文本的显示宽度：半角算 1、全角/CJK 算 2。"""
-    return sum(2 if ord(ch) > 0x2E7F else 1 for ch in text)
+def _char_px(ch):
+    """单个字符的估算像素宽度（按 Blender 默认 UI 字号的实测字宽）。"""
+    if ch == " ":
+        return _PX_SPACE
+    return _PX_CJK if ord(ch) > 0x2E7F else _PX_HALF
 
 
-def _wrap_by_units(text, max_units):
-    """按显示宽度折行（中文没有空格可断，直接硬断）。"""
+def _text_px(text):
+    """文本的估算像素宽度。"""
+    return sum(_char_px(ch) for ch in text)
+
+
+def _wrap_px(text, max_px):
+    """按像素宽度折行（中文没有空格可断，直接硬断）。"""
     lines, cur, cur_w = [], "", 0
     for ch in text:
-        w = 2 if ord(ch) > 0x2E7F else 1
-        if cur and cur_w + w > max_units:
+        cw = _char_px(ch)
+        if cur and cur_w + cw > max_px:
             lines.append(cur)
             cur, cur_w = "", 0
         cur += ch
-        cur_w += w
+        cur_w += cw
     if cur:
         lines.append(cur)
-    return lines
-
-
-def _wrap_note(note, first_units, rest_units):
-    """备注折行：首行按 first_units（前面还有 id 前缀），其余行按 rest_units。
-
-    续行不缩进（顶格），所以能用满详情列的宽度。
-    """
-    out, rest, limit = [], note, first_units
-    while rest:
-        w, cut = 0, 0
-        for ch in rest:
-            cw = 2 if ord(ch) > 0x2E7F else 1
-            if w + cw > limit:
-                break
-            w += cw
-            cut += 1
-        if cut == 0:        # 一个字符都放不下时硬吞一个，避免死循环
-            cut = 1
-        out.append(rest[:cut])
-        rest = rest[cut:]
-        limit = rest_units
-    return out or [""]
+    return lines or [""]
 
 
 def _ui_scale(context):
@@ -191,12 +180,6 @@ class DMC5_OT_BatchExportDialog(bpy.types.Operator):
         self._ui_scale = _ui_scale(context)
         return context.window_manager.invoke_props_dialog(self, width=EXPORTER_WINDOW_WIDTH)
 
-    @staticmethod
-    def _note_units(scale=1.0):
-        """详情列里一行最多能放下的显示单位数（按固定窗口宽度估算）。"""
-        usable = EXPORTER_WINDOW_WIDTH * (1.0 - _LIST_FACTOR) - _DETAIL_BASE_PX * scale
-        return max(16, int(usable / (_PX_PER_UNIT * scale)))
-
     def _sync_groups(self, scheme, scheme_file):
         if getattr(self, '_groups_scheme_file', None) == scheme_file:
             return
@@ -266,23 +249,24 @@ class DMC5_OT_BatchExportDialog(bpy.types.Operator):
             if not note:
                 entry_box.label(text=entry_id)
             else:
-                # label 不会自动换行、弹窗宽度也是固定的，超宽会被直接裁掉，所以在这里
-                # 按详情列的实际可用宽度折行（中文按 2 个单位算）。
-                # 续行不缩进（顶格）、用满宽度；行尾要补 "]"，所以每行再让出 1 个单位。
-                avail = self._note_units(getattr(self, "_ui_scale", 1.0))
-                limit_rest = max(8, avail - 1)
+                # label 不折行、弹窗宽度也固定，超宽会被直接裁掉 —— 这里按详情列的
+                # 可用像素折行（用实测字宽算）；续行缩进到第一行备注文字的位置，
+                # 缩进量随 id 长度变（用空格拼，实测每个空格 3px）。
+                scale = getattr(self, "_ui_scale", 1.0) or 1.0
+                avail = _DETAIL_PX / scale          # 高 DPI 下把可用宽度折算回基准像素
                 prefix = f"{entry_id}  ["
-                limit_first = avail - _display_units(prefix) - 1
-                if limit_first < 8:
-                    # 窗口窄 + id 长：一行塞不下 "id  [" 和备注，让 id 单独成行
+                indent_px = _text_px(prefix)
+                body = avail - indent_px - _text_px("]")
+                if body < 40:                       # 装不下几个字：让 id 单独成行
                     entry_box.label(text=entry_id)
-                    lines = _wrap_by_units(note, limit_rest)
-                    first_prefix = ""
+                    lines = _wrap_px(note, max(40.0, avail - _text_px("]")))
+                    indent, first_prefix = "", ""
                 else:
-                    lines = _wrap_note(note, limit_first, limit_rest)
+                    lines = _wrap_px(note, body)
+                    indent = " " * max(1, int(indent_px / _PX_SPACE))
                     first_prefix = prefix
                 for _i, _ln in enumerate(lines):
-                    entry_box.label(text=(first_prefix if _i == 0 else "") + _ln
+                    entry_box.label(text=(first_prefix if _i == 0 else indent) + _ln
                                     + ("]" if _i == len(lines) - 1 else ""))
 
             if entry.get("mesh"):
