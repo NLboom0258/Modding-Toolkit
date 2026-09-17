@@ -1,3 +1,5 @@
+import math
+
 import bpy
 from bpy.props import CollectionProperty, IntProperty, StringProperty
 
@@ -6,7 +8,41 @@ from .batch_export import (
     _get_enabled, _set_enabled,
 )
 
-EXPORTER_WINDOW_WIDTH = 600
+# 弹窗宽度估算用。Blender 的 invoke_props_dialog 宽度完全由 width 参数决定：
+# 内容超宽只会被直接裁掉，不会把弹窗撑开（Toolkit 其它游戏的导出对话框也都是固定宽度），
+# 所以长备注必须按内容自己算宽度（见 _calc_width）。
+_PX_PER_UNIT = 7          # 一个半角字符的估算像素宽度（CJK 按 2 个单位算）
+_DETAIL_BASE_PX = 150     # 详情列里除文本外要留给图标/按钮/滚动条的余量
+_MIN_WIDTH = 460
+_MAX_WIDTH_RATIO = 0.9    # 最多占窗口宽度的比例，避免弹窗跑出屏幕
+_LIST_FACTOR = 0.35       # 左侧组列表占比（与 draw 里的 split factor 一致）
+
+
+def _display_units(text):
+    """文本的显示宽度：半角算 1、全角/CJK 算 2。"""
+    return sum(2 if ord(ch) > 0x2E7F else 1 for ch in text)
+
+
+def _wrap_by_units(text, max_units):
+    """按显示宽度折行（中文没有空格可断，直接硬断）。"""
+    lines, cur, cur_w = [], "", 0
+    for ch in text:
+        w = 2 if ord(ch) > 0x2E7F else 1
+        if cur and cur_w + w > max_units:
+            lines.append(cur)
+            cur, cur_w = "", 0
+        cur += ch
+        cur_w += w
+    if cur:
+        lines.append(cur)
+    return lines
+
+
+def _ui_scale(context):
+    """界面缩放：高 DPI 下字体与像素同步放大，宽度估算要跟着走。"""
+    prefs = getattr(context, "preferences", None)
+    sys_prefs = getattr(prefs, "system", None) if prefs is not None else None
+    return float(getattr(sys_prefs, "ui_scale", 1.0) or 1.0)
 
 
 def _get_armatures():
@@ -133,7 +169,38 @@ class DMC5_OT_BatchExportDialog(bpy.types.Operator):
     group_index: IntProperty()
 
     def invoke(self, context, event):
-        return context.window_manager.invoke_props_dialog(self, width=EXPORTER_WINDOW_WIDTH)
+        self._ui_scale = _ui_scale(context)
+        self._dialog_width = self._calc_width(context, self._ui_scale)
+        return context.window_manager.invoke_props_dialog(self, width=self._dialog_width)
+
+    def _calc_width(self, context, scale):
+        """按方案里最长的一条备注算弹窗宽度。
+
+        详情列只占 (1 - _LIST_FACTOR)，所以文本需要的宽度要折算回整个弹窗宽度；
+        上限取窗口宽度的 _MAX_WIDTH_RATIO，保证弹窗不会跑出屏幕。
+        """
+        settings = context.scene.mhw_suite_settings
+        scheme_file = settings.dmc5_export_scheme
+        longest = 0
+        if scheme_file and scheme_file != 'NONE':
+            scheme = _load_scheme(scheme_file)
+            if scheme:
+                for group in scheme["groups"]:
+                    for entry in group["entries"]:
+                        line = f'{entry["id"]}  [{entry.get("note", "")}]'
+                        longest = max(longest, _display_units(line))
+        need = (longest * _PX_PER_UNIT + _DETAIL_BASE_PX) * scale / (1.0 - _LIST_FACTOR)
+        win_w = getattr(context.window, "width", 0) or 1920
+        # 向上取整并多留一个字符：弹窗宽度最终要 int() 上报，不补余量的话反推出来的
+        # 可用宽度会比最长行少 1 个单位，那一行就会被裁掉。
+        limit = min(need + _PX_PER_UNIT * scale, win_w * _MAX_WIDTH_RATIO)
+        return int(max(_MIN_WIDTH, math.ceil(limit)))
+
+    @staticmethod
+    def _note_units(width, scale=1.0):
+        """详情列里一行最多能放下的显示单位数（与 _calc_width 同一套估算）。"""
+        usable = width * (1.0 - _LIST_FACTOR) - _DETAIL_BASE_PX * scale
+        return max(16, int(usable / (_PX_PER_UNIT * scale)))
 
     def _sync_groups(self, scheme, scheme_file):
         if getattr(self, '_groups_scheme_file', None) == scheme_file:
@@ -178,7 +245,6 @@ class DMC5_OT_BatchExportDialog(bpy.types.Operator):
 
         layout.separator()
         layout.prop(settings, "dmc5_use_blank_export", text="Use Blank Model for Unselected", icon='FILE_BLANK')
-        layout.prop(settings, "dmc5_note_wrap", text="Note Width", slider=True)
 
         layout.separator()
         split = layout.split(factor=0.35)
@@ -205,13 +271,17 @@ class DMC5_OT_BatchExportDialog(bpy.types.Operator):
             if not note:
                 entry_box.label(text=entry_id)
             else:
-                # 备注按字符数折行：弹窗宽度由内容决定，不折行的长备注会超出屏幕被裁掉
-                # （宽度由设置里的 Note Width 控制）。
-                _w = max(20, int(getattr(scene, "dmc5_note_wrap", 60) or 60))
-                lines = [note[i:i + _w] for i in range(0, len(note), _w)]
+                # 弹窗宽度是算出来的（见 _calc_width），这里按详情列的实际可用宽度折行。
+                # label 不会自动换行，超宽会被直接裁掉。
+                avail = self._note_units(getattr(self, "_dialog_width", _MIN_WIDTH),
+                                         getattr(self, "_ui_scale", 1.0))
+                prefix = f"{entry_id}  ["
+                # 末尾要补一个 "]"，折行时先把它扣掉，否则单段那一行会多出 1 个单位被裁。
+                per_line = max(8, avail - _display_units(prefix) - 1)
+                lines = _wrap_by_units(note, per_line)
                 for _i, _ln in enumerate(lines):
                     if _i == 0:
-                        entry_box.label(text=f"{entry_id}  [{_ln}" + ("]" if len(lines) == 1 else ""))
+                        entry_box.label(text=f"{prefix}{_ln}" + ("]" if len(lines) == 1 else ""))
                     else:
                         entry_box.label(text="    " + _ln + ("]" if _i == len(lines) - 1 else ""))
 

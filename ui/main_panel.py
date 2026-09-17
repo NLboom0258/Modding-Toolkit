@@ -442,13 +442,6 @@ class MHW_PT_SuiteSettings(bpy.types.PropertyGroup):
         description="For slots with no collection selected, copy in the built-in blank file instead of skipping",
         default=True,
     )
-    dmc5_note_wrap: bpy.props.IntProperty(
-        name="Note Wrap Width",
-        description="Wrap the per-entry note at this many characters in the batch export dialog. "
-                    "The dialog is sized to its content, so an unwrapped long note runs past the "
-                    "screen edge and gets clipped",
-        default=60, min=20, max=200,
-    )
 
 
 class MHW_PT_MainPanel(bpy.types.Panel):
