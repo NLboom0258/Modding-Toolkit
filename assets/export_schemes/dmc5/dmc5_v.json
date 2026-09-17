@@ -2,17 +2,380 @@
   "character": "V (DMC5)",
   "character_id": "dmc5_v",
   "base_path": "x64/character/player",
-  "fbxskel": "pl0200_v/pl0200_body/pl0200.fbxskel.3",
   "groups": [
     {
-      "name": "身体",
+      "name": "身体-人形态",
       "entries": [
         {
           "id": "pl0200_body",
           "mesh": "pl0200_v/pl0200_body/pl0200.mesh.1808282334",
-          "mdf2": ["pl0200_v/pl0200_body/pl0200.mdf2.10"],
+          "mdf2": [
+            "pl0200_v/pl0200_body/pl0200.mdf2.10",
+            "pl0200_v/pl0200_body/pl0200_blood.mdf2.10",
+            "pl0200_v/pl0200_body/pl0200_burn.mdf2.10",
+            "pl0200_v/pl0200_body/pl0200_freeze.mdf2.10",
+            "pl0200_v/pl0200_body/pl0200_slow.mdf2.10",
+            "pl0200_v/pl0200_body/pl0200_vmode.mdf2.10",
+            "pl0200_v/pl0200_body/pl0200_wet.mdf2.10"
+          ],
           "chain": "pl0200_v/pl0200_body/pl0200.chain.21",
-          "note": "身体"
+          "fbxskel": "pl0200_v/pl0200_body/pl0200.fbxskel.3",
+          "note": "人形态身体；目录含 chain 与 fbxskel"
+        }
+      ]
+    },
+    {
+      "name": "头部-人形态",
+      "entries": [
+        {
+          "id": "pl0200_01_head",
+          "mesh": "pl0200_v/pl0200_01_head/pl0200_01.mesh.1808282334",
+          "mdf2": [
+            "pl0200_v/pl0200_01_head/pl0200_01.mdf2.10",
+            "pl0200_v/pl0200_01_head/pl0200_01_blood.mdf2.10",
+            "pl0200_v/pl0200_01_head/pl0200_01_burn.mdf2.10",
+            "pl0200_v/pl0200_01_head/pl0200_01_freeze.mdf2.10",
+            "pl0200_v/pl0200_01_head/pl0200_01_slow.mdf2.10",
+            "pl0200_v/pl0200_01_head/pl0200_01_vmode.mdf2.10",
+            "pl0200_v/pl0200_01_head/pl0200_01_wet.mdf2.10"
+          ],
+          "fbxskel": "pl0200_v/pl0200_01_head/pl0200_01.fbxskel.3",
+          "note": "关卡内调用；头部带独立表情骨架 fbxskel"
+        }
+      ]
+    },
+    {
+      "name": "头发-人形态",
+      "entries": [
+        {
+          "id": "pl0200_03_hair",
+          "mesh": "pl0200_v/pl0200_03_hair/pl0200_03.mesh.1808282334",
+          "mdf2": [
+            "pl0200_v/pl0200_03_hair/pl0200_03.mdf2.10",
+            "pl0200_v/pl0200_03_hair/pl0200_03_astral.mdf2.10",
+            "pl0200_v/pl0200_03_hair/pl0200_03_blood.mdf2.10",
+            "pl0200_v/pl0200_03_hair/pl0200_03_burn.mdf2.10",
+            "pl0200_v/pl0200_03_hair/pl0200_03_freeze.mdf2.10",
+            "pl0200_v/pl0200_03_hair/pl0200_03_slow.mdf2.10",
+            "pl0200_v/pl0200_03_hair/pl0200_03_transparent.mdf2.10",
+            "pl0200_v/pl0200_03_hair/pl0200_03_vmode.mdf2.10",
+            "pl0200_v/pl0200_03_hair/pl0200_03_wet.mdf2.10"
+          ],
+          "chain": "pl0200_v/pl0200_03_hair/pl0200_03.chain.21",
+          "note": "头发(03)"
+        }
+      ]
+    },
+    {
+      "name": "头发-特殊状态",
+      "entries": [
+        {
+          "id": "pl0200_13_hair",
+          "mesh": "pl0200_v/pl0200_13_hair/pl0200_13.mesh.1808282334",
+          "mdf2": [
+            "pl0200_v/pl0200_13_hair/pl0200_13.mdf2.10"
+          ],
+          "chain": "pl0200_v/pl0200_13_hair/pl0200_13.chain.21",
+          "note": "头发(13)；用途待确认"
+        }
+      ]
+    },
+    {
+      "name": "头部-过场",
+      "entries": [
+        {
+          "id": "pl0200_11",
+          "mesh": "pl0200_v/pl0200_11_head_event/pl0200_11.mesh.1808282334",
+          "mdf2": [
+            "pl0200_v/pl0200_11_head_event/pl0200_11.mdf2.10",
+            "pl0200_v/pl0200_11_head_event/pl0200_11_astral.mdf2.10",
+            "pl0200_v/pl0200_11_head_event/pl0200_11_blood.mdf2.10",
+            "pl0200_v/pl0200_11_head_event/pl0200_11_wet.mdf2.10"
+          ],
+          "note": "过场头(11)；主菜单/过场/角色报告等非关卡内调用"
+        },
+        {
+          "id": "pl0200_11_light",
+          "mesh": "pl0200_v/pl0200_11_head_event/pl0200_11_light.mesh.1808282334",
+          "mdf2": [],
+          "note": "过场头(light)；材质与 11 共用, 不在这里重复"
+        }
+      ]
+    },
+    {
+      "name": "身体-无衣着",
+      "entries": [
+        {
+          "id": "pl0210_body",
+          "mesh": "pl0210_v_naked/pl0210_body/pl0210.mesh.1808282334",
+          "mdf2": [
+            "pl0210_v_naked/pl0210_body/pl0210.mdf2.10",
+            "pl0210_v_naked/pl0210_body/pl0210_astral.mdf2.10"
+          ],
+          "note": "无衣着(Vergil 自剖后的过场调用)；贴图借用 pl0200 的 astral"
+        }
+      ]
+    },
+    {
+      "name": "身体-龟裂a",
+      "entries": [
+        {
+          "id": "pl0230_body",
+          "mdf2": [
+            "pl0230_v_cracked_a/pl0230_body/pl0230.mdf2.10",
+            "pl0230_v_cracked_a/pl0230_body/pl0230_blood.mdf2.10",
+            "pl0230_v_cracked_a/pl0230_body/pl0230_freeze.mdf2.10",
+            "pl0230_v_cracked_a/pl0230_body/pl0230_slow.mdf2.10",
+            "pl0230_v_cracked_a/pl0230_body/pl0230_wet.mdf2.10"
+          ],
+          "note": "皮肤龟裂(a)身体(仅材质, 目录里没有 mesh)"
+        }
+      ]
+    },
+    {
+      "name": "头部-龟裂a",
+      "entries": [
+        {
+          "id": "pl0230_01_head",
+          "mdf2": [
+            "pl0230_v_cracked_a/pl0230_01_head/pl0230_01.mdf2.10",
+            "pl0230_v_cracked_a/pl0230_01_head/pl0230_01_blood.mdf2.10",
+            "pl0230_v_cracked_a/pl0230_01_head/pl0230_01_burn.mdf2.10",
+            "pl0230_v_cracked_a/pl0230_01_head/pl0230_01_freeze.mdf2.10",
+            "pl0230_v_cracked_a/pl0230_01_head/pl0230_01_slow.mdf2.10",
+            "pl0230_v_cracked_a/pl0230_01_head/pl0230_01_wet.mdf2.10"
+          ],
+          "note": "龟裂(a)头部(仅材质)"
+        },
+        {
+          "id": "pl0230_11",
+          "mdf2": [
+            "pl0230_v_cracked_a/pl0230_11_head_event/pl0230_11.mdf2.10",
+            "pl0230_v_cracked_a/pl0230_11_head_event/pl0230_11_blood.mdf2.10",
+            "pl0230_v_cracked_a/pl0230_11_head_event/pl0230_11_wet.mdf2.10"
+          ],
+          "note": "龟裂(a)过场头(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "身体-龟裂b",
+      "entries": [
+        {
+          "id": "pl0231_body",
+          "mdf2": [
+            "pl0231_v_cracked_b/pl0231_body/pl0231.mdf2.10",
+            "pl0231_v_cracked_b/pl0231_body/pl0231_blood.mdf2.10",
+            "pl0231_v_cracked_b/pl0231_body/pl0231_burn.mdf2.10",
+            "pl0231_v_cracked_b/pl0231_body/pl0231_freeze.mdf2.10",
+            "pl0231_v_cracked_b/pl0231_body/pl0231_slow.mdf2.10",
+            "pl0231_v_cracked_b/pl0231_body/pl0231_wet.mdf2.10"
+          ],
+          "note": "皮肤龟裂(b)身体(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "头部-龟裂b",
+      "entries": [
+        {
+          "id": "pl0231_01_head",
+          "mdf2": [
+            "pl0231_v_cracked_b/pl0231_01_head/pl0231_01.mdf2.10",
+            "pl0231_v_cracked_b/pl0231_01_head/pl0231_01_blood.mdf2.10",
+            "pl0231_v_cracked_b/pl0231_01_head/pl0231_01_burn.mdf2.10",
+            "pl0231_v_cracked_b/pl0231_01_head/pl0231_01_freeze.mdf2.10",
+            "pl0231_v_cracked_b/pl0231_01_head/pl0231_01_slow.mdf2.10",
+            "pl0231_v_cracked_b/pl0231_01_head/pl0231_01_wet.mdf2.10"
+          ],
+          "note": "龟裂(b)头部(仅材质)"
+        },
+        {
+          "id": "pl0231_11",
+          "mdf2": [
+            "pl0231_v_cracked_b/pl0231_11_head_event/pl0231_11.mdf2.10",
+            "pl0231_v_cracked_b/pl0231_11_head_event/pl0231_11_blood.mdf2.10",
+            "pl0231_v_cracked_b/pl0231_11_head_event/pl0231_11_wet.mdf2.10"
+          ],
+          "note": "龟裂(b)过场头(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "身体-龟裂c",
+      "entries": [
+        {
+          "id": "pl0232_body",
+          "mdf2": [
+            "pl0232_v_cracked_c/pl0232_body/pl0232.mdf2.10",
+            "pl0232_v_cracked_c/pl0232_body/pl0232_blood.mdf2.10",
+            "pl0232_v_cracked_c/pl0232_body/pl0232_burn.mdf2.10",
+            "pl0232_v_cracked_c/pl0232_body/pl0232_freeze.mdf2.10",
+            "pl0232_v_cracked_c/pl0232_body/pl0232_slow.mdf2.10",
+            "pl0232_v_cracked_c/pl0232_body/pl0232_wet.mdf2.10"
+          ],
+          "note": "皮肤龟裂(c)身体(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "头部-龟裂c",
+      "entries": [
+        {
+          "id": "pl0232_11",
+          "mdf2": [
+            "pl0232_v_cracked_c/pl0232_11_head_event/pl0232_11.mdf2.10",
+            "pl0232_v_cracked_c/pl0232_11_head_event/pl0232_11_blood.mdf2.10",
+            "pl0232_v_cracked_c/pl0232_11_head_event/pl0232_11_wet.mdf2.10"
+          ],
+          "note": "龟裂(c)过场头(仅材质；该形态没有 01_head)"
+        }
+      ]
+    },
+    {
+      "name": "身体-异色",
+      "entries": [
+        {
+          "id": "pl0200_c00_body",
+          "mdf2": [
+            "pl0200_c00_v/pl0200_c00_body/pl0200_c00.mdf2.10",
+            "pl0200_c00_v/pl0200_c00_body/pl0200_c00_blood.mdf2.10",
+            "pl0200_c00_v/pl0200_c00_body/pl0200_c00_burn.mdf2.10",
+            "pl0200_c00_v/pl0200_c00_body/pl0200_c00_freeze.mdf2.10",
+            "pl0200_c00_v/pl0200_c00_body/pl0200_c00_slow.mdf2.10",
+            "pl0200_c00_v/pl0200_c00_body/pl0200_c00_vmode.mdf2.10",
+            "pl0200_c00_v/pl0200_c00_body/pl0200_c00_wet.mdf2.10"
+          ],
+          "note": "异色(人形态)身体(仅材质, 目录里没有 mesh)"
+        }
+      ]
+    },
+    {
+      "name": "身体-异色龟裂a",
+      "entries": [
+        {
+          "id": "pl0230_c00_body",
+          "mdf2": [
+            "pl0230_c00_v_cracked_a/pl0230_c00_body/pl0230_c00.mdf2.10",
+            "pl0230_c00_v_cracked_a/pl0230_c00_body/pl0230_c00_blood.mdf2.10",
+            "pl0230_c00_v_cracked_a/pl0230_c00_body/pl0230_c00_burn.mdf2.10",
+            "pl0230_c00_v_cracked_a/pl0230_c00_body/pl0230_c00_freeze.mdf2.10",
+            "pl0230_c00_v_cracked_a/pl0230_c00_body/pl0230_c00_slow.mdf2.10",
+            "pl0230_c00_v_cracked_a/pl0230_c00_body/pl0230_c00_wet.mdf2.10"
+          ],
+          "note": "异色龟裂(a)身体(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "身体-异色龟裂b",
+      "entries": [
+        {
+          "id": "pl0231_c00_body",
+          "mdf2": [
+            "pl0231_c00_v_cracked_b/pl0231_c00_body/pl0231_c00.mdf2.10",
+            "pl0231_c00_v_cracked_b/pl0231_c00_body/pl0231_c00_blood.mdf2.10",
+            "pl0231_c00_v_cracked_b/pl0231_c00_body/pl0231_c00_burn.mdf2.10",
+            "pl0231_c00_v_cracked_b/pl0231_c00_body/pl0231_c00_freeze.mdf2.10",
+            "pl0231_c00_v_cracked_b/pl0231_c00_body/pl0231_c00_slow.mdf2.10",
+            "pl0231_c00_v_cracked_b/pl0231_c00_body/pl0231_c00_wet.mdf2.10"
+          ],
+          "note": "异色龟裂(b)身体(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "身体-异色龟裂c",
+      "entries": [
+        {
+          "id": "pl0232_c00_body",
+          "mdf2": [
+            "pl0232_c00_v_cracked_c/pl0232_c00_body/pl0232_c00.mdf2.10",
+            "pl0232_c00_v_cracked_c/pl0232_c00_body/pl0232_c00_blood.mdf2.10",
+            "pl0232_c00_v_cracked_c/pl0232_c00_body/pl0232_c00_burn.mdf2.10",
+            "pl0232_c00_v_cracked_c/pl0232_c00_body/pl0232_c00_freeze.mdf2.10",
+            "pl0232_c00_v_cracked_c/pl0232_c00_body/pl0232_c00_slow.mdf2.10",
+            "pl0232_c00_v_cracked_c/pl0232_c00_body/pl0232_c00_wet.mdf2.10"
+          ],
+          "note": "异色龟裂(c)身体(仅材质)"
+        }
+      ]
+    },
+    {
+      "name": "特效-V残影",
+      "base_path": "x64/vfx/mesh/mesh_character/pl0200",
+      "entries": [
+        {
+          "id": "vfx_pl0200_warp_body",
+          "mdf2": [
+            "mesh_03_pl0200_warp_000_00_00.mdf2.10",
+            "mesh_03_pl0200_warp_000_00_03.mdf2.10"
+          ],
+          "note": "身体残影(两版)"
+        },
+        {
+          "id": "vfx_pl0200_warp_head",
+          "mdf2": [
+            "mesh_03_pl0200_warp_000_00_01.mdf2.10"
+          ],
+          "note": "头部残影"
+        },
+        {
+          "id": "vfx_pl0200_warp_hair",
+          "mdf2": [
+            "mesh_03_pl0200_warp_000_00_02.mdf2.10"
+          ],
+          "note": "头发残影"
+        },
+        {
+          "id": "vfx_pl0200_staff",
+          "mesh": "mesh_03_pl0200_000_00.mesh.1808282334",
+          "mdf2": [],
+          "note": "手杖；疑似 Royal Fork(范围处决)发射的魔力手杖用的网格(无骨架)"
+        }
+      ]
+    },
+    {
+      "name": "特效-V残影网格",
+      "entries": [
+        {
+          "id": "pl0200_emitter",
+          "mesh": "pl0200_v/pl0200_vfxmesh/pl0200_emitter.mesh.1808282334",
+          "mdf2": [],
+          "note": "身体残影用的发射器网格(瞬移残影)"
+        },
+        {
+          "id": "pl0200_01_emitter",
+          "mesh": "pl0200_v/pl0200_vfxmesh/pl0200_01_emitter.mesh.1808282334",
+          "mdf2": [],
+          "note": "头部残影用的发射器网格(瞬移残影)"
+        }
+      ]
+    },
+    {
+      "name": "特效-未知",
+      "entries": [
+        {
+          "id": "pl0200_ending_emitter",
+          "mesh": "pl0200_v/pl0200_vfxmesh/pl0200_ending_emitter.mesh.1808282334",
+          "mdf2": [],
+          "note": "右臂纹身(3 个子网格 = 三个使魔不召唤时的纹身形态)；疑似只用在通关报名表最后那段结尾动画里, 实测改它游戏里看不到变化, 用途未确认"
+        }
+      ]
+    },
+    {
+      "name": "武器-手杖",
+      "base_path": "x64/character/weapon",
+      "default_enabled": false,
+      "entries": [
+        {
+          "id": "wp02_000",
+          "mesh": "wp02_000/wp02_000.mesh.1808282334",
+          "mdf2": [
+            "wp02_000/wp02_000.mdf2.10",
+            "wp02_000/wp02_000_vmode.mdf2.10"
+          ],
+          "note": "手杖(目录里没有 chain/物理)"
         }
       ]
     }
