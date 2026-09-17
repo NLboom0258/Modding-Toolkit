@@ -250,24 +250,23 @@ class DMC5_OT_BatchExportDialog(bpy.types.Operator):
                 entry_box.label(text=entry_id)
             else:
                 # label 不折行、弹窗宽度也固定，超宽会被直接裁掉 —— 这里按详情列的
-                # 可用像素折行（用实测字宽算）；续行缩进到第一行备注文字的位置，
-                # 缩进量随 id 长度变（用空格拼，实测每个空格 3px）。
+                # 可用像素折行（用实测字宽算）；续行缩进到备注文字的位置，缩进量随
+                # id 长度变（用空格拼，实测每个空格 3px）。
                 scale = getattr(self, "_ui_scale", 1.0) or 1.0
                 avail = _DETAIL_PX / scale          # 高 DPI 下把可用宽度折算回基准像素
-                prefix = f"{entry_id}  ["
+                prefix = f"{entry_id}  "
                 indent_px = _text_px(prefix)
-                body = avail - indent_px - _text_px("]")
+                body = avail - indent_px
                 if body < 40:                       # 装不下几个字：让 id 单独成行
                     entry_box.label(text=entry_id)
-                    lines = _wrap_px(note, max(40.0, avail - _text_px("]")))
+                    lines = _wrap_px(note, max(40.0, avail))
                     indent, first_prefix = "", ""
                 else:
                     lines = _wrap_px(note, body)
                     indent = " " * max(1, int(indent_px / _PX_SPACE))
                     first_prefix = prefix
                 for _i, _ln in enumerate(lines):
-                    entry_box.label(text=(first_prefix if _i == 0 else indent) + _ln
-                                    + ("]" if _i == len(lines) - 1 else ""))
+                    entry_box.label(text=(first_prefix if _i == 0 else indent) + _ln)
 
             if entry.get("mesh"):
                 head = entry_box.row(align=True)
