@@ -33,32 +33,68 @@ _DETAIL_PX = 340          # ui_scale=1 时详情列可用于文本的像素宽�
 _LIST_FACTOR = 0.35       # 左侧组列表占比（与 draw 里的 split factor 一致）
 
 
-def _char_px(ch):
-    """单个字符的像素宽度（查实测字宽表）。"""
-    px = _CHAR_PX.get(ch)
-    if px is not None:
-        return px
-    return _PX_CJK if ord(ch) > 0x2E7F else _PX_FALLBACK
+class _Metrics:
+    """字符宽度度量。
 
+    默认用内置的实测表（_CHAR_PX）；打开对话框时可以用 blf 现量一遍
+    （见 _measure_metrics），这样用户改了界面字号 / DPI / 字体也能自动跟上。
+    宽度单位统一是“ui_scale=1 时的像素”，与 _DETAIL_PX 同一个口径。
+    """
 
-def _text_px(text):
-    """文本的估算像素宽度。"""
-    return sum(_char_px(ch) for ch in text)
+    def __init__(self):
+        self.ascii = dict(_CHAR_PX)
+        self.cjk = float(_PX_CJK)
+        self.fallback = float(_PX_FALLBACK)
 
+    def char(self, ch):
+        """单个字符的像素宽度。"""
+        px = self.ascii.get(ch)
+        if px is not None:
+            return px
+        return self.cjk if ord(ch) > 0x2E7F else self.fallback
 
-def _wrap_px(text, max_px):
-    """按像素宽度折行（中文没有空格可断，直接硬断）。"""
-    lines, cur, cur_w = [], "", 0
-    for ch in text:
-        cw = _char_px(ch)
-        if cur and cur_w + cw > max_px:
+    def text(self, s):
+        """文本的像素宽度。"""
+        return sum(self.char(ch) for ch in s)
+
+    def wrap(self, s, max_px):
+        """按像素宽度折行（中文没有空格可断，直接硬断）。"""
+        lines, cur, cur_w = [], "", 0
+        for ch in s:
+            cw = self.char(ch)
+            if cur and cur_w + cw > max_px:
+                lines.append(cur)
+                cur, cur_w = "", 0
+            cur += ch
+            cur_w += cw
+        if cur:
             lines.append(cur)
-            cur, cur_w = "", 0
-        cur += ch
-        cur_w += cw
-    if cur:
-        lines.append(cur)
-    return lines or [""]
+        return lines or [""]
+
+
+def _measure_metrics(context, scale):
+    """用 Blender 自己的字体度量现量一遍字符宽度（量不到时返回内置表那份）。
+
+    只在打开对话框时做一次：导出界面开着的时候用户改不了界面字号，
+    所以这一次的度量整场有效。
+    """
+    metrics = _Metrics()
+    try:
+        import blf
+        points = 11.0
+        prefs = getattr(context, "preferences", None)
+        styles = getattr(prefs, "ui_styles", None) if prefs is not None else None
+        if styles is not None:
+            points = float(getattr(styles[0].widget, "points", 11.0) or 11.0)
+        blf.size(0, points * scale)
+        for code in range(32, 127):
+            ch = chr(code)
+            metrics.ascii[ch] = blf.dimensions(0, ch)[0] / scale
+        metrics.cjk = blf.dimensions(0, "中")[0] / scale
+        metrics.fallback = metrics.ascii.get("n", metrics.fallback)
+    except Exception:                                       # noqa: BLE001 - 量不到就用回内置表
+        pass
+    return metrics
 
 
 def _ui_scale(context):
@@ -193,7 +229,15 @@ class DMC5_OT_BatchExportDialog(bpy.types.Operator):
 
     def invoke(self, context, event):
         self._ui_scale = _ui_scale(context)
+        self._metrics_cache = None       # 首帧 draw 时用 blf 现量一次
         return context.window_manager.invoke_props_dialog(self, width=EXPORTER_WINDOW_WIDTH)
+
+    def _get_metrics(self, context):
+        """取字符宽度度量（首次调用时现量，之后整个对话框生命周期复用）。"""
+        if self._metrics_cache is None:
+            self._metrics_cache = _measure_metrics(
+                context, getattr(self, "_ui_scale", 1.0) or 1.0)
+        return self._metrics_cache
 
     def _sync_groups(self, scheme, scheme_file):
         if getattr(self, '_groups_scheme_file', None) == scheme_file:
@@ -252,9 +296,10 @@ class DMC5_OT_BatchExportDialog(bpy.types.Operator):
 
         if selected_group is not None:
             box = col2.box()
-            self._draw_group_detail_normal(box, scene, character_id, selected_group)
+            self._draw_group_detail_normal(box, scene, character_id, selected_group,
+                                           self._get_metrics(context))
 
-    def _draw_group_detail_normal(self, layout, scene, character_id, group):
+    def _draw_group_detail_normal(self, layout, scene, character_id, group, metrics):
         layout.label(text=group["name"], icon='FILE_FOLDER')
         for entry in group["entries"]:
             entry_id = entry["id"]
@@ -270,15 +315,15 @@ class DMC5_OT_BatchExportDialog(bpy.types.Operator):
                 scale = getattr(self, "_ui_scale", 1.0) or 1.0
                 avail = _DETAIL_PX / scale          # 高 DPI 下把可用宽度折算回基准像素
                 prefix = f"{entry_id}  "
-                indent_px = _text_px(prefix)
+                indent_px = metrics.text(prefix)
                 body = avail - indent_px
                 if body < 40:                       # 装不下几个字：让 id 单独成行
                     entry_box.label(text=entry_id)
-                    lines = _wrap_px(note, max(40.0, avail))
+                    lines = metrics.wrap(note, max(40.0, avail))
                     indent, first_prefix = "", ""
                 else:
-                    lines = _wrap_px(note, body)
-                    indent = " " * max(1, int(indent_px / _CHAR_PX[" "]))
+                    lines = metrics.wrap(note, body)
+                    indent = " " * max(1, int(indent_px / metrics.char(" ")))
                     first_prefix = prefix
                 for _i, _ln in enumerate(lines):
                     entry_box.label(text=(first_prefix if _i == 0 else indent) + _ln)
