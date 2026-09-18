@@ -588,6 +588,23 @@
       ]
     },
     {
+      "name": "特效-bossV残影网格",
+      "entries": [
+        {
+          "id": "pl0310_05_emitter",
+          "mesh": "pl0310_vergil_majin/pl0310_vfxmesh/pl0310_05_emitter.mesh.1808282334",
+          "mdf2": [],
+          "note": "Boss 维吉尔残影用的发射器网格(该目录只有 mesh, 没有材质)"
+        },
+        {
+          "id": "pl0310_06_emitter",
+          "mesh": "pl0310_vergil_majin/pl0310_vfxmesh/pl0310_06_emitter.mesh.1808282334",
+          "mdf2": [],
+          "note": "同目录的另一个发射器网格; 暂未观察到实际使用(Boss 维吉尔的残影没有尾巴)"
+        }
+      ]
+    },
+    {
       "name": "武器-阎魔刀",
       "base_path": "x64/character/weapon",
       "default_enabled": false,
