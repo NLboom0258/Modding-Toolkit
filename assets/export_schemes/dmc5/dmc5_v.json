@@ -21,6 +21,15 @@
           "chain": "pl0200_v/pl0200_body/pl0200.chain.21",
           "fbxskel": "pl0200_v/pl0200_body/pl0200.fbxskel.3",
           "note": "人形态身体；目录含 chain 与 fbxskel"
+        },
+        {
+          "id": "pl0210_body",
+          "mesh": "pl0210_v_naked/pl0210_body/pl0210.mesh.1808282334",
+          "mdf2": [
+            "pl0210_v_naked/pl0210_body/pl0210.mdf2.10",
+            "pl0210_v_naked/pl0210_body/pl0210_astral.mdf2.10"
+          ],
+          "note": "无衣着(Vergil 自剖后的过场调用)；贴图借用 pl0200 的 astral"
         }
       ]
     },
@@ -89,20 +98,6 @@
           ],
           "chain": "pl0200_v/pl0200_13_hair/pl0200_13.chain.21",
           "note": "头发(13)；用途待确认"
-        }
-      ]
-    },
-    {
-      "name": "身体-无衣着",
-      "entries": [
-        {
-          "id": "pl0210_body",
-          "mesh": "pl0210_v_naked/pl0210_body/pl0210.mesh.1808282334",
-          "mdf2": [
-            "pl0210_v_naked/pl0210_body/pl0210.mdf2.10",
-            "pl0210_v_naked/pl0210_body/pl0210_astral.mdf2.10"
-          ],
-          "note": "无衣着(Vergil 自剖后的过场调用)；贴图借用 pl0200 的 astral"
         }
       ]
     },
@@ -210,7 +205,7 @@
             "pl0232_v_cracked_c/pl0232_11_head_event/pl0232_11_blood.mdf2.10",
             "pl0232_v_cracked_c/pl0232_11_head_event/pl0232_11_wet.mdf2.10"
           ],
-          "note": "龟裂(c)过场头(仅材质；该形态没有 01_head)"
+          "note": "龟裂(c)过场头(仅材质)"
         }
       ]
     },
@@ -233,7 +228,7 @@
       ]
     },
     {
-      "name": "身体-异色龟裂a",
+      "name": "身体-龟裂-异色",
       "entries": [
         {
           "id": "pl0230_c00_body",
@@ -246,12 +241,7 @@
             "pl0230_c00_v_cracked_a/pl0230_c00_body/pl0230_c00_wet.mdf2.10"
           ],
           "note": "异色龟裂(a)身体(仅材质)"
-        }
-      ]
-    },
-    {
-      "name": "身体-异色龟裂b",
-      "entries": [
+        },
         {
           "id": "pl0231_c00_body",
           "mdf2": [
@@ -263,12 +253,7 @@
             "pl0231_c00_v_cracked_b/pl0231_c00_body/pl0231_c00_wet.mdf2.10"
           ],
           "note": "异色龟裂(b)身体(仅材质)"
-        }
-      ]
-    },
-    {
-      "name": "身体-异色龟裂c",
-      "entries": [
+        },
         {
           "id": "pl0232_c00_body",
           "mdf2": [
