@@ -129,7 +129,18 @@ class DMC5_OT_MdfBulkGenerate(bpy.types.Operator):
         if mdf_collection is not None:
             guess = mdf_collection.name.replace(".mdf2", ".mesh")
             if guess in bpy.data.collections:
-                self.mesh_collection = guess
+                # Guarded the same way chain_convert_ops._prefill guards its own
+                # guess. An enum property only accepts one of the identifiers its
+                # items callback lists, and the existence check above is weaker
+                # than that list: a name with no ".mdf2" in it (an mdf collection
+                # called "foo.m", say) is left untouched by the replace, so the
+                # collection that matches here is the mdf one -- which the mesh
+                # picker does not list, and assigning it raised
+                # "enum '...' not found in (...)".
+                try:
+                    self.mesh_collection = guess
+                except (TypeError, ValueError):
+                    pass
         return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
