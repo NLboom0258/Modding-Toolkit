@@ -3,7 +3,7 @@ import sys
 import time
 import bpy
 from ...core.i18n import T
-from ...core import weight_utils
+from ...core import weight_utils, facial_maps
 from ...core import bone_utils
 from ...core import ref_skeleton
 from ...core import facial_bones
@@ -22,105 +22,11 @@ from ...core.standard_ops import _run_bone_color_refresh
 # Endfield 面部顶点组改名 (Endfield → MHWilds)
 # ============================================================
 
-ENDFIELD_FACE_RENAME_MAP = [
-    ("face_Head", "HeadAll_SCL"),
-    ("browLf01Joint", "L_EyeBrow_A_LOD01"),
-    ("browLf02Joint", "L_EyeBrow_B_LOD01"),
-    ("browLf03Joint", "L_EyeBrow_B_LOD01"),
-    ("browLf04Joint", "L_EyeBrow_B_LOD01"),
-    ("browLf05Joint", "L_EyeBrow_C_LOD01"),
-    ("browLineLfUp01Joint", "L_EyeBrow_A_LOD01"),
-    ("browLineLfUp02Joint", "L_EyeBrow_B_LOD01"),
-    ("browLineLfUp03Joint", "L_EyeBrow_C_LOD01"),
-    ("browLineLf01Joint", "L_DoubleEyeLid_A_LOD00"),
-    ("browLineLf02Joint", "L_DoubleEyeLid_LOD01"),
-    ("browLineLf03Joint", "L_DoubleEyeLid_B_LOD00"),
-    ("browRt01Joint", "R_EyeBrow_A_LOD01"),
-    ("browRt02Joint", "R_EyeBrow_B_LOD01"),
-    ("browRt03Joint", "R_EyeBrow_B_LOD01"),
-    ("browRt04Joint", "R_EyeBrow_B_LOD01"),
-    ("browRt05Joint", "R_EyeBrow_C_LOD01"),
-    ("browLineRtUp01Joint", "R_EyeBrow_A_LOD01"),
-    ("browLineRtUp02Joint", "R_EyeBrow_B_LOD01"),
-    ("browLineRtUp03Joint", "R_EyeBrow_C_LOD01"),
-    ("browLineRt01Joint", "R_DoubleEyeLid_A_LOD00"),
-    ("browLineRt02Joint", "R_DoubleEyeLid_LOD01"),
-    ("browLineRt03Joint", "R_DoubleEyeLid_B_LOD00"),
-    ("faceLfIrisJoint", "L_EyeJ_LOD02"),
-    ("faceLfHighlightJoint", "L_EyeJ_LOD02"),
-    ("faceLfHighlightJointA", "L_EyeJ_LOD02"),
-    ("faceLfHighlightJointB", "L_EyeJ_LOD02"),
-    ("faceLfPupilJoint", "L_EyeJ_LOD02"),
-    ("eyeLf01Joint", "L_InnerEyeJ_LOD02"),
-    ("eyeLf01EyelashJoint", "L_UpEyeLid_A_LOD00"),
-    ("eyeLf02Joint", "L_UpEyeLid_A_LOD00"),
-    ("eyeLf02EyelashJoint", "L_UpEyeLid_A_LOD00"),
-    ("eyeLf03Joint", "L_UpEyeLid_LOD01"),
-    ("eyeLf03EyelashJoint", "L_UpEyeLid_LOD01"),
-    ("eyeLf03IrissdJoint", "L_UpEyeLid_LOD01"),
-    ("eyeLf04Joint", "L_UpEyeLid_B_LOD00"),
-    ("eyeLf04EyelashJoint", "L_UpEyeLid_B_LOD00"),
-    ("eyeLf05Joint", "L_OuterEyeJ_LOD02"),
-    ("eyeLf05EyelashJoint", "L_UpEyeLid_B_LOD00"),
-    ("eyeLf06Joint", "L_LoEyeLid_B_LOD00"),
-    ("eyeLf07Joint", "L_LoEyeLid_LOD01"),
-    ("eyeLf08Joint", "L_LoEyeLid_A_LOD00"),
-    ("faceRtIrisJoint", "R_EyeJ_LOD02"),
-    ("faceRtHighlightJoint", "R_EyeJ_LOD02"),
-    ("faceRtHighlightJointA", "R_EyeJ_LOD02"),
-    ("faceRtHighlightJointB", "R_EyeJ_LOD02"),
-    ("faceRtPupilJoint", "R_EyeJ_LOD02"),
-    ("eyeRt01Joint", "R_InnerEyeJ_LOD02"),
-    ("eyeRt01EyelashJoint", "R_UpEyeLid_A_LOD00"),
-    ("eyeRt02Joint", "R_UpEyeLid_A_LOD00"),
-    ("eyeRt02EyelashJoint", "R_UpEyeLid_A_LOD00"),
-    ("eyeRt03Joint", "R_UpEyeLid_LOD01"),
-    ("eyeRt03EyelashJoint", "R_UpEyeLid_LOD01"),
-    ("eyeRt03IrissdJoint", "R_UpEyeLid_LOD01"),
-    ("eyeRt04Joint", "R_UpEyeLid_B_LOD00"),
-    ("eyeRt04EyelashJoint", "R_UpEyeLid_B_LOD00"),
-    ("eyeRt05Joint", "R_OuterEyeJ_LOD02"),
-    ("eyeRt05EyelashJoint", "R_UpEyeLid_B_LOD00"),
-    ("eyeRt06Joint", "R_LoEyeLid_B_LOD00"),
-    ("eyeRt07Joint", "R_LoEyeLid_LOD01"),
-    ("eyeRt08Joint", "R_LoEyeLid_A_LOD00"),
-    ("NoseMd01Joint", "C_Nose_LOD01"),
-    ("lineJoint", "HeadAll_SCL"),
-    ("faceMdToothUpJoint", "UpperTeeth"),
-    ("line_toothJoint", "UpperTeeth"),
-    ("faceMdToothDnJoint", "LowerTeeth"),
-    ("TongueMd04Joint", "C_TongueC_LOD01"),
-    ("TongueMd03Joint", "C_TongueB_LOD01"),
-    ("TongueMd02Joint", "C_TongueB_LOD01"),
-    ("TongueMd01Joint", "C_TongueA_LOD01"),
-    ("lipLdn1Joint", "L_cornerLip_B_LOD01"),
-    ("lipLdn2Joint", "L_loLip_BT_LOD00"),
-    ("lipLdn3Joint", "L_loLip_T_LOD01"),
-    ("lipLdn4Joint", "L_loLip_AT_LOD00"),
-    ("lipMdnJoint", "C_loLip_T_LOD01"),
-    ("lipRdn1Joint", "R_cornerLip_B_LOD01"),
-    ("lipRdn2Joint", "R_loLip_BT_LOD00"),
-    ("lipRdn3Joint", "R_loLip_T_LOD01"),
-    ("lipRdn4Joint", "R_loLip_AT_LOD00"),
-    ("lipLup1Joint", "L_cornerLip_B_LOD01"),
-    ("lipLup2Joint", "L_upLip_BT_LOD00"),
-    ("lipLup3Joint", "L_upLip_T_LOD01"),
-    ("lipLup4Joint", "L_upLip_AT_LOD00"),
-    ("lipMupJoint", "C_upLip_T_LOD01"),
-    ("lipRup1Joint", "R_cornerLip_B_LOD01"),
-    ("lipRup2Joint", "R_upLip_BT_LOD00"),
-    ("lipRup3Joint", "R_upLip_T_LOD01"),
-    ("lipRup4Joint", "R_upLip_AT_LOD00"),
-    ("faceMdJawDnJoint", "C_Chin_LOD01"),
-    ("faceLfCheekOtDnJoint", "L_JawLine_LOD01"),
-    ("faceLfCheekOtInJoint", "L_malarFat_B_LOD01"),
-    ("faceLfCheekOtJoint", "L_Cheek_LOD02"),
-    ("faceLfCheekOtUpJoint", "L_CheekBone_LOD02"),
-    ("faceRtCheekOtDnJoint", "R_JawLine_LOD01"),
-    ("faceRtCheekOtInJoint", "R_malarFat_B_LOD01"),
-    ("faceRtCheekOtJoint", "R_Cheek_LOD02"),
-    ("faceRtCheekOtUpJoint", "R_CheekBone_LOD02"),
-]
+# 表在 assets/facial_maps/endfield_to_mhws.json —— 见 core/facial_maps.py 的说明：
+# 面部对应是人标的数据，不是逻辑，同一份东西不该在代码和 assets 下各存一份。
+# 顺序有意义（先到的拿名字，后到的并进去），别对那个 JSON 做键排序。
+def _endfield_to_mhws():
+    return facial_maps.load("endfield_to_mhws")
 
 
 
@@ -143,7 +49,7 @@ class MHWS_OT_EndfieldFaceRename(bpy.types.Operator):
         for obj in context.selected_objects:
             if obj.type != 'MESH':
                 continue
-            for old_name, new_name in ENDFIELD_FACE_RENAME_MAP:
+            for old_name, new_name in _endfield_to_mhws():
                 if weight_utils.rename_or_merge_vgroup(obj, old_name, new_name):
                     total += 1
         self.report({'INFO'}, T("mhws.operators.endfield_processed").format(n=total))
@@ -956,13 +862,22 @@ class MHWS_OT_OptimizeSkeleton(bpy.types.Operator):
 
         # Knee 对齐到膝关节，Shin 在其正下方 0.01：
         # universal_snap 已把 Shin 头对齐到膝关节位置，先把 Knee 平移到该点（保持自身方向长度），
-        # 再把 Shin 整体下移 0.01，使 Knee 恰在 Shin 正上方（仅 Z 相差），与 MBT 一致
+        # 再把 Shin 整体下移 0.01，使 Knee 恰在 Shin 正上方（仅 Z 相差），与 MBT 一致。
+        # 该操作不是幂等的（每次都会再下移 0.01），反复点击会让两骨越移越低——
+        # 先判断是否已满足目标关系，满足则整侧跳过。
         for side in ('L', 'R'):
             shin = edit_bones.get(f'{side}_Shin')
             if shin is None:
                 continue
             knee = edit_bones.get(f'{side}_Knee')
             if knee is not None:
+                already_aligned = (
+                    abs(knee.head.x - shin.head.x) < 1e-4
+                    and abs(knee.head.y - shin.head.y) < 1e-4
+                    and abs((knee.head.z - shin.head.z) - 0.01) < 1e-4
+                )
+                if already_aligned:
+                    continue
                 offset = shin.head - knee.head
                 knee.tail = knee.tail + offset
                 knee.head = shin.head.copy()
