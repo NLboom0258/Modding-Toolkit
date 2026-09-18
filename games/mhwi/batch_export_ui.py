@@ -35,6 +35,23 @@ _FILETYPE_LABELS = {
 
 # ── 集合过滤 ──────────────────────────────────────────────────────
 
+# ── Enum item cache ────────────────────────────────────
+# Same guard core/* already uses (pre_export_check_ops, mdf_port_ops, ...): Blender
+# keeps no reference to the strings an `items` callback returns, so a list rebuilt
+# on every access can be collected mid-draw -- the labels come out garbled, and a
+# non-ASCII identifier read back in execute() raises UnicodeDecodeError (an ASCII
+# name happens to survive, being valid UTF-8 either way).
+
+_enum_cache = {}
+
+
+def _cached(key, items):
+    cache = _enum_cache.setdefault(key, [])
+    cache.clear()
+    cache.extend(items)
+    return cache
+
+
 def _get_filtered_collections(filetype):
     type_map = {
         "mod3": "MHW_MOD3_COLLECTION",
@@ -58,7 +75,7 @@ def _get_filtered_collections(filetype):
             result.append((c.name, c.name, "", "OUTLINER_COLLECTION", len(result)))
     if not result:
         result.append(("NONE", T("mhwi.batch_export_ui.no_matching_collections"), "", "ERROR", 0))
-    return result
+    return _cached(f"mhwi_collection_{filetype}", result)
 
 
 # ── Pick / Clear ──────────────────────────────────────────────────

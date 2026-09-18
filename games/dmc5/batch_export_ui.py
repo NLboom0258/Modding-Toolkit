@@ -104,6 +104,23 @@ def _ui_scale(context):
     return float(getattr(sys_prefs, "ui_scale", 1.0) or 1.0)
 
 
+# ── Enum item cache ───────────────────────────────────────────────────────────
+# Same guard core/* already uses (pre_export_check_ops, mdf_port_ops, ...): Blender
+# keeps no reference to the strings an `items` callback returns, so a list rebuilt
+# on every access can be collected mid-draw -- the labels come out garbled, and a
+# non-ASCII identifier read back in execute() raises UnicodeDecodeError (an ASCII
+# name happens to survive, being valid UTF-8 either way).
+
+_enum_cache = {}
+
+
+def _cached(key, items):
+    cache = _enum_cache.setdefault(key, [])
+    cache.clear()
+    cache.extend(items)
+    return cache
+
+
 def _get_armatures():
     result = []
     for obj in bpy.data.objects:
@@ -111,7 +128,7 @@ def _get_armatures():
             result.append((obj.name, obj.name, "", 'ARMATURE_DATA', len(result)))
     if not result:
         result.append(("NONE", "No armatures", "", "ERROR", 0))
-    return result
+    return _cached("dmc5_armature", result)
 
 
 def _get_filtered_collections(suffix):
@@ -130,7 +147,7 @@ def _get_filtered_collections(suffix):
             result.append((c.name, c.name, "", "OUTLINER_COLLECTION", len(result)))
     if not result:
         result.append(("NONE", "No matching collections", "", "ERROR", 0))
-    return result
+    return _cached(f"dmc5_collection_{suffix}", result)
 
 
 class DMC5_OT_ToggleEntry(bpy.types.Operator):

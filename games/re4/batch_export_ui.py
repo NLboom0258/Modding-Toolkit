@@ -13,6 +13,23 @@ from .batch_export import (
 EXPORTER_WINDOW_WIDTH = 600
 
 
+# ── Enum item cache ────────────────────────────────────
+# Same guard core/* already uses (pre_export_check_ops, mdf_port_ops, ...): Blender
+# keeps no reference to the strings an `items` callback returns, so a list rebuilt
+# on every access can be collected mid-draw -- the labels come out garbled, and a
+# non-ASCII identifier read back in execute() raises UnicodeDecodeError (an ASCII
+# name happens to survive, being valid UTF-8 either way).
+
+_enum_cache = {}
+
+
+def _cached(key, items):
+    cache = _enum_cache.setdefault(key, [])
+    cache.clear()
+    cache.extend(items)
+    return cache
+
+
 def _get_filtered_collections(suffix):
     result = []
     type_map = {"mesh": "RE_MESH_COLLECTION", "mdf2": "RE_MDF_COLLECTION", "chain": "RE_CHAIN_COLLECTION"}
@@ -29,7 +46,7 @@ def _get_filtered_collections(suffix):
             result.append((c.name, c.name, "", "OUTLINER_COLLECTION", len(result)))
     if not result:
         result.append(("NONE", "No matching collections", "", "ERROR", 0))
-    return result
+    return _cached(f"re4_collection_{suffix}", result)
 
 
 def _get_armatures():
@@ -39,7 +56,7 @@ def _get_armatures():
             result.append((obj.name, obj.name, "", 'ARMATURE_DATA', len(result)))
     if not result:
         result.append(("NONE", "No armatures", "", "ERROR", 0))
-    return result
+    return _cached("re4_armature", result)
 
 
 # ============================================================
