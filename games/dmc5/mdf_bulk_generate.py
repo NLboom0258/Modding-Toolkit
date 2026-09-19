@@ -17,10 +17,33 @@ are replaced by the generated ones (the template's own name is not kept), which
 is what "rebuild the material list from this one" means.
 """
 
+import os
+
 import bpy
 
 from ...core.i18n import T
 from ...core.mesh_utils import material_name_of
+
+
+def _mesh_collections():
+    """Every RE mesh collection, sorted -- the one set the picker and the
+    pre-fill both read, so neither can offer (or assign) something the other
+    does not know about.
+
+    ``~TYPE`` decides whenever it is present; the ``.mesh`` name suffix is only
+    the fallback for collections carrying no marker at all -- the same shape
+    mhwi/mhws/mhrs use.  Testing the suffix with ``or`` instead also listed a
+    *mdf* collection that happened to be called ``foo.mesh``, which holds no
+    meshes and so could only ever fail with "no meshes".
+    """
+    def is_mesh(coll):
+        marker = coll.get("~TYPE", "")
+        if marker:
+            return marker == "RE_MESH_COLLECTION"
+        return coll.name.endswith(".mesh")
+
+    return sorted((c for c in bpy.data.collections if is_mesh(c)),
+                  key=lambda c: c.name)
 
 
 _mesh_collection_items_cache = []
@@ -34,11 +57,7 @@ def mesh_collection_items(self, context):
     presets and bone pickers need).
     """
     global _mesh_collection_items_cache
-    _mesh_collection_items_cache = [
-        (coll.name, coll.name, "")
-        for coll in sorted(bpy.data.collections, key=lambda c: c.name)
-        if coll.get("~TYPE") == "RE_MESH_COLLECTION" or coll.name.endswith(".mesh")
-    ]
+    _mesh_collection_items_cache = [(c.name, c.name, "") for c in _mesh_collections()]
     if not _mesh_collection_items_cache:
         _mesh_collection_items_cache = [("NONE", T("dmc5.mdf_bulk.no_collection_item"), "")]
     return _mesh_collection_items_cache
@@ -124,23 +143,29 @@ class DMC5_OT_MdfBulkGenerate(bpy.types.Operator):
         # Pre-fill when the mdf collection has a same-named mesh collection
         # (pl0500.mdf2 <-> pl0500.mesh) -- the common case when both came from
         # one import.
+        #
+        # Matched on the stem against the picker's own set, rather than by
+        # renaming ".mdf2" to ".mesh" and then checking that the result merely
+        # exists.  The type marker is what identifies a mesh collection, so a
+        # target called plain "pl0500" is as valid as "pl0500.mesh" -- the name
+        # suffix is only the marker-less fallback (see _mesh_collections).  It
+        # also means we never assign something the picker does not list.
         template = context.active_object
         mdf_collection = mdf_collection_of(template) if template else None
         if mdf_collection is not None:
-            guess = mdf_collection.name.replace(".mdf2", ".mesh")
-            if guess in bpy.data.collections:
-                # Guarded the same way chain_convert_ops._prefill guards its own
-                # guess. An enum property only accepts one of the identifiers its
-                # items callback lists, and the existence check above is weaker
-                # than that list: a name with no ".mdf2" in it (an mdf collection
-                # called "foo.m", say) is left untouched by the replace, so the
-                # collection that matches here is the mdf one -- which the mesh
-                # picker does not list, and assigning it raised
-                # "enum '...' not found in (...)".
-                try:
-                    self.mesh_collection = guess
-                except (TypeError, ValueError):
-                    pass
+            offered = {c.name for c in _mesh_collections()}
+            stem = os.path.splitext(mdf_collection.name)[0]
+            for candidate in (f"{stem}.mesh", stem):
+                if candidate in offered:
+                    # Belt and braces, same guard chain_convert_ops._prefill
+                    # applies: an enum property only accepts one of its own
+                    # identifiers, so a stray assignment raises instead of
+                    # silently doing nothing.
+                    try:
+                        self.mesh_collection = candidate
+                    except (TypeError, ValueError):
+                        pass
+                    break
         return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
