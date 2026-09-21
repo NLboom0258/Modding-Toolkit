@@ -129,6 +129,29 @@ def _is_signed(fmt_name):
     return 'SNORM' in fmt_name or 'SF16' in fmt_name
 
 
+def _is_srgb_source(filepath):
+    """True when *filepath* is a .dds carrying an sRGB DXGI format.
+
+    Only a DDS has a format to read. For a PNG/TGA/JPG source there is no such
+    thing, and none is needed: those are taken as-is, which is what "hand back
+    the bytes that are in the file" wants anyway.
+
+    Legacy DDS headers cannot express an sRGB DXGI format at all (those need the
+    DX10 extension), so `'DX10'` in the fourCC slot is the test for whether the
+    format field is there to read.
+    """
+    if not filepath.lower().endswith('.dds'):
+        return False
+    try:
+        with open(filepath, 'rb') as f:
+            head = f.read(148)
+    except OSError:
+        return False
+    if len(head) < 148 or head[:4] != b'DDS ' or head[84:88] != b'DX10':
+        return False
+    return dxgi.is_srgb(struct.unpack_from('<i', head, 128)[0])
+
+
 def _run_texconv(dll, file, args, out_dir, verbose=False, allow_slow_codec=False):
     args = list(args)
     if out_dir:
@@ -159,6 +182,18 @@ def convert_to_dds(filepath, dxgi_format_name, out_dir, generate_mips=True,
     REE-Content-Editor converts textures (DirectXTex called with plain
     TexCompressFlags.Default and the sRGB-ness carried only by the format enum).
 
+    It *does* pass -srgbi for an _SRGB destination, and that is what keeps the
+    bytes untouched. DirectXTex reads the format's sRGB bit as a colour space,
+    not a label: given a non-sRGB input and an _SRGB destination it applies a
+    linear->sRGB encode. Measured with a flat 128,64,200 source, texconv turned
+    it into 188,137,229 (R8G8B8A8_UNORM_SRGB, directly readable from the file)
+    and produced a BC7 payload differing from BC7_UNORM's for the same source.
+    -srgbi declares the input sRGB, which is the truth for a source image, so
+    the two cancel exactly: measured byte-identical BC7 payloads against
+    BC7_UNORM, and values that round-trip unchanged. Linear destinations need
+    nothing — there the input's declared space already matches — which is why
+    that branch always looked right.
+
     Callers must still pass the format matching the texture's *role*, since that
     tag is what the shader honours (see core/mdf_tex_processor_base.py's
     SRGB_SLOT_TYPES for how that's decided per slot).
@@ -185,6 +220,11 @@ def convert_to_dds(filepath, dxgi_format_name, out_dir, generate_mips=True,
     filepath = _sanitize_png_color_metadata(filepath, out_dir)
 
     args = ['-f', dxgi_format_name, '-sepalpha']  # -sepalpha: without it, alpha gets mangled by mip generation
+    # Declare the input's colour space as the destination's, so no conversion
+    # happens either way — see this function's docstring.  Without it an _SRGB
+    # destination comes out an extra sRGB encode brighter than the source.
+    if dxgi.is_srgb(dxgi_format_name):
+        args += ['-srgbi']
     if not generate_mips:
         args += ['-m', '1']
     if image_filter:
@@ -249,6 +289,13 @@ def convert_to_raw_rgba(filepath, out_dir, verbose=False, allow_slow_codec=False
     dll = _load_dll()
 
     args = ['-f', 'R8G8B8A8_UNORM', '-ft', 'TGA']
+    # Same colour-space rule as convert_to_dds, in reverse: a source tagged
+    # _SRGB would otherwise be sRGB->linear decoded on the way out, so the
+    # returned array would not be the bytes that are in the file.  Measured on
+    # a BC7_UNORM_SRGB DDS carrying 128,64,200: without this it reads back
+    # 55,13,147, with it 128,64,200.
+    if _is_srgb_source(filepath):
+        args += ['-srgbo']
 
     # Into a private subdirectory, not out_dir.  texconv names its output after
     # the input stem, so a .tga source that already lives in out_dir would have
@@ -391,6 +438,9 @@ def convert_to_png(filepath, out_dir, verbose=False, allow_slow_codec=False):
     dll = _load_dll()
 
     args = ['-f', 'R8G8B8A8_UNORM', '-ft', 'PNG']
+    # See convert_to_raw_rgba above: keep the stored bytes, do not colour-convert.
+    if _is_srgb_source(filepath):
+        args += ['-srgbo']
     _run_texconv(dll, filepath, args, out_dir, verbose=verbose, allow_slow_codec=allow_slow_codec)
 
     base_name = os.path.splitext(os.path.basename(filepath))[0] + '.png'
