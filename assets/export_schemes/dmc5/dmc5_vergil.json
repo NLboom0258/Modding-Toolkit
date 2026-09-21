@@ -546,20 +546,20 @@
           "note": "身体残影(两版)"
         },
         {
-          "id": "vfx_pl0800_warp_hair",
+          "id": "vfx_pl0800_warp_head",
           "mdf2": [
             "mesh_03_pl0800_warp_000_01_01.mdf2.10",
             "mesh_03_pl0800_warp_000_01_04.mdf2.10"
           ],
-          "note": "头发残影(两版)"
+          "note": "头部残影(两版)"
         },
         {
-          "id": "vfx_pl0800_warp_head",
+          "id": "vfx_pl0800_warp_hair",
           "mdf2": [
             "mesh_03_pl0800_warp_000_01_02.mdf2.10",
             "mesh_03_pl0800_warp_000_01_05.mdf2.10"
           ],
-          "note": "头部残影(两版)"
+          "note": "头发残影(两版)"
         },
         {
           "id": "vfx_pl0800_warp_majin",
