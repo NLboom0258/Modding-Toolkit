@@ -6,7 +6,7 @@ import shutil
 import time
 
 from .i18n import T
-from .slot_resolver import resolve_dds_format, write_slot_tex
+from .slot_resolver import FORMAT_AUTO, resolve_slot_dds_format, write_slot_tex
 from .re_normal_pack import encode_normal_ga
 
 # ── PBR Constants ──────────────────────────────────────────────────────────────
@@ -68,7 +68,15 @@ PBR_DEFAULTS = {
 # Only these PBR types expose a per-channel selector in the UI
 PBR_CHANNEL_SELECTABLE = {'alpha', 'roughness', 'metallic', 'ao', 'cavity', 'translucency'}
 
-# Slot types that should be converted as BC7_UNORM_SRGB (colour / emissive data)
+# Slot types that should be converted as BC7_UNORM_SRGB (colour / emissive data).
+#
+# This is the set of names *every* RE Engine game shares.  A game whose albedo
+# slot is called something else extends it in its own MdfTexProcessBase subclass
+# (``_srgb_slot_types``) rather than adding here -- DMC5's ``BaseMetalMap``, for
+# instance, exists in no other game, and a game-specific name in this list would
+# be a fact with no visible owner.  (Getting that wrong is not cosmetic: a colour
+# texture written without the sRGB tag renders washed out, see
+# core/slot_resolver.resolve_slot_dds_format.)
 SRGB_SLOT_TYPES = {'BaseDielectricMap', 'BaseAlphaMap', 'EmissiveMap', 'Emissive_ColorMap', 'BaseShiftMap'}
 
 # Slot types whose G/A pair needs the hemi-octahedral encode (core/re_normal_pack.py)
@@ -670,7 +678,8 @@ def _capture_material_state(m):
         'pbr_chs':        {pt: getattr(m.pbr, f"{pt}_ch") for pt in PBR_CHANNEL_SELECTABLE},
         'pbr_inv':        {pt: getattr(m.pbr, f"{pt}_inv") for pt in PBR_CHANNEL_SELECTABLE},
         'normal_flip_g':  m.pbr.normal_flip_g,
-        'slots':          {s.texture_type: {'mode': s.mode, 'direct_image': s.direct_image}
+        'slots':          {s.texture_type: {'mode': s.mode, 'direct_image': s.direct_image,
+                                            'format_override': s.format_override}
                            for s in m.slots},
     }
 
@@ -740,8 +749,11 @@ def _do_refresh(settings, col, scene, is_null_fn=None):
             if binding.textureType in prev_slots:
                 sd = prev_slots[binding.textureType]
                 if isinstance(sd, dict):
-                    slot.mode         = sd.get('mode', 'SKIP')
-                    slot.direct_image = sd.get('direct_image', '')
+                    slot.mode            = sd.get('mode', 'SKIP')
+                    slot.direct_image    = sd.get('direct_image', '')
+                    # Absent in state saved before the override existed -- AUTO is
+                    # what those runs used, so the default is the right restore.
+                    slot.format_override = sd.get('format_override', FORMAT_AUTO)
                 else:
                     slot.mode, slot.direct_image = sd
             elif is_null_fn(binding.path):
@@ -791,8 +803,12 @@ class MdfTexPBRInputs(bpy.types.PropertyGroup):
 _mdf_tex_slot_mode_items_cache = []
 
 def get_mdf_tex_slot_mode_items(self, context):
-    global _mdf_tex_slot_mode_items_cache
-    _mdf_tex_slot_mode_items_cache = [
+    # Filled in place rather than rebound: Blender keeps no reference of its own
+    # to the strings an items callback returns, so the list object it was handed
+    # last time has to stay the one it gets now -- same rule as
+    # core/pre_export_check_ops.py's _cached.
+    cache = _mdf_tex_slot_mode_items_cache
+    cache[:] = [
         ('COMPOSE', T("core.mdf_tex_processor_base.mode_compose"),
                     T("core.mdf_tex_processor_base.mode_compose_desc"), 'NODE_COMPOSITING', 0),
         ('DIRECT',  T("core.mdf_tex_processor_base.mode_direct"),
@@ -802,7 +818,29 @@ def get_mdf_tex_slot_mode_items(self, context):
         ('SKIP',    T("core.mdf_tex_processor_base.mode_skip"),
                     T("core.mdf_tex_processor_base.mode_skip_desc"),    'RADIOBUT_OFF',     3),
     ]
-    return _mdf_tex_slot_mode_items_cache
+    return cache
+
+
+_mdf_tex_slot_format_items_cache = []
+
+def get_mdf_tex_slot_format_items(self, context):
+    """The per-slot format override (only the sRGB bit is selectable).
+
+    Same in-place-fill rule as get_mdf_tex_slot_mode_items just above -- the
+    identifiers here happen to be ASCII, so getting it wrong would show garbled
+    labels rather than raise, which is exactly the kind of thing that goes
+    unnoticed.
+    """
+    cache = _mdf_tex_slot_format_items_cache
+    cache[:] = [
+        (FORMAT_AUTO,       T("core.mdf_tex_processor_base.format_auto"),
+                            T("core.mdf_tex_processor_base.format_auto_desc"),   '', 0),
+        ('BC7_UNORM',       T("core.mdf_tex_processor_base.format_linear"),
+                            T("core.mdf_tex_processor_base.format_linear_desc"), '', 1),
+        ('BC7_UNORM_SRGB',  T("core.mdf_tex_processor_base.format_srgb"),
+                            T("core.mdf_tex_processor_base.format_srgb_desc"),   '', 2),
+    ]
+    return cache
 
 
 class MdfTexSlotItem(bpy.types.PropertyGroup):
@@ -814,6 +852,14 @@ class MdfTexSlotItem(bpy.types.PropertyGroup):
         default=3,  # 'SKIP' — dynamic items require an int index default
     )
     direct_image: bpy.props.StringProperty(name="Direct Image", subtype='FILE_PATH')
+    # 'AUTO' by default: the slot-type rule decides.  Only worth touching for a
+    # slot whose name says nothing about its content -- see
+    # core/slot_resolver.resolve_slot_dds_format.
+    format_override: bpy.props.EnumProperty(
+        name="Format",
+        items=get_mdf_tex_slot_format_items,
+        default=0,  # 'AUTO' -- dynamic items require an int index default
+    )
 
 
 class MdfTexMaterialItem(bpy.types.PropertyGroup):
@@ -1024,6 +1070,10 @@ class MdfTexProcessBase(bpy.types.Operator):
     _use_art_prefix   = True
     _path_fixed_prefix = ""   # Optional path segment prepended to texture_base_path
     _platform_segment  = "STM"  # natives/<platform_segment>/ 引擎平台段 (RE4/RE9/MHWS=STM, DMC5=x64)
+    # Which slots hold colour, for resolve_slot_dds_format.  Defaults to the
+    # names every game shares; a game with its own albedo slot overrides this
+    # with ``SRGB_SLOT_TYPES | {...}`` (see games/dmc5/mdf_tex_processor.py).
+    _srgb_slot_types  = SRGB_SLOT_TYPES
     _log_tag          = "MDF Tex"
 
     def execute(self, context):
@@ -1161,8 +1211,9 @@ class MdfTexProcessBase(bpy.types.Operator):
 
                         write_slot_tex(
                             src_img, disk_path, temp_dir,
-                            dds_fmt=resolve_dds_format(
-                                slot.texture_type, SRGB_SLOT_TYPES),
+                            dds_fmt=resolve_slot_dds_format(
+                                slot.texture_type, slot.format_override,
+                                cls._srgb_slot_types),
                             generate_mipmaps=effective_mipmaps,
                             mip_quality=mat_item.mipmap_strategy,
                             image_to_dds=ImageListToDDS,

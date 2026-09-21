@@ -26,6 +26,20 @@ DMC5_TEXTURE_TYPE_ABBREV = {
     'TimeLock_EmissiveColor': 'TIMELOCK',
 }
 
+# DMC5's albedo slot is BaseMetalMap (RGB colour + A metallic), not the
+# BaseDielectricMap every other RE Engine game uses -- so it has to be declared
+# here, or its textures go out as BC7_UNORM and render washed out.  Measured
+# against the vanilla files rather than assumed (scanning the unpacked
+# character/player tree: 2814 .tex, _analysis/tools/_scan_tex_formats.py), every
+# ALBM is sRGB-tagged (742x BC7_UNORM_SRGB + 5x BC1_UNORM_SRGB) while ATOS is
+# linear throughout (617x BC1/BC7_UNORM) -- i.e. the packed slots were already
+# right and only the colour ones were missing from the base set.
+#
+# TimeLock_EmissiveColor is the time-stop emissive colour map: same category
+# (emissive colour and nothing else), but it has no file in the vanilla tree to
+# check against, so it is included on that reasoning alone.
+DMC5_SRGB_SLOT_TYPES = SRGB_SLOT_TYPES | {'BaseMetalMap', 'TimeLock_EmissiveColor'}
+
 # DMC5 channel maps: base colour RGB + metallic A (direct, NOT inverted);
 # ATOS-E packs alpha R / translucency G / AO B / emissive A; TimeLock is a
 # time-stop emissive colour map (RGB = emissive, A unused).
@@ -137,6 +151,7 @@ class DMC5_OT_MdfTexProcess(MdfTexProcessBase):
     _channel_maps     = DMC5_SLOT_CHANNEL_MAPS
     _tex_version      = DMC5_TEX_VERSION
     _abbrev_map       = DMC5_TEXTURE_TYPE_ABBREV
+    _srgb_slot_types  = DMC5_SRGB_SLOT_TYPES
     _use_art_prefix    = False
     _path_fixed_prefix = ""   # DMC5 assets 直接放 natives/x64/<base> 下（re4 才有固定前缀）
     _platform_segment  = "x64"  # DMC5 用 natives/x64/ (不是 STM)
@@ -193,6 +208,7 @@ def register():
         use_art_prefix=False,
         path_fixed_prefix="",   # TODO(待确认)
         null_tex_by_type=DMC5_NULL_TEX_BY_TYPE,
+        srgb_slot_types=DMC5_SRGB_SLOT_TYPES,
         natives_root_key="dmc5_natives_root",
         # Built from REE-Lib's cached DMC5 file list, which that tool reconstructs
         # from the game exe + pak contents and validates by hashing (DMC5's pak

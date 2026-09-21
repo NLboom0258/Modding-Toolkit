@@ -39,7 +39,9 @@ def register_game_tex_config(game_code, **cfg):
     """cfg keys: abbrev_map, channel_maps, tex_version, use_art_prefix,
     path_fixed_prefix, null_tex_by_type, natives_root_key, vanilla_asset_rel,
     platform_segment (the game's ``natives/<platform>/`` segment -- 'STM'
-    everywhere except DMC5, which ships under ``natives/x64``)."""
+    everywhere except DMC5, which ships under ``natives/x64``),
+    srgb_slot_types (the slots that hold colour; omit to use the set every game
+    shares, see MdfTexProcessBase._srgb_slot_types)."""
     _GAME_TEX_CONFIG[game_code] = cfg
 
 
@@ -315,7 +317,8 @@ def write_ported_tex(source, dst_slot_type, dst_cfg, tex_name, dst_natives_root,
     image_to_dds, dds_to_tex = _import_tex_utils()
     write_slot_tex(
         png_path, disk_path, temp_dir,
-        dds_fmt=resolve_dds_format(dst_slot_type, SRGB_SLOT_TYPES),
+        dds_fmt=resolve_dds_format(
+            dst_slot_type, dst_cfg.get('srgb_slot_types', SRGB_SLOT_TYPES)),
         generate_mipmaps=True,
         image_to_dds=image_to_dds,
         dds_to_tex=lambda p, o: dds_to_tex(p, tex_version, o),

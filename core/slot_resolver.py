@@ -24,6 +24,10 @@ import os
 import shutil
 
 
+#: The per-slot override's "decide for me" value -- see resolve_slot_dds_format.
+FORMAT_AUTO = 'AUTO'
+
+
 def resolve_dds_format(slot_type, srgb_slots):
     """DXGI format name for a slot's texture data.
 
@@ -34,6 +38,29 @@ def resolve_dds_format(slot_type, srgb_slots):
     channel format costs nothing over a two-channel BC5.
     """
     return 'BC7_UNORM_SRGB' if slot_type in srgb_slots else 'BC7_UNORM'
+
+
+def resolve_slot_dds_format(slot_type, override, srgb_slots):
+    """resolve_dds_format, with a per-slot manual override on top.
+
+    ``srgb_slots`` names the slots whose content is colour, which is a per-game
+    question: the RE games call the albedo slot ``BaseDielectricMap`` and DMC5
+    calls its own ``BaseMetalMap``, so each game declares the extra names (see
+    MdfTexProcessBase._srgb_slot_types).
+
+    That rule can only cover slots whose *name* says what they hold. A material
+    is free to bind a texture under any name at all -- DMC5 ships plenty of
+    one-off slots (``kizu_Map01``, ``cu_Base_Map``, ``_Texture2D``) whose name
+    says nothing, and there is no way to tell a colour map from a mask by
+    looking at one. Hence the override: ``AUTO`` asks for the rule, an explicit
+    format name is used as-is. Only the sRGB tag is at stake, and the pixels are
+    never gamma-converted (see core/texconv_native.convert_to_dds), so a wrong
+    guess here is the difference between a texture rendering correctly and
+    rendering washed out -- which is exactly why it is worth a manual control.
+    """
+    if override and override != FORMAT_AUTO:
+        return override
+    return resolve_dds_format(slot_type, srgb_slots)
 
 
 def grade_source_file(src_img, temp_dir, dds_fmt, grade_mode):

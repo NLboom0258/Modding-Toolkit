@@ -4,8 +4,9 @@ import os
 from .i18n import T
 from .mdf_tex_processor_base import (
     PBR_TYPES, PBR_TYPE_LABELS, PBR_CHANNEL_SELECTABLE,
-    BASE_COMMON_SLOT_TYPES, BASE_NULL_TEX_BY_TYPE,
+    BASE_COMMON_SLOT_TYPES, BASE_NULL_TEX_BY_TYPE, SRGB_SLOT_TYPES,
 )
+from .slot_resolver import FORMAT_AUTO, resolve_dds_format
 from .slot_sources import find_shader_slot_supplies
 
 PROCESSOR_WINDOW_WIDTH = 660
@@ -43,6 +44,10 @@ class MdfTexDialogBase(bpy.types.Operator):
     _path_hint         = "例：Author/Character/"
     _common_slot_types = BASE_COMMON_SLOT_TYPES
     _null_tex_by_type  = BASE_NULL_TEX_BY_TYPE
+    # For showing what a slot's 'Auto' format resolves to.  Same per-game split
+    # as the processor's own _srgb_slot_types -- a game with its own albedo slot
+    # overrides both sides (see games/dmc5/mdf_tex_processor{,_ui}.py).
+    _srgb_slot_types   = SRGB_SLOT_TYPES
 
     # ── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -220,6 +225,28 @@ class MdfTexDialogBase(bpy.types.Operator):
             row = box.row(align=True)
             row.label(text=slot.texture_type, icon='TEXTURE_DATA')
             row.prop(slot, "mode", text="")
+
+            if slot.mode in ('COMPOSE', 'DIRECT'):
+                # Indented onto its own row rather than squeezed in beside the
+                # mode: 'Direct' already carries a file picker and a clear
+                # button, and a one-off slot name can be long enough to push
+                # either of them off the dialog.  Only the two modes that
+                # actually write a texture get it -- Default/No Change convert
+                # nothing, so a format choice there would be a control with no
+                # effect.
+                fmt_split = box.split(factor=0.06)
+                fmt_split.column()
+                fmt_row = fmt_split.column().row(align=True)
+                fmt_row.label(text=T("core.mdf_tex_processor_base.slot_format_label"))
+                fmt_row.prop(slot, "format_override", text="")
+                if slot.format_override == FORMAT_AUTO:
+                    # Spell out what 'Auto' picked for this slot: the whole
+                    # failure mode this control exists for is a wrong sRGB tag,
+                    # and that is invisible until the texture is in the game.
+                    fmt_row.label(
+                        text=resolve_dds_format(slot.texture_type,
+                                                cls._srgb_slot_types),
+                        icon='INFO')
 
             if slot.mode == 'DIRECT':
                 cur = slot.direct_image

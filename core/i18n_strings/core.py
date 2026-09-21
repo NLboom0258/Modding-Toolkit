@@ -429,6 +429,34 @@ STRINGS = {
     "core.mdf_tex_processor_base.mode_skip_desc": {
         "EN": "Keep the existing path unchanged", "ZH": "保持现有路径不变"},
 
+    # Only shown for the modes that actually write a texture (PBR Compose /
+    # Direct); Default/No Change never convert anything, so an sRGB flag there
+    # would be a prompt that cannot do anything.
+    "core.mdf_tex_processor_base.slot_format_label": {"EN": "Format", "ZH": "格式"},
+    "core.mdf_tex_processor_base.format_auto": {"EN": "Auto", "ZH": "自动"},
+    "core.mdf_tex_processor_base.format_auto_desc": {
+        "EN": "Decide from the slot type: colour slots (albedo, emissive) are written as "
+              "BC7_UNORM_SRGB, every other slot as BC7_UNORM. Pick an explicit value only for "
+              "slots whose name says nothing about their content.",
+        "ZH": "按槽位类型决定: 彩色槽位 (反照率/自发光) 写成 BC7_UNORM_SRGB, 其余槽位写 BC7_UNORM。"
+              "只有当槽位名看不出内容时才需要手动指定。"},
+    "core.mdf_tex_processor_base.format_linear": {"EN": "BC7_UNORM", "ZH": "BC7_UNORM"},
+    "core.mdf_tex_processor_base.format_linear_desc": {
+        "EN": "Force BC7_UNORM, i.e. the texture is not sRGB-tagged -- what packed data "
+              "(normals, masks, curve tables) wants. Choosing it where the game expects sRGB "
+              "makes those textures render too bright / washed out.",
+        "ZH": "强制 BC7_UNORM, 即贴图不带 sRGB 标记——打包数据 (法线/遮罩/曲线表) 该用这个。"
+              "游戏期望 sRGB 的地方选它, 贴图会发白/过亮。"},
+    "core.mdf_tex_processor_base.format_srgb": {"EN": "BC7_UNORM_SRGB", "ZH": "BC7_UNORM_SRGB"},
+    "core.mdf_tex_processor_base.format_srgb_desc": {
+        "EN": "Force BC7_UNORM_SRGB, i.e. the texture is sRGB-tagged -- what colour data "
+              "wants. Choosing it where the game expects linear data makes those textures "
+              "render too dark. The pixel bytes are never gamma-converted either way; this is "
+              "only the tag the shader reads.",
+        "ZH": "强制 BC7_UNORM_SRGB, 即贴图带 sRGB 标记——彩色数据该用这个。"
+              "游戏期望线性数据的地方选它, 贴图会发黑。两种情况下像素字节都不会被 gamma "
+              "转换, 改变的只是着色器读到的标记。"},
+
     "core.mdf_tex_processor_base.generate_mipmaps_label": {"EN": "Generate MipMaps", "ZH": "生成 MipMaps"},
     "core.mdf_generator_base.unresolved_channels": {
         "EN": "{n} PBR channel(s) had no usable source and fell back to a null texture. "

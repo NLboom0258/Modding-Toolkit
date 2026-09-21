@@ -2,7 +2,8 @@ import bpy
 
 from ...core.i18n import T
 from ...core.mdf_tex_processor_ui_base import MdfTexDialogBase
-from .mdf_tex_processor import DMC5_COMMON_SLOT_TYPES, DMC5_NULL_TEX_BY_TYPE
+from .mdf_tex_processor import (DMC5_COMMON_SLOT_TYPES, DMC5_NULL_TEX_BY_TYPE,
+                                DMC5_SRGB_SLOT_TYPES)
 
 
 class DMC5_OT_MdfTexProcessorDialog(MdfTexDialogBase):
@@ -22,6 +23,7 @@ class DMC5_OT_MdfTexProcessorDialog(MdfTexDialogBase):
     _path_hint         = "e.g. Character/pl0100/"
     _common_slot_types = DMC5_COMMON_SLOT_TYPES
     _null_tex_by_type  = DMC5_NULL_TEX_BY_TYPE
+    _srgb_slot_types   = DMC5_SRGB_SLOT_TYPES
 
 
 classes = [DMC5_OT_MdfTexProcessorDialog]
