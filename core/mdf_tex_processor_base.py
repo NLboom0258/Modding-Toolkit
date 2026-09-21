@@ -658,15 +658,18 @@ def _compose_channels(slot_type, pbr_paths, pbr_channels, temp_dir, tex_name, pb
                   f"{len(colour_channels)} colour channel(s) at strength {strength:.2f}")
 
     abbrev   = BASE_TEXTURE_TYPE_ABBREV.get(slot_type, slot_type)
-    # Staged as TGA rather than PNG: this file exists only to hand the buffer to
-    # texconv, and a zlib round trip is by far the most expensive thing that
-    # happened to it.  Same 8 bits per channel either way, so the compressor sees
-    # identical bytes -- see core/tga_file.py for why not DDS.
-    out_name = f"{tex_name}_{abbrev}_composed.tga"
+    # Staged as PNG, not TGA -- see core/png_file.py for the measurement.  Short
+    # version: a TGA whose alpha plane is uniformly zero comes back from texconv
+    # fully opaque, and a uniformly-zero alpha plane is exactly what a 0-neutral
+    # quantity looks like.  DMC5's BaseMetalMap.A is metallic, defaults to 0, and
+    # was arriving in the game as 1.0.
+    # DDS would skip texconv entirely, but write_slot_tex sends a .dds straight
+    # to dds_to_tex, so it would ship this uncompressed RGBA8 buffer.
+    out_name = f"{tex_name}_{abbrev}_composed.png"
     out_path = os.path.join(temp_dir, out_name)
 
-    from . import tga_file
-    tga_file.write_tga_rgba8(out_path, result)
+    from . import png_file
+    png_file.write_png_rgba8(out_path, result)
     return out_path
 
 

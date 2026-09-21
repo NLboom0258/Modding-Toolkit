@@ -80,19 +80,19 @@ def grade_source_file(src_img, temp_dir, dds_fmt, grade_mode):
     if grade_mode == 'NONE' or not color_grade.is_color_format(dds_fmt):
         return None
 
-    from . import texconv_native, tga_file
+    from . import texconv_native, png_file
     import numpy as np
 
     arr = texconv_native.convert_to_raw_rgba(src_img, temp_dir).astype(np.float32) / 255.0
     out = color_grade.grade(arr, grade_mode)
     # 新的 stem：避免和未处理的同名源在 temp_dir 里互相覆盖（texconv 按 stem 命名输出）
     stem = os.path.splitext(os.path.basename(src_img))[0] + '_' + grade_mode.lower()
-    path = os.path.join(temp_dir, stem + '.tga')
-    # convert_to_raw_rgba hands back row 0 = top; write_tga_rgba8 wants row 0 =
+    path = os.path.join(temp_dir, stem + '.png')
+    # convert_to_raw_rgba hands back row 0 = top; write_png_rgba8 wants row 0 =
     # bottom (Blender's convention -- see its docstring).  Without this flip every
     # graded texture ships upside down, and only the graded ones, which is exactly
     # the kind of bug that gets blamed on the grading maths.
-    tga_file.write_tga_rgba8(path, out[::-1])
+    png_file.write_png_rgba8(path, out[::-1])
     return path
 
 

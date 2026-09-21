@@ -21,7 +21,7 @@ from .color_grade import color_grade_items, DEFAULT_MODE_INDEX
 # the other way.  This module had kept the slow form on every one of its six
 # pixel transfers, and a single convert can chain three of them.
 from .mdf_tex_processor_base import image_to_array
-from .tga_file import write_tga_rgba8
+from .png_file import write_png_rgba8
 
 _CH = {'R': 0, 'G': 1, 'B': 2, 'A': 3}
 _CH_ITEMS = [('R', 'R', ''), ('G', 'G', ''), ('B', 'B', ''), ('A', 'A', '')]
@@ -400,8 +400,8 @@ def _compose_channels(channel_map, path_a, path_b, out_dir, name_hint, encode_oc
         a = result[:, :, _CH['A']]
         result[:, :, _CH['G']], result[:, :, _CH['A']] = encode_normal_ga(g, a)
 
-    out_path = os.path.join(out_dir, f"{name_hint}_composed.tga")
-    return write_tga_rgba8(out_path, result)
+    out_path = os.path.join(out_dir, f"{name_hint}_composed.png")
+    return write_png_rgba8(out_path, result)
 
 
 # ── Detail normal map overlay (SINGLE mode only) ────────────────────────────
@@ -466,8 +466,8 @@ def _blend_detail_normal(base_path, detail_path, tiling_x, tiling_y, out_dir, na
     result[:, :, 2] = z * 0.5 + 0.5
     result[:, :, 3] = base_arr[:, :, 3]
 
-    out_path = os.path.join(out_dir, f"{name_hint}.tga")
-    return write_tga_rgba8(out_path, result)
+    out_path = os.path.join(out_dir, f"{name_hint}.png")
+    return write_png_rgba8(out_path, result)
 
 
 # ── Color adjust (COLOR preset only) ────────────────────────────────────────
@@ -486,7 +486,7 @@ def _luminance(rgb):
 
 
 def _apply_color_grade_file(path, mode, out_dir, name_hint):
-    """Run core.color_grade over *path* and stage the result as a TGA.
+    """Run core.color_grade over *path* and stage the result as a PNG.
 
     Separate from _apply_color_adjustments on purpose: that one is a manual
     per-image tweak in Photoshop's units, this is the fixed three-way mode the
@@ -504,10 +504,10 @@ def _apply_color_grade_file(path, mode, out_dir, name_hint):
     img = bpy.data.images.load(path, check_existing=False)
     img.name = tmp_name
     img.colorspace_settings.name = 'Non-Color'
-    arr = image_to_array(img)          # Blender 行序，和 write_tga_rgba8 一致，不用翻
+    arr = image_to_array(img)          # Blender 行序，和 write_png_rgba8 一致，不用翻
     bpy.data.images.remove(img)
     out = color_grade.grade(arr, mode)
-    return write_tga_rgba8(os.path.join(out_dir, f"{name_hint}.tga"), out)
+    return write_png_rgba8(os.path.join(out_dir, f"{name_hint}.png"), out)
 
 
 def _apply_color_adjust(rgb, exposure, saturation, vibrance):
@@ -535,7 +535,7 @@ def _apply_color_adjust(rgb, exposure, saturation, vibrance):
 
 def _apply_color_adjustments(path, exposure, saturation, vibrance, out_dir, name_hint):
     """Load *path*, run _apply_color_adjust over its RGB (alpha untouched),
-    and save the result as a new staging TGA in out_dir. Mirrors the load/save
+    and save the result as a new staging PNG in out_dir. Mirrors the load/save
     pattern _blend_detail_normal uses above."""
     tmp_name = "__tex_convert_coloradj"
     if tmp_name in bpy.data.images:
@@ -548,8 +548,8 @@ def _apply_color_adjustments(path, exposure, saturation, vibrance, out_dir, name
 
     arr[:, :, :3] = _apply_color_adjust(arr[:, :, :3], exposure, saturation, vibrance)
 
-    out_path = os.path.join(out_dir, f"{name_hint}.tga")
-    return write_tga_rgba8(out_path, arr)
+    out_path = os.path.join(out_dir, f"{name_hint}.png")
+    return write_png_rgba8(out_path, arr)
 
 
 def _import_mhwtex_convert():

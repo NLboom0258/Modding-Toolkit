@@ -934,20 +934,22 @@ def guess_best_preset(material_name, preset_items):
 #
 # Setting colorspace_settings to 'Non-Color' does not help (still 55 before the
 # pixel assignment, 0 after it).  The only thing that round-trips exactly is
-# writing the file ourselves -- core/tga_file.py quantises with Blender's own
+# writing the file ourselves -- core/png_file.py quantises with Blender's own
 # float->byte rule and was verified byte-exact through texconv.
 #
 # So: never hand a generated buffer to Image.save().  Go through here.
 def _write_exact_rgba(arr, out_path_no_ext):
-    """Write an (h, w, 4) float array in 0..1 to a TGA, returning its path.
+    """Write an (h, w, 4) float array in 0..1 to a PNG, returning its path.
 
-    TGA rather than PNG because slot_resolver.write_slot_tex dispatches on the
-    extension and .tga takes the normal texconv route (unlike .dds, which would
-    take the passthrough branch and ship uncompressed).
+    PNG rather than TGA because a TGA whose alpha plane is uniformly zero is read
+    back by texconv as fully opaque -- see core/png_file.py -- and a solid colour
+    is precisely where that happens (a 0-neutral quantity is a constant 0).
+    And not DDS, because slot_resolver.write_slot_tex dispatches on the extension
+    and .dds takes the passthrough branch, shipping uncompressed.
     """
-    from .tga_file import write_tga_rgba8
-    out_path = out_path_no_ext + '.tga'
-    write_tga_rgba8(out_path, arr)
+    from .png_file import write_png_rgba8
+    out_path = out_path_no_ext + '.png'
+    write_png_rgba8(out_path, arr)
     return out_path
 
 

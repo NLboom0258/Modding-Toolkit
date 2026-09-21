@@ -244,9 +244,9 @@ def convert_to_dds(filepath, dxgi_format_name, out_dir, generate_mips=True,
 
 #: TGA header: id_length, colour_map_type, image_type(2=uncompressed true-colour),
 #: colour map spec (5B, unused), x/y origin, width, height, depth, descriptor.
-#: Mirrors core/tga_file.py's own _HEADER_STRUCT_FMT -- kept separate rather than
-#: imported since that module writes only, this reads only, and the two staying
-#: in sync is trivially checked by inspection (both are the documented TGA spec).
+#: The documented TGA spec, spelled out here because nothing else in the addon
+#: reads TGA any more -- texconv is asked for it as an *output* format precisely
+#: because it is the one an image library is not needed to decode.
 _TGA_HEADER = struct.Struct('<BBB5s2H2HBB')
 
 
@@ -280,10 +280,10 @@ def convert_to_raw_rgba(filepath, out_dir, verbose=False, allow_slow_codec=False
     just handed back as pixels instead of a file -- for callers that want to
     do further numpy processing (e.g. convert_to_dds_area_mips below) without
     depending on PIL, which Blender's bundled Python does not ship.  Routes
-    through TGA rather than PNG for exactly that reason: this addon already
-    carries a trivial TGA reader/writer (core/tga_file.py) for the same "no
-    image library available" constraint, whereas decoding PNG's DEFLATE stream
-    from scratch would mean reimplementing part of zlib's inflate.
+    through TGA rather than PNG for exactly that reason: TGA is the one format
+    this addon can read with a few lines of struct (see _read_tga_rgba8 below),
+    whereas decoding PNG's DEFLATE stream from scratch would mean reimplementing
+    part of zlib's inflate.
     """
     _ensure_com_initialized()
     dll = _load_dll()
@@ -376,7 +376,7 @@ def convert_to_dds_area_mips(filepath, dxgi_format_name, out_dir, size=None,
     if not (_is_pot(w) and _is_pot(h)):
         raise ValueError(f"convert_to_dds_area_mips needs power-of-two dimensions, got {w}x{h}")
 
-    from .tga_file import write_tga_rgba8
+    from .png_file import write_png_rgba8
 
     stem = os.path.splitext(os.path.basename(filepath))[0]
     level = rgba.astype(np.float32) / 255.0  # (h, w, 4) in 0..1, row 0 = top
@@ -385,21 +385,21 @@ def convert_to_dds_area_mips(filepath, dxgi_format_name, out_dir, size=None,
     out_fmt = None
 
     while True:
-        tmp_tga = os.path.join(out_dir, f"__area_mip_{stem}_{cw}x{ch}.tga")
-        # write_tga_rgba8 expects row 0 = bottom (Blender's own convention,
+        tmp_png = os.path.join(out_dir, f"__area_mip_{stem}_{cw}x{ch}.png")
+        # write_png_rgba8 expects row 0 = bottom (Blender's own convention,
         # see its docstring); our arrays are row 0 = top throughout, so flip
         # only at this final handoff.
-        write_tga_rgba8(tmp_tga, level[::-1])
+        write_png_rgba8(tmp_png, level[::-1])
         level_dds = None
         try:
-            level_dds = convert_to_dds(tmp_tga, dxgi_format_name, out_dir, generate_mips=False,
+            level_dds = convert_to_dds(tmp_png, dxgi_format_name, out_dir, generate_mips=False,
                                        verbose=verbose, allow_slow_codec=allow_slow_codec)
             d = dds_file.read_dds(level_dds)
             mips.append(d.mips[0])
             out_fmt = d.dxgi_format
         finally:
-            if os.path.isfile(tmp_tga):
-                os.remove(tmp_tga)
+            if os.path.isfile(tmp_png):
+                os.remove(tmp_png)
             if level_dds and os.path.isfile(level_dds):
                 os.remove(level_dds)
 
