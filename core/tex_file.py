@@ -37,9 +37,16 @@ LEGACY_TEX_MAX_VERSION = 27
 # matching REE-Content-Editor's own from-scratch DDS->tex conversion path.
 _HEADER_STRUCT = struct.Struct('<I i h h h B B i i I I B B H H H')
 
-# Legacy header (32 bytes): magic, version, width(UShort), height(UShort), unk(UShort),
-# mipCount(UByte), numImages(UByte), format(UInt), unk2/3/4(UInt).  No swizzle 8 bytes.
-_LEGACY_HEADER_STRUCT = struct.Struct('<IIHHHBBIIII')
+# Legacy header (32 bytes).  Same field order as the Modern one as far as `flags`;
+# the two layouts differ only in what follows it (Modern appends five swizzle /
+# trailer fields) and in the mipCount/imageCount byte order:
+#   magic(u32) version(u32) width(u16) height(u16) depth(u16)
+#   mipCount(u8) imageCount(u8) format(i32)
+#   swizzleControl(i32) cubemapMarker(u32) flags(u32)
+# These fields used to be named unk00/unk2/unk3/unk4 here, which is how a
+# from-scratch Legacy file came to be written with depth 0 and swizzleControl 0
+# while every vanilla DMC5 .tex carries 1 and -1 -- see _build_legacy_uncompressed.
+_LEGACY_HEADER_STRUCT = struct.Struct('<IIHHHBBIiII')
 
 # MipHeader (16 bytes): offset(int64), pitch(int32), size(int32).
 _MIP_HEADER_STRUCT = struct.Struct('<q i i')
@@ -100,11 +107,21 @@ def _build_legacy_uncompressed(dds, tex_version):
     """Build the Legacy (version<=27) .tex byte layout: 32-byte header + mip table + raw mip data.
     No 256-row padding and no GDeflate (Legacy stores mips raw, sized per the mip header),
     matching the Noesis RE Engine plugin's format for RE7/RE2/DMC5/RE3.
+
+    ``depth`` and ``swizzleControl`` are load-bearing, not decoration.  REE-Lib's
+    ``TexFile.LoadDataFromDDS`` writes 1 and -1 into every texture it builds, and
+    all 2814 vanilla DMC5 .tex measured (_analysis/tools/_scan_legacy_header.py)
+    carry swizzleControl = -1 with depth = 1 -- the 16 exceptions are volume
+    textures at depth 32/64/128.  Leaving both at 0 is what made an exported
+    texture load on DX11 and hard-crash DMC5 on DX12: a D3D12 resource's
+    ``DepthOrArraySize`` cannot be 0, while the D3D11 texture description has no
+    such field for a Texture2D, so only the DX12 path ever saw the bad value.
     """
     mip_count = len(dds.mips)
     header_bytes = _LEGACY_HEADER_STRUCT.pack(
-        TEX_MAGIC, tex_version, dds.width, dds.height, 0,   # unk00 = 0
-        mip_count, 1, dds.dxgi_format, 0, 0, 0,             # numImages=1, unk2/3/4=0
+        TEX_MAGIC, tex_version, dds.width, dds.height, 1,   # depth = 1 (no volume textures)
+        mip_count, 1, dds.dxgi_format,                      # mipCount, imageCount = 1
+        -1, 0, 0,                                           # swizzleControl=-1, cubemapMarker=0, flags=0
     )
     mip_table_size = mip_count * MIP_HEADER_SIZE
     body = bytearray()
@@ -205,8 +222,8 @@ def read_tex_size(filepath):
 def _read_legacy_tex_to_dds(data):
     """Parse a Legacy (version<=27) .tex into a dds_file.DDSFile."""
     from . import dds_file
-    (magic, version, width, height, _unk00, mip_count, _num_images,
-     dxgi_fmt, _u2, _u3, _u4) = _LEGACY_HEADER_STRUCT.unpack_from(data, 0)
+    (magic, version, width, height, _depth, mip_count, _image_count,
+     dxgi_fmt, _swizzle_control, _cubemap_marker, _flags) = _LEGACY_HEADER_STRUCT.unpack_from(data, 0)
     if magic != TEX_MAGIC:
         raise ValueError("Not a .tex file")
     header_size = _LEGACY_HEADER_STRUCT.size
