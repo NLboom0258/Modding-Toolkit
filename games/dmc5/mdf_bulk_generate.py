@@ -22,7 +22,7 @@ import os
 import bpy
 
 from ...core.i18n import T
-from ...core.mesh_utils import material_name_of
+from ...core.mesh_utils import blender_natural_key, material_name_of
 
 
 def _mesh_collections():
@@ -64,17 +64,25 @@ def mesh_collection_items(self, context):
 
 
 def collect_material_names(mesh_collection):
-    """Unique material names used by *mesh_collection*'s meshes, in object-name order.
+    """Unique material names used by *mesh_collection*'s meshes, in Outliner order.
 
     Same precedence the exporter applies (``__`` suffix first, then the object's
     first Blender material), and de-duplicated: two submeshes sharing one
     material name share one MDF material, exactly as they share one
     ``materialIndex`` in the exported mesh.
+
+    The order is cosmetic -- the game pairs a submesh with its material by
+    *name*, never by position: the mesh writes its own material-name table
+    (RE-Mesh-Editor ``file_re_mesh.py``) and every MDF material carries the MMH3
+    hash of its name (``file_re_mdf.py``), so a submesh finds its material
+    wherever it sits in the list.  It is still built in Blender's Outliner order
+    (``blender_natural_key``, so ``Sub_2`` comes before ``Sub_10``) so that the
+    material list reads in the same order as the meshes it was built from.
     """
     names = []
     seen = set()
     meshes = sorted((obj for obj in mesh_collection.all_objects if obj.type == 'MESH'),
-                    key=lambda obj: obj.name)
+                    key=lambda obj: blender_natural_key(obj.name))
     for obj in meshes:
         name = material_name_of(obj)
         if name not in seen:
