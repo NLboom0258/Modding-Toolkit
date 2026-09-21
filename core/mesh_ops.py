@@ -1144,9 +1144,11 @@ Groups whose suffixed name matches a real bone in the bound armature are skipped
 #
 # So renaming only normalizes the *name*, under two rules:
 #
-# * objects are sorted by their **current name** -- the order the Outliner shows
-#   with "Sort Alphabetically" enabled.  That is stable; the collection's internal
-#   object order is not, since it changes whenever an object is added or removed.
+# * objects are sorted by their **current name**, in the Outliner's own order --
+#   ``mesh_utils.blender_natural_cmp``, a port of ``BLI_strcasecmp_natural``.
+#   The ``Sub`` numbers have to line up with the tree the user is looking at;
+#   the collection's internal object order changes whenever an object is added, so
+#   it is not an option even if it were stable.
 # * ``Sub`` is numbered from 0 within each ``Group_<N>`` (objects with no
 #   ``Group_`` in their name count as group 0).
 #
@@ -1158,7 +1160,7 @@ Groups whose suffixed name matches a real bone in the bound armature are skipped
 # vertex-group or material name makes the exported mesh impossible to re-import.
 
 class MHW_OT_RenameMeshREFormat(bpy.types.Operator):
-    """Rename selected meshes to Group_<N>_Sub_<M>__<material>: sorted by object name, numbered from Sub_0 within each Group_<N>, matching the names RE Mesh Editor writes on import. All selected meshes must be in one mesh collection, and object/bone/material names must stay ASCII."""
+    """Rename selected meshes to Group_<N>_Sub_<M>__<material>: sorted in the Outliner's alphabetical order, numbered from Sub_0 within each Group_<N>, matching the names RE Mesh Editor writes on import. All selected meshes must be in one mesh collection, and object/bone/material names must stay ASCII."""
 
     bl_idname = "mhw.rename_mesh_re_format"
     bl_label = "Rename Meshes (RE Format)"

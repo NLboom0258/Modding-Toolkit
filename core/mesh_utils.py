@@ -18,6 +18,7 @@ reads.
 """
 
 import re
+from functools import cmp_to_key
 
 import numpy as np
 
@@ -354,9 +355,13 @@ def create_outline_shell(context, objects, vertex_group_name="", thickness=0.001
 #
 # So renaming only normalizes the *name*, under two rules:
 #
-# * objects are sorted by their **current name** -- the order the Outliner shows
-#   with "Sort Alphabetically" enabled.  That is stable; the collection's internal
-#   object order is not, since it changes whenever an object is added or removed.
+# * objects are sorted by their **current name**, in Blender's own Outliner
+#   order -- literally ``BLI_strcasecmp_natural``, ported below as
+#   ``blender_natural_cmp``.  Matching that function is the whole point: the
+#   numbering has to line up with the tree the user is looking at, otherwise a
+#   second click would renumber everything.  (The collection's internal object
+#   order is not an option anyway -- it changes whenever an object is added or
+#   removed.)
 # * ``Sub`` is numbered from 0 within each ``Group_<N>`` (objects with no
 #   ``Group_`` in their name count as group 0).
 #
@@ -370,6 +375,122 @@ def create_outline_shell(context, objects, vertex_group_name="", thickness=0.001
 
 _GROUP_RE = re.compile(r"Group_(\d+)")
 _NO_MATERIAL = "NO_MATERIAL"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Blender's "Sort Alphabetically" order
+#
+# The Outliner sorts with ``BLI_strcasecmp_natural()`` (blenlib ``string.cc``,
+# used by ``treesort_alpha()`` in ``editors/space_outliner/outliner_tree.cc``),
+# so anything sorted any other way silently disagrees with the tree the user is
+# looking at.  Ported literally, including the parts that only show up on odd
+# names:
+#
+# * characters compare case-insensitively (``tolower``);
+# * with a digit on both sides, the runs compare *as numbers* -- leading zeros
+#   are skipped, the longer run wins, equal-length runs compare digit by digit,
+#   and a still-equal pair is decided by how many leading zeros each had (fewer
+#   wins), a verdict recorded once and kept for the rest of the comparison;
+# * ``.`` sorts before everything else, so ``foo.bar`` comes before ``foo 1.bar``;
+# * when one string ends, the shorter one sorts first;
+# * anything still equal falls back to a case-*sensitive* ``strcmp`` -- which
+#   also makes this a total order, so the result cannot depend on input order.
+#
+# Exact for the ASCII names this addon requires: C's ``tolower``/``isdigit`` are
+# byte-wise there, Python's are Unicode-aware.
+
+_DIGITS = "0123456789"
+
+
+def _is_digit(ch):
+    return ch in _DIGITS
+
+
+def _left_number_cmp(a, b, tiebreaker):
+    """Port of Blender's ``left_number_strcmp()``: compare the digit runs at the
+    head of *a* and *b* after skipping leading zeros.  0 means "numerically
+    equal, keep comparing"; *tiebreaker* is the C function's out-parameter."""
+    zeros_a = 0
+    while zeros_a < len(a) and a[zeros_a] == '0':
+        zeros_a += 1
+    zeros_b = 0
+    while zeros_b < len(b) and b[zeros_b] == '0':
+        zeros_b += 1
+    a, b = a[zeros_a:], b[zeros_b:]
+
+    digits = 0
+    while True:
+        digit_a = digits < len(a) and _is_digit(a[digits])
+        digit_b = digits < len(b) and _is_digit(b[digits])
+        if digit_a and digit_b:
+            digits += 1
+            continue
+        if digit_a:
+            return 1  # a has more digits, so its number is bigger
+        if digit_b:
+            return -1
+        break
+
+    if digits and a[:digits] != b[:digits]:  # same length, compare the digits
+        return 1 if a[:digits] > b[:digits] else -1
+
+    if tiebreaker[0] == 0:
+        if zeros_a > zeros_b:
+            tiebreaker[0] = 1
+        elif zeros_a < zeros_b:
+            tiebreaker[0] = -1
+    return 0
+
+
+def blender_natural_cmp(s1, s2):
+    """Port of Blender's ``BLI_strcasecmp_natural()`` -- the comparison behind
+    the Outliner's "Sort Alphabetically".  Negative / zero / positive.
+
+    ``10`` sorts after ``9`` (numbers compare as numbers), ``Eye`` before
+    ``eye`` (only a pure case difference reaches the final ``strcmp``).
+    """
+    d1 = d2 = 0
+    tiebreaker = [0]
+
+    while True:
+        if (_is_digit(s1[d1] if d1 < len(s1) else '')
+                and _is_digit(s2[d2] if d2 < len(s2) else '')):
+            number_cmp = _left_number_cmp(s1[d1:], s2[d2:], tiebreaker)
+            if number_cmp:
+                return number_cmp
+            # Step over the digit runs the number comparison just consumed.
+            d1 += 1
+            while d1 < len(s1) and _is_digit(s1[d1]):
+                d1 += 1
+            d2 += 1
+            while d2 < len(s2) and _is_digit(s2[d2]):
+                d2 += 1
+
+        if d1 >= len(s1) or d2 >= len(s2):  # shorter string first
+            break
+
+        c1, c2 = s1[d1].lower(), s2[d2].lower()
+        if c1 == c2:
+            pass
+        elif c1 == '.':  # "foo.bar" before "foo 1.bar"
+            return -1
+        elif c2 == '.':
+            return 1
+        elif c1 < c2:
+            return -1
+        elif c1 > c2:
+            return 1
+        d1 += 1
+        d2 += 1
+
+    if tiebreaker[0]:
+        return tiebreaker[0]
+    return (s1 > s2) - (s1 < s2)
+
+
+#: ``sorted(names, key=blender_natural_key)``, or ``blender_natural_key(o.name)``
+#: for objects -- the Blender Outliner's order.
+blender_natural_key = cmp_to_key(blender_natural_cmp)
 
 
 def parse_group_id(name):
@@ -402,7 +523,7 @@ def build_rename_plan(objects):
     """Return ``[(obj, new_name)]`` for *objects*, sorted by name, numbered per group."""
     counters = {}
     plan = []
-    for obj in sorted(objects, key=lambda o: o.name):
+    for obj in sorted(objects, key=lambda o: blender_natural_key(o.name)):
         group_id = parse_group_id(obj.name)
         sub = counters.get(group_id, 0)
         counters[group_id] = sub + 1
