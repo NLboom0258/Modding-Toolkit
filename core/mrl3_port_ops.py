@@ -102,6 +102,7 @@ _MRL3_VALUE_ATTR = {
 }
 _MDF_VALUE_ATTR = {
     "FLOAT": "float_value", "BOOL": "bool_value", "COLOR": "color_value",
+    "VEC2": "float_vector2_value", "VEC3": "float_vector3_value",
     "VEC4": "float_vector_value", "FLOAT4": "float_vector_value",
 }
 

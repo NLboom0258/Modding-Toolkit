@@ -77,6 +77,8 @@ _TEX_TYPE_FALLBACK = {
 # ── Param value migration ───────────────────────────────────────────────────
 
 _PROP_VALUE_FIELDS = {
+    'VEC2':  'float_vector2_value',
+    'VEC3':  'float_vector3_value',
     'VEC4':  'float_vector_value',
     'COLOR': 'color_value',
     'BOOL':  'bool_value',
