@@ -1,4 +1,4 @@
-from . import shader_defs, mdf_tex_processor, mdf_tex_processor_ui, batch_export, batch_export_ui, mdf_bulk_generate
+from . import mdf_tex_processor, mdf_tex_processor_ui, batch_export, batch_export_ui, mdf_bulk_generate
 
 
 def register():
