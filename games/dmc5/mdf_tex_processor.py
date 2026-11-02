@@ -12,7 +12,9 @@ from ...core.mdf_tex_processor_base import (
     MdfTexClearPBRBase, MdfTexClearDirectBase,
     MdfTexCopyMaterialBase, MdfTexPasteMaterialBase,
     MdfTexProcessBase,
+    octahedral_normals_prop,
 )
+from ...core.color_grade import color_grade_items, DEFAULT_MODE_INDEX
 
 # ── DMC5 Constants (built from a real 3Dmigoto dump + real mdf2 materials) ──────
 
@@ -87,6 +89,11 @@ _on_dmc5_collection_update = make_collection_update_cb(_is_null_dmc5)
 # ── Settings PropertyGroup ─────────────────────────────────────────────────────
 
 class DMC5MdfTexProcessorSettings(bpy.types.PropertyGroup):
+    # The three global fields every other game's settings class carries.  The
+    # shared dialog (core/mdf_tex_processor_ui_base.py) draws all three, and two
+    # of them without an hasattr guard, so a settings class missing any of them
+    # breaks the dialog's draw rather than silently hiding a control.
+    octahedral_normals: octahedral_normals_prop()
     mdf_collection: bpy.props.PointerProperty(
         name="MDF Collection",
         type=bpy.types.Collection,
@@ -103,6 +110,18 @@ class DMC5MdfTexProcessorSettings(bpy.types.PropertyGroup):
     materials_index:       bpy.props.IntProperty()
     clipboard_json:        bpy.props.StringProperty(default="")
     mdf_loaded_collection: bpy.props.StringProperty(default="")
+    # 与生成器同名同义的全局档，见 core/color_grade.py。默认 NONE。
+    global_color_grade: bpy.props.EnumProperty(
+        name="Colour Grade (Global)",
+        description="Tone adjustment applied to every colour (sRGB) texture before encoding",
+        items=lambda self, ctx: color_grade_items(),
+        default=DEFAULT_MODE_INDEX,
+    )
+    global_disable_mipmaps: bpy.props.BoolProperty(
+        name="Disable MipMaps (Global)",
+        description="Override every material's own Generate MipMaps checkbox and skip mipmap generation entirely",
+        default=False,
+    )
 
 
 # ── Operators ──────────────────────────────────────────────────────────────────
