@@ -389,7 +389,7 @@ SECTIONS = {
 #: character games (scheme-driven batch export).  The picker draws them in this
 #: order, so it is also the order the games are offered in.
 GAME_ROWS = (("MHWI", "MHWS", "MHRS"),
-             ("RE4", "RE9", "ONI"))
+             ("RE4", "RE9", "DMC5", "ONI"))
 
 #: Shown before the user has ever picked one.
 DEFAULT_GAME = "MHWS"
@@ -402,6 +402,7 @@ _GAME_NAME_KEYS = {
     "RE4":  "ui.game_sections.game_re4",
     "RE9":  "ui.game_sections.game_re9",
     "ONI":  "ui.game_sections.game_oni",
+    "DMC5": "ui.game_sections.game_dmc5",
 }
 
 #: Persistent backing for the items callback below: Blender's C side keeps the

@@ -331,6 +331,7 @@ STRINGS = {
     "ui.game_sections.game_re4":  {"EN": "Resident Evil 4",             "ZH": "生化危机 4 重制版"},
     "ui.game_sections.game_re9":  {"EN": "Resident Evil Requiem",       "ZH": "生化危机：安魂曲"},
     "ui.game_sections.game_oni":  {"EN": "Onimusha: Way of the Sword",  "ZH": "鬼武者：剑之道"},
+    "ui.game_sections.game_dmc5": {"EN": "Devil May Cry 5",             "ZH": "鬼泣 5"},
     "ui.game_sections.btn_configure_shape_keys":  {"EN": "Configure Selected Meshes' Shape Keys", "ZH": "配置选中网格形态键"},
     "ui.main_panel.btn_mdf_tex_processor":        {"EN": "MDF2 Processor", "ZH": "MDF2 处理器"},
     "ui.main_panel.btn_mdf_generator":            {"EN": "MDF2 Generator", "ZH": "MDF2 生成器"},
