@@ -3,7 +3,8 @@ import bpy
 from ...core.i18n import T
 from ...core.mdf_tex_processor_ui_base import MdfTexDialogBase
 from .mdf_tex_processor import (DMC5_COMMON_SLOT_TYPES, DMC5_NULL_TEX_BY_TYPE,
-                                DMC5_SRGB_SLOT_TYPES)
+                                DMC5_SLOT_CHANNEL_MAPS, DMC5_SRGB_SLOT_TYPES,
+                                DMC5_TEXTURE_TYPE_ABBREV)
 
 
 class DMC5_OT_MdfTexProcessorDialog(MdfTexDialogBase):
@@ -23,6 +24,13 @@ class DMC5_OT_MdfTexProcessorDialog(MdfTexDialogBase):
     _path_hint         = "e.g. Character/pl0100/"
     _common_slot_types = DMC5_COMMON_SLOT_TYPES
     _null_tex_by_type  = DMC5_NULL_TEX_BY_TYPE
+    # The dialog resolves which PBR inputs a slot reads straight from this map
+    # (core/mdf_tex_processor_ui_base.py: recipe_inputs(s.texture_type, ...)).
+    # Without it the base set applies, which has no BaseMetalMap / ATOS-E /
+    # TimeLock entries -- those slots then report "cannot be composed" and every
+    # PBR input shows up as unread.  Same table the processor itself uses.
+    _channel_maps      = DMC5_SLOT_CHANNEL_MAPS
+    _abbrev_map        = DMC5_TEXTURE_TYPE_ABBREV
     _srgb_slot_types   = DMC5_SRGB_SLOT_TYPES
 
 
