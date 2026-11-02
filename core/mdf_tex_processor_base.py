@@ -6,7 +6,8 @@ import shutil
 import time
 
 from .i18n import T
-from .slot_resolver import FORMAT_AUTO, resolve_slot_dds_format, write_slot_tex
+from .slot_resolver import (FORMAT_AUTO, resolve_dds_format,
+                            resolve_slot_dds_format, write_slot_tex)
 from .re_normal_pack import encode_normal_ga
 from .mdf_tex_slot_status import resolve_slot, migrate_saved_mode, recipe_inputs
 from .gen_pipeline import SlotWriter
@@ -995,7 +996,7 @@ def get_mdf_tex_slot_mode_items(self, context):
         ('SKIP',    T("core.mdf_tex_processor_base.mode_skip"),
                     T("core.mdf_tex_processor_base.mode_skip_desc"),    'RADIOBUT_OFF',     3),
     ]
-    return cache
+    return _mdf_tex_slot_mode_items_cache
 
 
 _mdf_tex_slot_format_items_cache = []

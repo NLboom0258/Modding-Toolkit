@@ -1342,7 +1342,7 @@ class MHW_OT_ClearEmptyVGroups(bpy.types.Operator):
 
         plan = rename_mesh_objects(meshes)
         self.report({'INFO'}, T("ui.main_panel.mesh_rename_done").format(count=len(plan)))
-        return poll_msg.selected_mesh(cls, context)
+        return {'FINISHED'}
 
     @classmethod
     def description(cls, context, properties):

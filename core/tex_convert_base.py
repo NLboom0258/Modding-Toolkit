@@ -550,10 +550,10 @@ def _apply_color_grade_file(path, mode, out_dir, name_hint):
     img = bpy.data.images.load(path, check_existing=False)
     img.name = tmp_name
     img.colorspace_settings.name = 'Non-Color'
-    arr = image_to_array(img)          # Blender 行序，和 write_png_rgba8 一致，不用翻
+    arr = image_to_array(img)          # Blender 行序，和 write_tga_rgba8 一致，不用翻
     bpy.data.images.remove(img)
     out = color_grade.grade(arr, mode)
-    return write_png_rgba8(os.path.join(out_dir, f"{name_hint}.png"), out)
+    return write_tga_rgba8(os.path.join(out_dir, f"{name_hint}.tga"), out)
 
 
 def _apply_color_adjust(rgb, exposure, saturation, vibrance):
@@ -581,7 +581,7 @@ def _apply_color_adjust(rgb, exposure, saturation, vibrance):
 
 def _apply_color_adjustments(path, exposure, saturation, vibrance, out_dir, name_hint):
     """Load *path*, run _apply_color_adjust over its RGB (alpha untouched),
-    and save the result as a new staging PNG in out_dir. Mirrors the load/save
+    and save the result as a new staging TGA in out_dir. Mirrors the load/save
     pattern _blend_detail_normal uses above."""
     tmp_name = "__tex_convert_coloradj"
     if tmp_name in bpy.data.images:
@@ -594,8 +594,8 @@ def _apply_color_adjustments(path, exposure, saturation, vibrance, out_dir, name
 
     arr[:, :, :3] = _apply_color_adjust(arr[:, :, :3], exposure, saturation, vibrance)
 
-    out_path = os.path.join(out_dir, f"{name_hint}.png")
-    return write_png_rgba8(out_path, arr)
+    out_path = os.path.join(out_dir, f"{name_hint}.tga")
+    return write_tga_rgba8(out_path, arr)
 
 
 # ── Preview (the 贴图处理 window) ──────────────────────────────────────────────
