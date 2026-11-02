@@ -1,6 +1,5 @@
 import bpy
 import contextlib
-import json
 import os
 import shutil
 
@@ -8,8 +7,13 @@ from ...core.i18n import T
 from ...core.re_mesh_compat import call_re_mesh_op, re_mesh_op_available
 from ...core.bone_utils import align_armatures_by_name
 from ...core import console_export
-from ...core import export_prep
+from ...core import export_autofix
+from ...core import mod_root
 from ...core import lua_bone_system
+from ...core.export_verify import checked
+from ...core import json_cache
+from ...core import shapekey_export
+from ...core import optional_editors
 
 # MHRS 游戏级文件后缀常量
 MHRS_EXTS = {
@@ -17,6 +21,7 @@ MHRS_EXTS = {
     "mdf2":  "mdf2.23",
     "chain": "chain.48",
     "user":  "user.2",
+    "jcns":  "jcns.21",
 }
 
 # 5个固定部位（part id 直接用于文件名，如 f_body279）
@@ -78,15 +83,18 @@ MESH_SETTINGS = {
 
 def _do_export_mesh(filepath, collection_name):
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
-    call_re_mesh_op('exportfile', filepath=filepath, targetCollection=collection_name, **MESH_SETTINGS)
+    # Shape-key mode and key filter of the batch export running, if any.
+    with shapekey_export.filtered(collection_name):
+        checked(filepath, lambda: call_re_mesh_op('exportfile', filepath=filepath, targetCollection=collection_name,
+                                                  **MESH_SETTINGS, **shapekey_export.export_kwargs()))
 
 def _do_export_mdf2(filepath, collection_name):
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
-    bpy.ops.re_mdf.exportfile(filepath=filepath, targetCollection=collection_name)
+    checked(filepath, lambda: bpy.ops.re_mdf.exportfile(filepath=filepath, targetCollection=collection_name))
 
 def _do_export_chain(filepath, collection_name):
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
-    bpy.ops.re_chain.exportfile(filepath=filepath, targetCollection=collection_name)
+    checked(filepath, lambda: bpy.ops.re_chain.exportfile(filepath=filepath, targetCollection=collection_name))
 
 
 _EXPORT_FUNCS = {
@@ -121,11 +129,7 @@ def get_mhrs_schemes_callback(self, context):
 def _load_scheme(filename):
     if not filename or filename == 'NONE':
         return None
-    filepath = os.path.join(_get_mhrs_schemes_dir(), filename)
-    if not os.path.exists(filepath):
-        return None
-    with open(filepath, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    return json_cache.load(os.path.join(_get_mhrs_schemes_dir(), filename))
 
 
 _armor_cache = []
@@ -160,6 +164,19 @@ def set_binding(scene, armor_id, gender, part, filetype, value):
     scene[_make_key(armor_id, gender, part, filetype)] = value
 
 
+def bound_pairs(scene, armor_id, gender):
+    """``[(part_id, mdf_col, mesh_col)]`` for every part with a mesh or mdf2
+    bound -- what auto-fix runs over.  Either collection may be None: a part
+    with only a mesh still gets its weights cleaned."""
+    out = []
+    for part_id, _name in MHRS_PARTS:
+        mdf = bpy.data.collections.get(get_binding(scene, armor_id, gender, part_id, "mdf2") or "")
+        mesh = bpy.data.collections.get(get_binding(scene, armor_id, gender, part_id, "mesh") or "")
+        if mdf is not None or mesh is not None:
+            out.append((part_id, mdf, mesh))
+    return out
+
+
 def _get_blank_path(filetype):
     """Return the path to the built-in blank file for the given filetype."""
     addon_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -183,9 +200,37 @@ def _resolve_part_file_types(armor_set, part_id):
     return fts
 
 
-def _make_filepath(natives_root, gender, code, part_id, filetype):
+def ignore_slot_limits(scene):
+    """The batch exporter's "Ignore Slot Limits" toggle: every part gets a .chain and
+    a .jcns under its own name, for a mod whose .pfb was edited to load them."""
+    settings = getattr(scene, "mhw_suite_settings", None)
+    return bool(getattr(settings, "mhrs_ignore_slot_limits", False))
+
+
+def jcns_slots(armor_set, gender, part_id, unlocked=False):
+    """The part's vanilla .jcns slots for this gender (the pack's "jcns", read off the
+    game's pak list), while REE JCNS Editor is installed; [] otherwise.  *unlocked*
+    adds a plain "jcns" (the mesh's own name) where the vanilla part has none."""
+    if not optional_editors.available("jcns"):
+        return []
+    slots = [optional_editors.jcns_slot(s)
+             for s in (armor_set or {}).get("jcns", {}).get(gender, {}).get(part_id, [])]
+    if unlocked and "jcns" not in slots:
+        slots.append("jcns")
+    return slots
+
+
+def part_file_types(armor_set, part_id, unlocked=False):
+    """The part's file types: the pack's table, plus a .chain when unlocked."""
+    fts = list(_resolve_part_file_types(armor_set or {}, part_id))
+    if unlocked and "chain" not in fts:
+        fts.append("chain")
+    return _canonical_order_file_types(fts)
+
+
+def _make_filepath(natives_root, gender, code, part_id, filetype, suffix=""):
     ext = MHRS_EXTS[filetype]
-    filename = f"{gender}_{part_id}{code}.{ext}"
+    filename = f"{gender}_{part_id}{code}{suffix}.{ext}"
     return os.path.join(natives_root, "natives", "STM", "player", "mod", gender, f"pl{code}", filename)
 
 
@@ -348,67 +393,9 @@ class MHRS_OT_BatchExport(bpy.types.Operator):
     def description(cls, context, properties):
         return T("mhrs.batch_export.batch_export_desc")
 
-    def _bound_mesh_collections(self, scene, armor_id, gender):
-        """Every distinct mesh collection bound to the selected armor set."""
-        seen = set()
-        mesh_collections = []
-        for part_id, _name in MHRS_PARTS:
-            col_name = get_binding(scene, armor_id, gender, part_id, "mesh")
-            if col_name and col_name not in seen:
-                col = bpy.data.collections.get(col_name)
-                if col:
-                    mesh_collections.append(col)
-                    seen.add(col_name)
-        return mesh_collections
-
-    def _cleanup_mesh_collections(self, context, scene, settings, armor_id, gender):
-        """Run RE Mesh cleanup operators on all bound mesh collections before export."""
-        if not re_mesh_op_available('delete_loose'):
-            self.report({'WARNING'}, T("mhrs.batch_export.remesh_not_installed"))
-            return
-
-        mesh_collections = self._bound_mesh_collections(scene, armor_id, gender)
-        if not mesh_collections:
-            return
-
-        if context.view_layer.objects.active is not None and context.mode != 'OBJECT':
-            bpy.ops.object.mode_set(mode='OBJECT')
-        bpy.ops.object.select_all(action='DESELECT')
-        for col in mesh_collections:
-            for obj in [o for o in col.objects if o.type == 'MESH']:
-                context.view_layer.objects.active = obj
-                obj.select_set(True)
-                try: call_re_mesh_op('delete_loose')
-                except Exception: pass
-                try: call_re_mesh_op('solve_repeated_uvs')
-                except Exception: pass
-                try: call_re_mesh_op('remove_zero_weight_vertex_groups')
-                except Exception: pass
-                try:
-                    call_re_mesh_op('limit_total_normalize', maxWeights='12')
-                except Exception:
-                    try:
-                        bpy.ops.object.vertex_group_limit_total(limit=12)
-                        bpy.ops.object.vertex_group_normalize_all(lock_active=False)
-                    except Exception:
-                        pass
-                obj.select_set(False)
-
     def execute(self, context):
         show_console = console_export.get_preferences(context).show_console_on_batch_export
         with console_export.kept_open_for_export(show_console):
-            return self._execute_with_triangulation(context)
-
-    def _execute_with_triangulation(self, context):
-        # Triangulation rides on the modifier stack: RE Mesh Editor exports
-        # evaluated geometry, so the mesh data is never touched and the
-        # modifiers come off again even if the export raises.
-        settings = context.scene.mhw_suite_settings
-        if not settings.mhrs_triangulate_face:
-            return self._run_export(context)
-        with export_prep.triangulated_for_export(context.scene.objects, 'mhrs') as touched:
-            if touched:
-                print("[MHRS] triangulating {n} face mesh(es) for export".format(n=len(touched)))
             return self._run_export(context)
 
     def _run_export(self, context):
@@ -419,7 +406,7 @@ class MHRS_OT_BatchExport(bpy.types.Operator):
             self.report({'ERROR'}, "RE Mesh Editor not installed")
             return {'CANCELLED'}
 
-        natives_root = scene.get("mhrs_natives_root", "")
+        natives_root = mod_root.read(scene, "mhrs_natives_root")
         if not natives_root or not os.path.isdir(natives_root):
             self.report({'ERROR'}, T("core.export_prep.set_mod_root_first"))
             return {'CANCELLED'}
@@ -442,24 +429,51 @@ class MHRS_OT_BatchExport(bpy.types.Operator):
         gender = settings.mhrs_gender
         parts_mask = armor_set.get("parts_mask", 0b11111)
 
-        if settings.mhrs_cleanup_before_export:
-            self._cleanup_mesh_collections(context, scene, settings, armor_id, gender)
+        # Auto-fix only after every check above has passed: an export that
+        # cancels must not leave its fixes behind. Persistent fixes first (one
+        # undo step), then the temporary ones wrap the export itself and come
+        # off again even if it raises.
+        pairs = bound_pairs(scene, armor_id, gender)
+        ids = export_autofix.enabled_items(context, 'MHRS')
+        done = export_autofix.apply(context, 'MHRS', pairs, ids)
+        meshes = [mesh for _p, _mdf, mesh in pairs if mesh is not None]
+        with export_autofix.temporary(context, 'MHRS', pairs, ids) as tmp, \
+                shapekey_export.session(context, 'MHRS', meshes, natives_root) as sk:
+            result = self._export(context, scene, settings, natives_root, armor_id, armor_set,
+                                  gender, parts_mask)
+            # SKS names the model <sex>_<number> and binds it through the body
+            # part (f_body279 -> f_279); see the Rise adapter's model_of.
+            body = f"{gender}_body{armor_id}"
+            paths, msg = shapekey_export.write_presets(
+                sk, natives_root, f"{gender}_{armor_id}", body, body)
+            if msg:
+                self.report({'INFO'}, T(msg).format(n=len(paths)))
+        fixed = {k: v for k, v in list(done.items()) + list(tmp.items()) if v}
+        if fixed:
+            print("[MHRS] auto-fix: " + ", ".join(f"{k}={v}" for k, v in fixed.items()))
+            self.report({'INFO'}, T("core.pre_export_check_ops.autofix_done").format(
+                n=sum(fixed.values())))
+        return result
 
+    def _export(self, context, scene, settings, natives_root, armor_id, armor_set,
+                gender, parts_mask):
         export_count = 0
         fail_count = 0
         skip_count = 0
         use_blank = settings.mhrs_use_blank_export
+        unlocked = ignore_slot_limits(scene)
 
         for idx, (part_id, part_name) in enumerate(MHRS_PARTS):
             if not (parts_mask & (1 << idx)):
                 continue
-            part_fts = _canonical_order_file_types(
-                _resolve_part_file_types(armor_set, part_id))
-            for filetype in part_fts:
+            own_fts = _resolve_part_file_types(armor_set, part_id)
+            for filetype in part_file_types(armor_set, part_id, unlocked):
                 filepath = _make_filepath(natives_root, gender, armor_id, part_id, filetype)
                 label = f"{part_name} {filetype.upper()}"
 
                 col = get_binding(scene, armor_id, gender, part_id, filetype)
+                if not col and filetype not in own_fts:
+                    continue        # a slot only the unlock opened: nothing to blank
                 if not col:
                     if use_blank and filetype not in NO_BLANK_FILE_TYPES:
                         blank_src = _get_blank_path(filetype)
@@ -481,6 +495,27 @@ class MHRS_OT_BatchExport(bpy.types.Operator):
                 try:
                     print(f"[MHRS] {label}: {col} -> {os.path.basename(filepath)}")
                     _EXPORT_FUNCS[filetype](filepath, col)
+                    export_count += 1
+                except Exception as err:
+                    print(f"[MHRS] FAILED {label}: {err}")
+                    fail_count += 1
+
+            # A jcns writes over the vanilla file of its slot; an unbound one is
+            # left alone and not counted.
+            for slot in jcns_slots(armor_set, gender, part_id, unlocked):
+                col = get_binding(scene, armor_id, gender, part_id, slot)
+                if not col:
+                    continue
+                label = f"{part_name} {optional_editors.slot_label(slot)}"
+                if col not in bpy.data.collections:
+                    print(f"[MHRS] SKIP {label}: collection '{col}' not found")
+                    skip_count += 1
+                    continue
+                filepath = _make_filepath(natives_root, gender, armor_id, part_id, "jcns",
+                                          optional_editors.slot_suffix(slot))
+                try:
+                    print(f"[MHRS] {label}: {col} -> {os.path.basename(filepath)}")
+                    optional_editors.do_export_jcns(filepath, col)
                     export_count += 1
                 except Exception as err:
                     print(f"[MHRS] FAILED {label}: {err}")
@@ -531,11 +566,16 @@ class MHRS_OT_SetNativesRoot(bpy.types.Operator):
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
     def execute(self, context):
-        path = self.directory.rstrip("/\\")
-        if os.path.basename(path).lower() == "natives":
-            path = os.path.dirname(path)
+        # A root picked one level too deep (…/natives, …/natives/STM) or one
+        # too shallow (the folder holding the mod) is corrected here; see
+        # core/mod_root.py for the rules.
+        mod_root.clear_cache()
+        path, status = mod_root.normalize(self.directory.rstrip("/\\"))
         context.scene["mhrs_natives_root"] = path
-        self.report({'INFO'}, f"MHRS Mod root: {path}")
+        if status == mod_root.AMBIGUOUS:
+            self.report({'WARNING'}, T("core.mod_root.ambiguous"))
+        else:
+            self.report({'INFO'}, f"MHRS Mod root: {path}")
         return {'FINISHED'}
 
 

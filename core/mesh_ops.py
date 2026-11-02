@@ -16,8 +16,11 @@ import ...` before the move; the depth changed, the target module did not.
 
 import bpy
 import re
+import unicodedata
 
 from .i18n import T, get_lang
+from . import poll_msg
+from . import mesh_utils
 from . import weight_utils
 from .mesh_utils import mesh_collection_of, rename_mesh_objects
 
@@ -107,10 +110,7 @@ class MHW_OT_ShapeKeyToWeights(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        obj = context.active_object
-        return (obj and obj.type == 'MESH'
-                and obj.data.shape_keys
-                and len(obj.data.shape_keys.key_blocks) > 1)
+        return poll_msg.shape_keys(cls, context)
 
     def invoke(self, context, event):
         obj = context.active_object
@@ -173,19 +173,105 @@ class MHW_OT_ShapeKeyToWeights(bpy.types.Operator):
 
         self.report({'INFO'}, T("ui.main_panel.sk_info_generated").format(name=active_kb.name, n=result))
         return {'FINISHED'}
-# (shape_key_name, direction_xyz, part_id, mhwi_vg, mhws_vg, re4_vg, re9_vg)
+# (slot, direction_xyz, part_id, mhwi_vg, mhws_vg, re4_vg, re9_vg)
 # part_id is an internal English identifier (translated for display via
 # _MMD_FACE_PART_KEYS below); it used to be the raw Chinese label itself.
+# slot says which shape key drives the row; the key itself is looked up in the
+# scheme tables below, so one row can be fed by several alternative keys.
 _MMD_FACE_ENTRIES = [
-    ("ウィンク２",  ( 0,  0, -1), "l_upper_eyelid", "MhBone_321", "L_UpEyeLid_LOD01",    "L_U_Eyelid3",   "L_UprLdEdge_02"),
-    ("ウィンク２",  ( 0,  0,  1), "l_lower_eyelid", "MhBone_325", "L_LoEyeLid_LOD01",    "L_D_Eyelid3",   "L_LwrLdEdge_02"),
-    ("ｳｨﾝｸ２右",  ( 0,  0, -1), "r_upper_eyelid", "MhBone_334", "R_UpEyeLid_LOD01",    "R_U_Eyelid3",   "R_UprLdEdge_02"),
-    ("ｳｨﾝｸ２右",  ( 0,  0,  1), "r_lower_eyelid", "MhBone_338", "R_LoEyeLid_LOD01",    "R_D_Eyelid3",   "R_LwrLdEdge_02"),
-    ("あ",          ( 0,  0,  1), "upper_lip",      "MhBone_381", "C_upLip_T_LOD01",     "C_UpperLip",    "C_UprLp_02"),
-    ("あ",          ( 0,  0, -1), "lower_lip",      "MhBone_388", "C_loLip_T_LOD01",     "C_LowerLip",    "C_LwrLp_02"),
-    ("あ",          ( 1,  0,  0), "l_mouth_corner", "MhBone_384", "L_cornerLip_B_LOD01", "L_MouthCorner", "L_LipCorner_02"),
-    ("あ",          (-1,  0,  0), "r_mouth_corner", "MhBone_385", "R_cornerLip_B_LOD01", "R_MouthCorner", "R_LipCorner_02"),
+    ("eye_l", ( 0,  0, -1), "l_upper_eyelid", "MhBone_321", "L_UpEyeLid_LOD01",    "L_U_Eyelid3",   "L_UprLdEdge_02"),
+    ("eye_l", ( 0,  0,  1), "l_lower_eyelid", "MhBone_325", "L_LoEyeLid_LOD01",    "L_D_Eyelid3",   "L_LwrLdEdge_02"),
+    ("eye_r", ( 0,  0, -1), "r_upper_eyelid", "MhBone_334", "R_UpEyeLid_LOD01",    "R_U_Eyelid3",   "R_UprLdEdge_02"),
+    ("eye_r", ( 0,  0,  1), "r_lower_eyelid", "MhBone_338", "R_LoEyeLid_LOD01",    "R_D_Eyelid3",   "R_LwrLdEdge_02"),
+    ("mouth", ( 0,  0,  1), "upper_lip",      "MhBone_381", "C_upLip_T_LOD01",     "C_UpperLip",    "C_UprLp_02"),
+    ("mouth", ( 0,  0, -1), "lower_lip",      "MhBone_388", "C_loLip_T_LOD01",     "C_LowerLip",    "C_LwrLp_02"),
+    ("mouth", ( 1,  0,  0), "l_mouth_corner", "MhBone_384", "L_cornerLip_B_LOD01", "L_MouthCorner", "L_LipCorner_02"),
+    ("mouth", (-1,  0,  0), "r_mouth_corner", "MhBone_385", "R_cornerLip_B_LOD01", "R_MouthCorner", "R_LipCorner_02"),
 ]
+
+# Which MMD shape key feeds each slot, in order of preference. A scheme is used only
+# as a whole: if any eye of a pair has no usable key, BOTH eyes move to the next
+# scheme, so the two sides never come from different shapes.
+# slot -> (key name, split by side). "Split by side" is for a key that moves both
+# eyes at once: one eye's group is cut out of it with an X-sign mask (+X = the
+# character's left).
+#
+# The order and the exclusions were measured on one MMD face mesh, by weighted
+# overlap of each candidate's weight field with the primary key's:
+#   eyes   まばたき 1.00/1.00 (upper/lower lid, identical to ウィンク２ per side),
+#          なごみ 0.95/0.82, ウィンク = 笑い 0.91/0.76. はぅ, じと目, はちゅ目 etc.
+#          barely move the lower lid (overlap <= 0.21), so they are not offered.
+#   mouth  あ２ 0.95, えー 0.94, ワ 0.92, え 0.87. い moves only the corners
+#          (lips 0.15/0.09) and お/う/▲ only the lips (corners 0.05): none of them
+#          can stand in for あ on its own.
+_MMD_EYE_SCHEMES = [
+    {"eye_l": ("ウィンク２", False), "eye_r": ("ウィンク２右", False)},
+    {"eye_l": ("まばたき",   True),  "eye_r": ("まばたき",   True)},
+    {"eye_l": ("ウィンク",   False), "eye_r": ("ウィンク右", False)},
+    {"eye_l": ("なごみ",     True),  "eye_r": ("なごみ",     True)},
+    {"eye_l": ("笑い",       True),  "eye_r": ("笑い",       True)},
+]
+_MMD_MOUTH_SCHEMES = [
+    {"mouth": (name, False)} for name in ("あ", "あ２", "えー", "ワ", "え")
+]
+_MMD_SLOT_SIDE = {"eye_l": 1, "eye_r": -1}
+
+
+def _mmd_norm(name):
+    """Shape-key name as compared by the face-weights lookup. NFKC folds half-width
+    kana (ｳｨﾝｸ) and full-width digits/punctuation (２, ！) onto one spelling, so
+    "ｳｨﾝｸ２右" and "ウィンク2右" are the same key."""
+    return unicodedata.normalize("NFKC", name).strip()
+
+
+def _mmd_key_lookup(shape_keys):
+    """{normalised name: key block}, the reference (basis) key excluded. The first
+    of several keys that normalise to the same name wins."""
+    lookup = {}
+    for kb in shape_keys.key_blocks:
+        if kb.name == shape_keys.reference_key.name:
+            continue
+        lookup.setdefault(_mmd_norm(kb.name), kb)
+    return lookup
+
+
+def _mmd_params(part_id, interior_falloff=False):
+    if part_id in _MMD_FACE_MOUTH_LABELS:
+        if interior_falloff:
+            return dict(_MMD_FACE_MOUTH_PARAMS,
+                        interior_falloff=_MMD_MOUTH_INTERIOR_FALLOFF)
+        return _MMD_FACE_MOUTH_PARAMS
+    return _MMD_FACE_FIXED_PARAMS[part_id in _MMD_FACE_UPPER_EYELID_LABELS]
+
+
+def _mmd_pick_scheme(obj, basis_kb, lookup, rows, schemes):
+    """Choose the first scheme every row of which has a key that actually deforms the
+    mesh; failing that, the earliest scheme with the most working rows (so a model that
+    has only one eye's key still gets that eye, as before).
+
+    Returns (plan, scheme_index) where plan is [(row, key block or None, side)] with
+    None meaning that row has no usable key.
+    """
+    best = None
+    for idx, scheme in enumerate(schemes):
+        plan, ok = [], 0
+        for row in rows:
+            slot, direction, part_id = row[0], row[1], row[2]
+            key_name, by_side = scheme[slot]
+            kb = lookup.get(_mmd_norm(key_name))
+            side = _MMD_SLOT_SIDE[slot] if by_side else None
+            if kb is not None and weight_utils.shape_key_to_weights(
+                    obj, kb, basis_kb, direction=direction, side=side, dry_run=True,
+                    **_mmd_params(part_id)) is not None:
+                ok += 1
+            else:
+                kb = None
+            plan.append((row, kb, side))
+        if best is None or ok > best[0]:
+            best = (ok, idx, plan)
+        if ok == len(rows):
+            break
+    return best[2], best[1]
 _MMD_FACE_GAME_COL = {'MHWI': 3, 'MHWS': 4, 'RE4': 5, 'RE9': 6}
 # The RE4 skeleton carries two complete sets of eyelid bones -- L_U_Eyelid01-04
 # and L_U_Eyelid1-4 -- and every reference character has both. Which set the
@@ -218,6 +304,21 @@ _MMD_FACE_FIXED_PARAMS = {
     True:  dict(ignore_threshold=0.0,   weight_strength=1.0, smooth_factor=0.0, smooth_iters=10),
     False: dict(ignore_threshold=0.001, weight_strength=1.0, smooth_factor=0.5, smooth_iters=10),
 }
+# Mouth groups (あ): the teeth/tongue/cavity wall move further than the lips, so
+# whole-mesh-max normalisation leaves the lips with a fraction of the weight and
+# gives the cavity interior 1.0 (it then pokes out through the lips when the
+# bones move). Normalise on the outer surface instead; the clamp to 1.0 then
+# makes the interior move with the lips as one piece.
+# Optional (off by default): fade the interior out with depth -- full weight up
+# to D0, linearly to 0 at D1. Local units, i.e. metres at object scale 1. Off by
+# default because it splits the teeth (front half moves, back half doesn't) and
+# detaches the cavity from the lips.
+_MMD_FACE_MOUTH_LABELS = {"upper_lip", "lower_lip", "l_mouth_corner", "r_mouth_corner"}
+_MMD_MOUTH_INTERIOR_FALLOFF = (0.002, 0.012)
+_MMD_FACE_MOUTH_PARAMS = dict(
+    _MMD_FACE_FIXED_PARAMS[False],
+    surface_ref=True,
+)
 class MHW_OT_MMDFaceWeights(bpy.types.Operator):
     """Split MMD eyelid/mouth shape keys by direction into target-game facial vertex groups"""
     bl_idname = "mhw.mmd_face_weights"
@@ -247,6 +348,10 @@ class MHW_OT_MMDFaceWeights(bpy.types.Operator):
         name="Sync Seam Vertices",
         default=True,
     )
+    interior_falloff: bpy.props.BoolProperty(
+        name="Fade Mouth Interior by Depth",
+        default=False,
+    )
 
     @classmethod
     def description(cls, context, properties):
@@ -254,10 +359,7 @@ class MHW_OT_MMDFaceWeights(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        obj = context.active_object
-        return (obj and obj.type == 'MESH'
-                and obj.data.shape_keys
-                and len(obj.data.shape_keys.key_blocks) > 1)
+        return poll_msg.shape_keys(cls, context)
 
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(self, width=280)
@@ -270,38 +372,46 @@ class MHW_OT_MMDFaceWeights(bpy.types.Operator):
             col.prop(self, "re4_character", text=T("ui.main_panel.mmd_re4_character_label"))
         col.separator()
         col.prop(self, "sync_seams", text=T("ui.main_panel.mmd_sync_seams_label"))
+        col.prop(self, "interior_falloff", text=T("ui.main_panel.mmd_interior_falloff_label"))
 
     def execute(self, context):
         obj = context.active_object
         if context.mode != 'OBJECT':
             bpy.ops.object.mode_set(mode='OBJECT')
 
-        key_blocks = obj.data.shape_keys.key_blocks
         basis_kb = obj.data.shape_keys.reference_key
         vg_col = _MMD_FACE_GAME_COL[self.target_game]
+        lookup = _mmd_key_lookup(obj.data.shape_keys)
 
-        done, skipped = [], []
-        for sk_name, direction, part_id, *vg_names in _MMD_FACE_ENTRIES:
-            kb = key_blocks.get(sk_name)
-            if kb is None:
-                skipped.append(part_id)
-                continue
-            target_vg = vg_names[vg_col - 3]
-            if self.target_game == 'RE4':
-                target_vg = _mmd_re4_vg_name(target_vg, self.re4_character)
-            params = _MMD_FACE_FIXED_PARAMS[part_id in _MMD_FACE_UPPER_EYELID_LABELS]
-
-            result = weight_utils.shape_key_to_weights(
-                obj, kb, basis_kb,
-                sync_seams=self.sync_seams,
-                direction=direction,
-                vg_name=target_vg,
-                **params,
-            )
-            if result is None:
-                skipped.append(part_id)
-            else:
-                done.append(part_id)
+        done, skipped, fallback_keys = [], [], []
+        for slots, schemes in ((("eye_l", "eye_r"), _MMD_EYE_SCHEMES),
+                               (("mouth",), _MMD_MOUTH_SCHEMES)):
+            rows = [r for r in _MMD_FACE_ENTRIES if r[0] in slots]
+            plan, scheme_idx = _mmd_pick_scheme(obj, basis_kb, lookup, rows, schemes)
+            used = []
+            for (slot, direction, part_id, *vg_names), kb, side in plan:
+                if kb is None:
+                    skipped.append(part_id)
+                    continue
+                target_vg = vg_names[vg_col - 3]
+                if self.target_game == 'RE4':
+                    target_vg = _mmd_re4_vg_name(target_vg, self.re4_character)
+                result = weight_utils.shape_key_to_weights(
+                    obj, kb, basis_kb,
+                    sync_seams=self.sync_seams,
+                    direction=direction,
+                    vg_name=target_vg,
+                    side=side,
+                    **_mmd_params(part_id, self.interior_falloff),
+                )
+                if result is None:
+                    skipped.append(part_id)
+                else:
+                    done.append(part_id)
+                    if kb.name not in used:
+                        used.append(kb.name)
+            if scheme_idx > 0:
+                fallback_keys.extend(used)
 
         if not done:
             self.report({'WARNING'}, T("ui.main_panel.mmd_warn_no_valid_shapekeys"))
@@ -313,6 +423,8 @@ class MHW_OT_MMDFaceWeights(bpy.types.Operator):
         if skipped:
             skipped_labels = [T(_MMD_FACE_PART_KEYS[p]) for p in skipped]
             msg += T("ui.main_panel.mmd_info_skipped_suffix").format(parts=join_sep.join(skipped_labels))
+        if fallback_keys:
+            msg += T("ui.main_panel.mmd_info_fallback_suffix").format(keys=join_sep.join(fallback_keys))
         self.report({'INFO'}, msg)
         return {'FINISHED'}
 class MHW_OT_CylindricalFaceNormals(bpy.types.Operator):
@@ -351,8 +463,7 @@ Unselected faces keep their own normals; the boundary transitions on its own."""
 
     @classmethod
     def poll(cls, context):
-        obj = context.active_object
-        return obj is not None and obj.type == 'MESH'
+        return poll_msg.active_mesh(cls, context)
 
     @classmethod
     def description(cls, context, properties):
@@ -458,8 +569,7 @@ touching the split vertices, sharp edges or material borders the game needs
 
     @classmethod
     def poll(cls, context):
-        obj = context.active_object
-        return obj is not None and obj.type == 'MESH'
+        return poll_msg.active_mesh(cls, context)
 
     @classmethod
     def description(cls, context, properties):
@@ -526,7 +636,10 @@ def _mesh_object_items(self, context):
 #: ``(id, label key, description key)``.  Enum item labels are static text
 #: Blender resolves at registration, before the language is known, so they have
 #: to come from a callable that runs ``T()`` at draw time.
+#: FROZEN comes first (and is therefore the default): it costs nothing over
+#: SELF on a first run and does not carry SELF's failure mode on a later one.
 _BASE_SOURCE_ITEMS = (
+    ('FROZEN', "ui.main_panel.fsk_base_frozen", "ui.main_panel.fsk_base_frozen_desc"),
     ('SELF', "ui.main_panel.fsk_base_self", "ui.main_panel.fsk_base_self_desc"),
     ('OBJECT', "ui.main_panel.fsk_base_object", "ui.main_panel.fsk_base_object_desc"),
 )
@@ -559,10 +672,7 @@ with the encoding basis (see core/normal_utils.py)"""
 
     @classmethod
     def poll(cls, context):
-        obj = context.active_object
-        return (obj is not None and obj.type == 'MESH'
-                and obj.data.shape_keys is not None
-                and len(obj.data.shape_keys.key_blocks) > 1)
+        return poll_msg.shape_keys(cls, context)
 
     @classmethod
     def description(cls, context, properties):
@@ -576,6 +686,14 @@ with the encoding basis (see core/normal_utils.py)"""
         layout.prop(self, "base_source", text=T("ui.main_panel.fsk_field_base_source"))
         if self.base_source == 'OBJECT':
             layout.prop(self, "base_object", text=T("ui.main_panel.fsk_field_base_object"))
+            # Transfer Normals lives here rather than on the panel: it is the way out
+            # for exactly one case of this dialog -- a reference with the same counts
+            # but a different corner order, which _reference_base refuses.
+            op = layout.operator("mhw.transfer_normals",
+                                 text=T("ui.main_panel.fsk_btn_transfer_instead"),
+                                 icon='MOD_DATA_TRANSFER')
+            if self.base_object != 'NONE':
+                op.reference = self.base_object
         layout.prop(self, "reset_intent",
                     text=T("ui.main_panel.fsk_field_reset"))
 
@@ -641,6 +759,31 @@ with the encoding basis (see core/normal_utils.py)"""
                 obj=ref.name))
         return co.reshape(-1, 3).astype(np.float64)
 
+    def _frozen_basis(self, obj):
+        """This mesh's own base geometry, snapshotted once into a
+        ``TK_Basis`` shape key and read from there on every later run.
+
+        Reading "this mesh's own Basis" trusts whatever Basis holds *right
+        now* -- but Basis is exactly what a bad transform bake or import
+        round-trip can corrupt, and once that happens a repair that reads it
+        live just captures the corruption as the new target (see
+        ``reencode_for_shape``'s intent field). Snapshotting Basis into a
+        hidden key the first time this runs gives every later repair a fixed
+        point instead: even if Basis breaks again afterward, the reference
+        this reads from does not follow it.
+        """
+        import numpy as np
+        from .shapekey_utils import FROZEN_BASIS_NAME
+
+        me = obj.data
+        frozen = me.shape_keys.key_blocks.get(FROZEN_BASIS_NAME)
+        if frozen is None:
+            frozen = obj.shape_key_add(name=FROZEN_BASIS_NAME, from_mix=False)
+            frozen.mute = True
+        co = np.empty(len(me.vertices) * 3, np.float32)
+        frozen.data.foreach_get("co", co)
+        return co.reshape(-1, 3).astype(np.float64)
+
     def execute(self, context):
         import numpy as np
         from . import normal_utils, shapekey_utils
@@ -675,6 +818,8 @@ with the encoding basis (see core/normal_utils.py)"""
                 base_co = self._reference_base(obj)
                 if base_co is None:
                     return {'CANCELLED'}
+            elif self.base_source == 'FROZEN':
+                base_co = self._frozen_basis(obj)
 
             n, fresh, resid = normal_utils.reencode_for_shape(
                 me, co, reset_intent=self.reset_intent, base_co=base_co)
@@ -706,7 +851,7 @@ and re-encoded against each one's own shape-keyed geometry
 
     @classmethod
     def poll(cls, context):
-        return any(o.type == 'MESH' for o in context.selected_objects)
+        return poll_msg.selected_mesh(cls, context)
 
     @classmethod
     def description(cls, context, properties):
@@ -847,8 +992,7 @@ custom split normals pointing where they were (see core/normal_utils.py)"""
 
     @classmethod
     def poll(cls, context):
-        obj = context.active_object
-        return obj is not None and obj.type == 'MESH'
+        return poll_msg.active_mesh(cls, context)
 
     @classmethod
     def description(cls, context, properties):
@@ -932,11 +1076,9 @@ rebuilding every key on top of the result (see core/shapekey_utils.py)"""
 
     @classmethod
     def poll(cls, context):
-        obj = context.active_object
-        return (obj is not None and obj.type == 'MESH'
-                and obj.data.shape_keys
-                and len(obj.data.shape_keys.key_blocks) > 1
-                and any(m.show_viewport for m in obj.modifiers))
+        return (poll_msg.shape_keys(cls, context)
+                and poll_msg.require(cls, any(m.show_viewport for m in context.active_object.modifiers),
+                                     "core.poll.need_visible_modifier"))
 
     @classmethod
     def description(cls, context, properties):
@@ -982,10 +1124,14 @@ shape keys and vertex groups each fragment inherited (see core/mesh_utils.py)"""
     clean_suffix: bpy.props.BoolProperty(
         name="Strip Material .001 Suffix", default=True,
         description="Rename mat.001 back to mat before naming the fragments after it")
+    merge_same_texture: bpy.props.BoolProperty(
+        name="Merge Meshes Sharing a Texture", default=False,
+        description="Treat materials that use the same base colour texture as one material: "
+                    "their fragments stay together in one object")
 
     @classmethod
     def poll(cls, context):
-        return any(o.type == 'MESH' for o in context.selected_objects)
+        return poll_msg.selected_mesh(cls, context)
 
     @classmethod
     def description(cls, context, properties):
@@ -1001,6 +1147,7 @@ shape keys and vertex groups each fragment inherited (see core/mesh_utils.py)"""
             col.prop(self, "clean_suffix", text=T("ui.main_panel.sbm_field_clean_suffix"))
         col.prop(self, "prune_keys", text=T("ui.main_panel.sbm_field_prune_keys"))
         col.prop(self, "prune_groups", text=T("ui.main_panel.sbm_field_prune_groups"))
+        col.prop(self, "merge_same_texture", text=T("ui.main_panel.sbm_field_merge_same_tex"))
 
     def execute(self, context):
         from . import mesh_utils
@@ -1010,7 +1157,8 @@ shape keys and vertex groups each fragment inherited (see core/mesh_utils.py)"""
             context, objects,
             rename=self.rename, prune_keys=self.prune_keys,
             prune_groups=self.prune_groups,
-            clean_suffix=self.clean_suffix and self.rename)
+            clean_suffix=self.clean_suffix and self.rename,
+            merge_same_texture=self.merge_same_texture)
         if not n:
             self.report({'ERROR'}, T("ui.main_panel.sbm_no_mesh"))
             return {'CANCELLED'}
@@ -1018,13 +1166,13 @@ shape keys and vertex groups each fragment inherited (see core/mesh_utils.py)"""
             n=n, keys=keys, groups=groups))
         return {'FINISHED'}
 class MHW_OT_CreateOutline(bpy.types.Operator):
-    """Create a brand new dedicated "<name>_Outline" shell object for each
-selected mesh (backface-culled black material + flipped-normal Solidify on a
-full duplicate, auto-applied — vertex groups, shape keys and the modifier
-stack, including any Armature binding, come along for the ride). The source
-mesh itself is never touched. Every run is independent — no tracking back to
-the source, so running it again just adds another shell rather than
-replacing one (see core/mesh_utils.py)"""
+    """Create a brand new inverted-hull outline shell object for each selected
+mesh: a full duplicate (vertex groups, shape keys and the modifier stack,
+including any Armature binding, come along for the ride) pushed out along the
+normal by the thickness, faces pointing inward, backface-culled black
+material. REME-named sources get a Group_X_Sub_Y__Outline name that sorts
+after every existing submesh. The source mesh itself is never touched (see
+core/mesh_utils.py)"""
     bl_idname = "mhw.create_outline"
     bl_label = "Create Outline"
     bl_options = {'REGISTER', 'UNDO'}
@@ -1035,14 +1183,14 @@ replacing one (see core/mesh_utils.py)"""
                     "(0 = no outline there, e.g. eyes/mouth interior); leave empty for uniform thickness")
     thickness: bpy.props.FloatProperty(
         name="Thickness", default=0.001, min=0.0, precision=4,
-        description="Solidify thickness on the newly created outline shell")
+        description="How far the outline shell sits outside the surface, along the normal")
     ignore_collection_name: bpy.props.StringProperty(
         name="Ignore Collection", default="IgnoreExport",
         description="Objects in this collection (or its sub-collections) are skipped")
 
     @classmethod
     def poll(cls, context):
-        return any(o.type == 'MESH' for o in context.selected_objects)
+        return poll_msg.selected_mesh(cls, context)
 
     @classmethod
     def description(cls, context, properties):
@@ -1070,7 +1218,7 @@ replacing one (see core/mesh_utils.py)"""
             self.report({'ERROR'}, T("ui.main_panel.outline_no_mesh"))
             return {'CANCELLED'}
 
-        added, missing_vg, not_baked = mesh_utils.create_outline_shell(
+        added, missing_vg, not_last = mesh_utils.create_outline_shell(
             context, objects,
             vertex_group_name=self.vertex_group_name,
             thickness=self.thickness,
@@ -1083,8 +1231,8 @@ replacing one (see core/mesh_utils.py)"""
         msg = T("ui.main_panel.outline_done").format(added=added)
         if missing_vg:
             msg += T("ui.main_panel.outline_warn_missing_vgroup_suffix").format(n=missing_vg)
-        if not_baked:
-            msg += T("ui.main_panel.outline_warn_not_baked_suffix").format(n=not_baked)
+        if not_last:
+            msg += T("ui.main_panel.outline_warn_not_last_suffix").format(n=not_last)
         self.report({'INFO'}, msg)
         return {'FINISHED'}
 _RENAMED_VG_PATTERN = re.compile(r'^(.+)\.\d{3}$')
@@ -1097,9 +1245,13 @@ Groups whose suffixed name matches a real bone in the bound armature are skipped
 
     @classmethod
     def poll(cls, context):
-        return any(o.type == 'MESH' for o in context.selected_objects)
+        return poll_msg.selected_mesh(cls, context)
 
     def execute(self, context):
+        with mesh_utils.object_mode(context):
+            return self._execute(context)
+
+    def _execute(self, context):
         mesh_objects = [o for o in context.selected_objects if o.type == 'MESH']
         total_merged = 0
         total_skipped = 0
@@ -1164,6 +1316,10 @@ class MHW_OT_RenameMeshREFormat(bpy.types.Operator):
 
     bl_idname = "mhw.rename_mesh_re_format"
     bl_label = "Rename Meshes (RE Format)"
+class MHW_OT_ClearEmptyVGroups(bpy.types.Operator):
+    """Remove every vertex group that no vertex is weighted to, on all selected meshes"""
+    bl_idname = "mhw.clear_empty_vgroups"
+    bl_label = "Clear Empty Vertex Groups"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -1186,6 +1342,25 @@ class MHW_OT_RenameMeshREFormat(bpy.types.Operator):
 
         plan = rename_mesh_objects(meshes)
         self.report({'INFO'}, T("ui.main_panel.mesh_rename_done").format(count=len(plan)))
+        return poll_msg.selected_mesh(cls, context)
+
+    @classmethod
+    def description(cls, context, properties):
+        return T("ui.main_panel.clear_empty_vg_tip")
+
+    def execute(self, context):
+        from . import mesh_utils
+
+        # 编辑模式下权重还在 bmesh 里，obj.data.vertices 读到的是进编辑模式前的旧值
+        mode = context.mode
+        if mode == 'EDIT_MESH':
+            bpy.ops.object.mode_set(mode='OBJECT')
+        meshes = [o for o in context.selected_objects if o.type == 'MESH']
+        removed = sum(mesh_utils.prune_vertex_groups(o) for o in meshes)
+        if mode == 'EDIT_MESH':
+            bpy.ops.object.mode_set(mode='EDIT')
+        self.report({'INFO'}, T("ui.main_panel.clear_empty_vg_done").format(
+            n=removed, meshes=len(meshes)))
         return {'FINISHED'}
 
 
@@ -1204,6 +1379,7 @@ classes = [
     MHW_OT_CreateOutline,
     MHW_OT_MergeRenamedVGroups,
     MHW_OT_RenameMeshREFormat,
+    MHW_OT_ClearEmptyVGroups,
 ]
 
 

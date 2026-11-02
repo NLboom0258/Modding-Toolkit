@@ -4,7 +4,7 @@ Filled in incrementally as each panel is migrated."""
 STRINGS = {
     # ── MHW_PT_SuiteSettings collapsible section headers ───────────────────────
     "ui.main_panel.basic_tools_header":     {"EN": "Basic Tools",               "ZH": "基础工具"},
-    "ui.main_panel.std_converter_header":   {"EN": "Skeleton & Mesh Convert", "ZH": "骨架&网格转换"},
+    "ui.main_panel.std_converter_header":   {"EN": "Skeleton & Mesh Convert", "ZH": "骨架 & 网格转换"},
     "ui.main_panel.pose_convert_header":    {"EN": "Pose Convert",              "ZH": "姿态转换"},
 
     # ── MHW_PT_SuiteSettings property draw-site label overrides ────────────────
@@ -23,7 +23,8 @@ STRINGS = {
                                                     "ZH": "忽略辅助骨"},
     "ui.main_panel.import_preset_label":       {"EN": "Source Preset (X)", "ZH": "来源预设 (X)"},
     "ui.main_panel.target_preset_label":       {"EN": "Target Game (Y)",   "ZH": "目标游戏 (Y)"},
-    "ui.main_panel.show_mapping_details_label":{"EN": "Show Mapping Details", "ZH": "显示映射细节"},
+    "ui.main_panel.mapping_details_header":    {"EN": "Mapping Details", "ZH": "映射细节"},
+    "ui.main_panel.align_mode_label":          {"EN": "Align Mode", "ZH": "对齐模式"},
     "ui.main_panel.pose_preset_field_label":   {"EN": "Skeleton Preset",   "ZH": "骨架预设"},
 
     # ── align_mode_override EnumProperty items (dynamic callback) ──────────────
@@ -139,10 +140,10 @@ STRINGS = {
     "已将 %s 对齐到 %s":     {"EN": "Aligned %s to %s",        "ZH": "已将 %s 对齐到 %s"},
 
     # ── MHW_PT_MainPanel.draw() section headers / static labels ────────────────
-    "ui.main_panel.label_bone_merge":            {"EN": "Bone & Weight Merge", "ZH": "骨骼&权重合并"},
-    "ui.main_panel.label_bone_processing":       {"EN": "Bone Processing",  "ZH": "骨骼处理"},
-    "ui.main_panel.label_mesh_processing":       {"EN": "Mesh Processing",  "ZH": "网格处理"},
-    "ui.main_panel.label_texture_processing":    {"EN": "Texture Processing", "ZH": "贴图处理"},
+    # Basic Tools' sub-panel headers
+    "ui.main_panel.bone_weight_header":          {"EN": "Bones & Weights", "ZH": "骨骼 & 权重"},
+    "ui.main_panel.mesh_header":                 {"EN": "Mesh",             "ZH": "网格"},
+    "ui.main_panel.texture_header":              {"EN": "Textures",         "ZH": "贴图"},
     "ui.main_panel.label_skeleton_cleanup":      {"EN": "Non-Physics Workflow", "ZH": "非物理流程工具"},
     "ui.main_panel.label_physics_chain_tools":   {"EN": "Physics Workflow", "ZH": "物理流程工具"},
     "ui.main_panel.label_bone_visibility":       {"EN": "Bone Visibility [X]:", "ZH": "骨骼显示 [X]:"},
@@ -159,6 +160,13 @@ STRINGS = {
     # ── MHW_PT_MainPanel.draw() operator button labels ──────────────────────────
     "ui.main_panel.btn_sk_to_weights":            {"EN": "Shape Key to Weights",  "ZH": "形态键转权重"},
     "ui.main_panel.btn_merge_renamed_vgroups":    {"EN": "Merge Renamed Vertex Groups", "ZH": "合并重名顶点组"},
+    "ui.main_panel.btn_clear_empty_vgroups":      {"EN": "Clear Empty Vertex Groups", "ZH": "清除空顶点组"},
+    "ui.main_panel.clear_empty_vg_tip": {
+        "EN": "Remove every vertex group that no vertex is weighted to, on all selected meshes",
+        "ZH": "删除选中网格上所有没有任何顶点权重的顶点组"},
+    "ui.main_panel.clear_empty_vg_done": {
+        "EN": "Removed {n} empty vertex group(s) from {meshes} mesh(es)",
+        "ZH": "已从 {meshes} 个网格上删除 {n} 个空顶点组"},
     "ui.main_panel.btn_universal_snap":           {"EN": "Align Bones [X+Y, dual armature]", "ZH": "对齐骨骼 [X+Y, 双骨架]"},
     "ui.main_panel.btn_same_kind_snap":           {"EN": "Align Bones [by name, dual armature]", "ZH": "对齐骨骼 [同名骨骼, 双骨架]"},
     "ui.main_panel.same_kind_align_label":        {"EN": "Same-Kind Bone Align", "ZH": "同种类骨骼对齐"},
@@ -169,7 +177,7 @@ STRINGS = {
     "ui.main_panel.btn_remove_non_base_bones":    {"EN": "Remove Non-Base Bones [X]", "ZH": "剔除非基础骨骼 [X]"},
     "ui.main_panel.btn_rename_bones_to_target":   {"EN": "Rename Base Bones [X+Y]", "ZH": "基础骨骼改名 [X+Y]"},
     "ui.main_panel.btn_smart_graft":              {"EN": "Graft Physics Bones [X+Y, dual armature]", "ZH": "移植物理骨骼 [X+Y, 双骨架]"},
-    "ui.main_panel.btn_merge_into_parent":        {"EN": "Merge into Parent Bone", "ZH": "合并到父骨"},
+    "ui.main_panel.btn_merge_into_parent":        {"EN": "Merge into Parent", "ZH": "合并到父级"},
     "ui.main_panel.btn_mark_main_continue":       {"EN": "Mark as Main Chain Continuation", "ZH": "标记为主链延伸"},
     "ui.main_panel.btn_clear_chain_role":         {"EN": "Clear Mark", "ZH": "清除标记"},
     "ui.main_panel.btn_refresh_bone_colors":      {"EN": "Refresh Bone Colors", "ZH": "刷新骨骼颜色"},
@@ -209,8 +217,7 @@ STRINGS = {
     "ui.main_panel.btn_apply_inverse":            {"EN": "◀ Inverse (B→A)", "ZH": "◀ 逆向 (B→A)"},
     "ui.main_panel.btn_tex_process":              {"EN": "Texture Processing", "ZH": "贴图处理"},
     "ui.main_panel.btn_align_non_physics":        {"EN": "Align Non-Physics Bones", "ZH": "对齐非物理骨骼"},
-    "ui.main_panel.btn_split_physics_bones":      {"EN": "Split Physics Bones", "ZH": "拆分物理骨"},
-    "ui.main_panel.btn_batch_rename_physics":     {"EN": "One-Click Rename", "ZH": "一键重命名"},
+    "ui.main_panel.btn_split_physics_bones":      {"EN": "Rename Physics Bones", "ZH": "重命名物理骨"},
     "ui.main_panel.btn_mrl3_tex_processor":       {"EN": "MRL3 Processor", "ZH": "MRL3 处理器"},
     "ui.main_panel.btn_mrl3_generator":           {"EN": "MRL3 Generator", "ZH": "MRL3 生成器"},
     # ── shared property labels drawn via prop(text=...) ────────────────────
@@ -220,9 +227,10 @@ STRINGS = {
     "ui.prop.gender": {"EN": "Gender", "ZH": "性别"},
     "ui.prop.rank": {"EN": "Rank", "ZH": "位阶"},
     "ui.prop.cleanup_before_export": {"EN": "Clean Mesh Before Export", "ZH": "导出前清理网格"},
-    "ui.prop.triangulate_face": {"EN": "Triangulate Face Mesh", "ZH": "面部网格三角化"},
     "ui.prop.anti_plagiarism": {"EN": "Anti-Plagiarism", "ZH": "防石化"},
     "ui.prop.watermark": {"EN": "Add Watermark Effect", "ZH": "添加水印特效"},
+    "ui.prop.ignore_slot_limits": {
+        "EN": "Ignore Slot Limits (needs .pfb edit)", "ZH": "忽略槽位限制（需要改pfb）"},
     "ui.prop.use_blank_export": {"EN": "Use Blank Model for Unselected", "ZH": "未选部位使用空模"},
     "ui.prop.ao_image": {"EN": "AO Map", "ZH": "AO 贴图"},
     "ui.prop.use_ao": {"EN": "Add AO", "ZH": "添加 AO"},
@@ -242,6 +250,7 @@ STRINGS = {
     "ui.game_sections.btn_batch_export_mhrs": {"EN": "MHRS Batch Exporter", "ZH": "MHRS 批量导出"},
     "ui.game_sections.btn_batch_export_re9":  {"EN": "RE9 Batch Exporter",  "ZH": "RE9 批量导出"},
     "ui.game_sections.btn_batch_export_dmc5": {"EN": "DMC5 Batch Exporter", "ZH": "DMC5 批量导出"},
+    "ui.game_sections.btn_batch_export_oni":  {"EN": "Onimusha Batch Exporter", "ZH": "鬼武者 批量导出"},
     "ui.game_sections.btn_mdf_convert_material": {"EN": "Convert to Another MDF Material", "ZH": "转换为其他MDF材质"},
     "ui.game_sections.btn_mdf_bulk_generate": {"EN": "Generate MDF Materials from Mesh", "ZH": "按网格批量生成 MDF 材质"},
 
@@ -311,9 +320,18 @@ STRINGS = {
     "ui.main_panel.btn_pre_export_check":         {"EN": "Matching Check", "ZH": "匹配检查"},
     "ui.main_panel.btn_batch_import":             {"EN": "Batch Import", "ZH": "批量导入"},
     "ui.main_panel.btn_mhws_preprocess":          {"EN": "One-Click Import & Align Wilds Model", "ZH": "一键导入并对齐荒野模型"},
+    "ui.main_panel.btn_mhwi_preprocess":          {"EN": "One-Click Import & Align MHWI Model", "ZH": "一键导入并对齐猎人模型"},
     "ui.main_panel.btn_mhws_optimize_skeleton":   {"EN": "Optimize Wilds Skeleton", "ZH": "优化荒野骨架"},
     "ui.main_panel.btn_mhws_optimize_aux":        {"EN": "Optimize Auxiliary Bones & Weights", "ZH": "优化辅助骨骼及权重"},
     "ui.main_panel.btn_add_facial_bones":         {"EN": "One-Click Add Facial Bones", "ZH": "一键添加表情骨"},
+    # The game picker's tooltips (MT_Preferences.active_game)
+    "ui.game_sections.game_mhwi": {"EN": "Monster Hunter: World",       "ZH": "怪物猎人：世界"},
+    "ui.game_sections.game_mhws": {"EN": "Monster Hunter Wilds",        "ZH": "怪物猎人：荒野"},
+    "ui.game_sections.game_mhrs": {"EN": "Monster Hunter Rise",         "ZH": "怪物猎人：崛起"},
+    "ui.game_sections.game_re4":  {"EN": "Resident Evil 4",             "ZH": "生化危机 4 重制版"},
+    "ui.game_sections.game_re9":  {"EN": "Resident Evil Requiem",       "ZH": "生化危机：安魂曲"},
+    "ui.game_sections.game_oni":  {"EN": "Onimusha: Way of the Sword",  "ZH": "鬼武者：剑之道"},
+    "ui.game_sections.btn_configure_shape_keys":  {"EN": "Configure Selected Meshes' Shape Keys", "ZH": "配置选中网格形态键"},
     "ui.main_panel.btn_mdf_tex_processor":        {"EN": "MDF2 Processor", "ZH": "MDF2 处理器"},
     "ui.main_panel.btn_mdf_generator":            {"EN": "MDF2 Generator", "ZH": "MDF2 生成器"},
     "ui.main_panel.btn_create_re_chain":          {"EN": "One-Click Create RE Chain", "ZH": "一键创建 RE Chain"},
@@ -351,6 +369,7 @@ STRINGS = {
     "ui.main_panel.mmd_target_game_label":        {"EN": "Target Game",        "ZH": "目标游戏"},
     "ui.main_panel.mmd_re4_character_label":      {"EN": "Character",          "ZH": "目标角色"},
     "ui.main_panel.mmd_sync_seams_label":         {"EN": "Sync Seam Vertices", "ZH": "缝合重合顶点"},
+    "ui.main_panel.mmd_interior_falloff_label":   {"EN": "Fade Mouth Interior by Depth", "ZH": "口腔内部按深度衰减"},
     "ui.main_panel.mmd_part_l_upper_eyelid":      {"EN": "L Upper Eyelid",  "ZH": "左眼上眼皮"},
     "ui.main_panel.mmd_part_l_lower_eyelid":      {"EN": "L Lower Eyelid",  "ZH": "左眼下眼皮"},
     "ui.main_panel.mmd_part_r_upper_eyelid":      {"EN": "R Upper Eyelid",  "ZH": "右眼上眼皮"},
@@ -362,6 +381,7 @@ STRINGS = {
     "ui.main_panel.mmd_warn_no_valid_shapekeys":  {"EN": "No valid shape keys found; check the MMD shape key names", "ZH": "未找到任何有效形态键，请检查 MMD 形态键名称"},
     "ui.main_panel.mmd_info_generated":           {"EN": "Generated {n} facial vertex group(s): {parts}", "ZH": "已生成 {n} 个表情顶点组：{parts}"},
     "ui.main_panel.mmd_info_skipped_suffix":      {"EN": "; skipped: {parts}", "ZH": "；跳过：{parts}"},
+    "ui.main_panel.mmd_info_fallback_suffix":     {"EN": "; used fallback shape keys: {keys}", "ZH": "；已改用备用形态键：{keys}"},
 
     # ── MHW_OT_CylindricalFaceNormals / MHW_OT_ResetFaceNormals ──────────────────
     "ui.main_panel.btn_cylindrical_face_normals": {"EN": "Cylindrical Face Normals (Toon)", "ZH": "面法向柱面化 (三渲二)"},
@@ -420,7 +440,6 @@ STRINGS = {
         "EN": "Re-encode the custom normals against the shape-keyed geometry. Blender stores a custom normal relative to a basis derived from the surrounding geometry, so dialling in shape keys leaves the stored bytes untouched but swings the direction they decode to — a few hundred corners on a face can end up tens of degrees out, which is the blotching around the eyes and mouth. This restores the authored directions without re-baking them, so a stylised field is kept exactly as it is",
         "ZH": "按形态键变形后的几何重新编码自定义法向。Blender 存的是法向在「由周围几何推出的基底」里的编码，所以调形态键时存的字节一个没变，解码出来的方向却歪了 —— 一张脸上会有几百个角点偏出几十度，那就是眼周和嘴部糊掉的斑块。此操作只恢复原本的方向，不重算，所以风格化的法向场分毫不动"},
     # ── MHW_OT_TransferNormals ───────────────────────────────────────────────────
-    "ui.main_panel.btn_transfer_normals":         {"EN": "Transfer Normals", "ZH": "转移法向"},
     "ui.main_panel.tn_tip": {
         "EN": "Give the selected meshes a reference mesh's normals. Corners are matched by rest position, not by index: two exports of the same head can carry identical counts in a different vertex and face order, in which case anything index-based silently lines the wrong corners up. The field is read off the reference mesh as it is actually shaded, so its shape keys and modifiers are already in it, and each target then gets it re-encoded against its own shape-keyed geometry. Use this when several expression meshes share one head and should all shade the same way",
         "ZH": "把参考网格的法向给选中的网格。角点是按静止位置匹配的，不是按索引：同一颗头的两次导出可以数量完全相同而顶点、面的顺序不同，这时任何按索引的做法都会静默地把错误的角点对到一起。法向场是按参考网格实际着色的样子读的，所以它的形态键和修改器都已经算在里面；每个目标再按自己的形态键几何重新编码。适用于多个表情网格共用一颗头、应当着色一致的情况"},
@@ -444,7 +463,6 @@ STRINGS = {
         "ZH": "有 {n} 个角点在匹配距离内找不到对应的来源角点，保留了原有法向"},
 
     # ── MHW_OT_SafeApplyTransform ────────────────────────────────────────────────
-    "ui.main_panel.btn_safe_apply_transform":     {"EN": "Safe Apply Base Transform", "ZH": "安全应用基础变换"},
     "ui.main_panel.sat_tip": {
         "EN": "Bake the object's transform into the mesh without losing the custom split normals. Blender stores a custom normal relative to a basis derived from the surrounding geometry, so baking a mirror -- any negative scale axis -- flips that basis and the same stored bytes decode to a different direction: measured on one face mesh, 76% of corners ended up more than 90 degrees out. RE Mesh's exporter bakes the object transform the same way, which is why a mirrored mesh exports with dead normals no matter what the triangulate option is set to. This captures the normals in world space, bakes the transform, and writes them back matched by (polygon, vertex) rather than by corner index",
         "ZH": "把物体变换烘进网格，且不丢自定义拆分法向。Blender 存的是法向在「由周围几何推出的基底」里的编码，所以烘入镜像（任何负缩放轴）会翻转这个基底，同一份字节解码出来就是别的方向：实测一张脸，76% 的角点偏出 90 度以上。RE Mesh 导出器用同样的方式烘物体变换，所以镜像过的网格导出后法向必然全废，跟三角化选项开不开无关。此操作先把法向抓到世界空间，烘完变换再按（面、顶点）而非角点索引写回去"},
@@ -468,6 +486,15 @@ STRINGS = {
         "ZH": "有 {n} 个物体被跳过，因为它们的网格数据与其他物体共用"},
 
     "ui.main_panel.fsk_field_reset":              {"EN": "Reset Target To Current Normals", "ZH": "重设目标为当前法向"},
+    "ui.main_panel.fsk_base_frozen":              {"EN": "Frozen Basis (auto)", "ZH": "冻结基型（自动）"},
+    "ui.main_panel.fsk_base_frozen_desc": {
+        "EN": "Snapshot this mesh's Basis into a hidden 'TK_Basis' shape key the first time this runs, "
+              "then always read the authored directions off that snapshot instead of the live Basis. "
+              "Recommended: if Basis itself is what got corrupted, reading it live just re-captures the "
+              "corruption every time, and there is no way back",
+        "ZH": "第一次运行时把本网格的基型快照进一个隐藏的 'TK_Basis' 形态键，之后一律从这份快照读原本的方向，"
+              "不再读实时基型。推荐使用：如果基型本身就是被搞坏的那部分，实时读它只会一次次把坏值重新记下来，"
+              "没法再修回去"},
     "ui.main_panel.fsk_base_self":                {"EN": "Own Basis", "ZH": "自身基型"},
     "ui.main_panel.fsk_base_self_desc": {
         "EN": "Read the authored directions off this mesh's own base shape, which is what its stored normals already decode against",
@@ -488,8 +515,10 @@ STRINGS = {
         "EN": "{obj} has a different topology. The base positions are read corner for corner, so the vertex, face and corner counts all have to match",
         "ZH": "{obj} 的拓扑不同。基型坐标是逐角点对应读的，所以顶点、面、角点数必须全部一致"},
     "ui.main_panel.fsk_err_reference_order": {
-        "EN": "{obj} has the same counts but a different vertex/face order ({n} corners disagree), so its positions describe other corners than this mesh's. Use Transfer Normals, which matches by position instead",
-        "ZH": "{obj} 数量相同但顶点/面的顺序不同（{n} 个角点对不上），它的坐标描述的是别的角点。请改用「转移法向」，那个是按位置匹配的"},
+        "EN": "{obj} has the same counts but a different vertex/face order ({n} corners disagree), so its positions describe other corners than this mesh's. Use \"Transfer Normals Instead\" in this dialog, which matches by position",
+        "ZH": "{obj} 数量相同但顶点/面的顺序不同（{n} 个角点对不上），它的坐标描述的是别的角点。请点本对话框里的「顶点顺序不同：改用转移法向」，那个是按位置匹配的"},
+    "ui.main_panel.fsk_btn_transfer_instead": {
+        "EN": "Order Differs: Transfer Normals Instead", "ZH": "顶点顺序不同：改用转移法向"},
     "ui.main_panel.fsk_warn_reference_transform": {
         "EN": "{obj} has a different rotation or scale. Its base shape is read as-is, so the directions come back in its frame rather than this mesh's",
         "ZH": "{obj} 的旋转或缩放与本物体不同。它的基型是按原样读取的，所以取回的方向处在它的坐标系里，而不是本网格的"},
@@ -527,6 +556,8 @@ STRINGS = {
     "ui.main_panel.sbm_field_clean_suffix": {"EN": "Strip Material .001 Suffix","ZH": "去掉材质名的 .001 后缀"},
     "ui.main_panel.sbm_field_prune_keys":   {"EN": "Prune Dead Shape Keys",     "ZH": "剪掉失效的形态键"},
     "ui.main_panel.sbm_field_prune_groups": {"EN": "Prune Empty Vertex Groups", "ZH": "剪掉空的顶点组"},
+    "ui.main_panel.sbm_field_merge_same_tex": {
+        "EN": "Merge Meshes Sharing a Base Colour Texture", "ZH": "合并使用相同贴图的网格"},
     "ui.main_panel.sbm_no_mesh": {"EN": "No mesh objects selected", "ZH": "没有选中任何网格物体"},
     "ui.main_panel.sbm_done": {
         "EN": "{n} object(s) after the split; pruned {keys} shape key(s) and {groups} vertex group(s)",
@@ -535,18 +566,16 @@ STRINGS = {
     # ── MHW_OT_CreateOutline ─────────────────────────────────────────────────────
     "ui.main_panel.btn_create_outline": {"EN": "Create Outline", "ZH": "一键描边"},
     "ui.main_panel.outline_tip": {
-        "EN": "Create a brand new '<name>_Outline' shell object for each selected mesh (backface-culled "
-              "black material + flipped-normal Solidify on a full duplicate, so vertex groups, shape keys "
-              "and any Armature binding carry over) without touching the source mesh itself. The Solidify "
-              "is auto-applied (same shape-key-safe path as 'Apply Modifiers (Keep Shape Keys)'), so the "
-              "shell ends up as real baked geometry rather than a live modifier. Every run is independent "
-              "— there's no tracking back to the source, so running it again just adds another shell "
-              "instead of replacing the last one",
-        "ZH": "给每个选中网格生成一份全新独立的 “<名字>_Outline” 描边网格（背面剔除黑色材质 + 翻转法线的 "
-              "Solidify，整份复制自源网格，顶点组权重/形态键/骨架绑定等都会带过去），源网格本身不会被改动。"
-              "Solidify 会自动应用（复用“对有形态键网格应用修改器”同一套形态键安全处理），描边网格最终是"
-              "实体几何，不是挂着的活动修改器。每次执行都是独立的——不会记录跟源网格的关联，"
-              "所以再执行一次只是多生成一份，不会替换掉上一份"},
+        "EN": "Create a brand new inverted-hull outline shell for each selected mesh: a full duplicate "
+              "(vertex groups, shape keys and any Armature binding carry over) pushed out along the normal "
+              "by Thickness (times the thickness vertex group's weight), faces pointing inward, with a "
+              "backface-culled black material. Faces weighing 0 are dropped. RE Mesh Editor-named meshes "
+              "get a 'Group_X_Sub_Y__Outline' name that sorts after every existing submesh, so existing "
+              "vertex indices don't change. The source mesh is never touched; every run adds another shell",
+        "ZH": "给每个选中网格生成一份全新的反壳描边网格：整份复制源网格（顶点组权重/形态键/骨架绑定都会带过去），"
+              "沿法线向外推出“厚度”（乘以厚度顶点组的权重），面朝内，配背面剔除的黑色材质；权重为 0 的面会被删掉。"
+              "按 RE Mesh Editor 规则命名的网格会得到 “Group_X_Sub_Y__Outline” 的名字，排在所有原有子网格之后，"
+              "原有顶点序号不变。源网格本身不会被改动；每执行一次就多生成一份"},
     "ui.main_panel.outline_field_vgroup": {"EN": "Thickness Vertex Group", "ZH": "厚度顶点组"},
     "ui.main_panel.outline_field_thickness": {"EN": "Thickness", "ZH": "厚度"},
     "ui.main_panel.outline_field_ignore_collection": {"EN": "Ignore Collection", "ZH": "忽略集合"},
@@ -560,9 +589,10 @@ STRINGS = {
     "ui.main_panel.outline_warn_missing_vgroup_suffix": {
         "EN": "; {n} source(s) have no vertex group by that name, outline thickness is uniform there",
         "ZH": "；其中 {n} 个源网格上没有该名字的顶点组，描边厚度按整网格统一处理"},
-    "ui.main_panel.outline_warn_not_baked_suffix": {
-        "EN": "; {n} shell(s) couldn't be safely auto-applied and were left as a live Solidify modifier",
-        "ZH": "；其中 {n} 份描边网格无法安全自动应用，Solidify 仍以活动修改器的形式保留"},
+    "ui.main_panel.outline_warn_not_last_suffix": {
+        "EN": "; {n} shell(s) couldn't be named to sort after every existing submesh of their group, "
+              "rename them before export or existing vertex indices will shift",
+        "ZH": "；其中 {n} 份描边网格无法命名成排在同组所有原有子网格之后，导出前请手动改名，否则原有顶点序号会变"},
 
     # ── MHW_OT_MergeRenamedVGroups ───────────────────────────────────────────────
     "ui.main_panel.merge_vg_done": {"EN": "Merge complete: {merged} vertex group(s) merged, {skipped} skipped (matches a real bone)",

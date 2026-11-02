@@ -14,6 +14,10 @@ STRINGS = {
     # ══════════════════════════════════════════════════════════════════════
 
     # ── RE9_OT_AutoCreateChains ─────────────────────────────────────────────
+    "re9.operators.sync_no_bones": {"EN": "No bones selected", "ZH": "没有选中骨骼"},
+    "re9.operators.sync_descendant": {
+        "EN": "'{bone}' is a descendant of '{parent}'. Select only the first bone of each chain",
+        "ZH": "“{bone}”是“{parent}”的子孙骨。每条链只选第一根骨骼"},
     "re9.operators.auto_create_chains_desc": {
         "EN": "One-click create an RE Chain (RE9 defaults to the .chain2 format)",
         "ZH": "一键创建 RE Chain（RE9 默认 .chain2 格式）。"},
@@ -77,36 +81,6 @@ STRINGS = {
               "itself named natives, its parent is used automatically",
         "ZH": "选择 RE9 Mod 根目录（natives 的上级）。若选中的文件夹本身名为 natives，自动取其上级"},
 
-    # ══════════════════════════════════════════════════════════════════════
-    # games/re9/batch_export_ui.py
-    # ══════════════════════════════════════════════════════════════════════
-
-    "re9.batch_export_ui.will_align_native_skeleton": {
-        "EN": "Will align to native skeleton: {name}", "ZH": "将对齐原生骨架: {name}"},
-    "re9.batch_export_ui.native_skeleton_not_found": {
-        "EN": "Native skeleton file not found; the selected armature will be exported directly",
-        "ZH": "未找到原生骨架文件，将直接导出选中骨架"},
-    "re9.batch_export_ui.copy_bindings": {"EN": "Copy", "ZH": "复制"},
-    "re9.batch_export_ui.copy_bindings_desc": {
-        "EN": "Copy this group's bound collections (Mesh/MDF2/SFUR/CHAIN2/CLSP), so they "
-              "can be pasted onto another group",
-        "ZH": "复制这个部位当前绑定的集合（Mesh/MDF2/SFUR/CHAIN2/CLSP），供粘贴到别的部位",
-    },
-    "re9.batch_export_ui.paste_bindings": {"EN": "Paste", "ZH": "粘贴"},
-    "re9.batch_export_ui.paste_bindings_desc": {
-        "EN": "Apply the copied bindings to this group -- only for the slots this group "
-              "actually has; anything else is skipped",
-        "ZH": "把复制的绑定应用到这个部位——只应用这个部位实际存在的槽位，其余的跳过",
-    },
-    "re9.batch_export_ui.copy_done": {
-        "EN": "Copied {n} binding(s) from {group}", "ZH": "已从 {group} 复制 {n} 项绑定"},
-    "re9.batch_export_ui.copy_nothing": {
-        "EN": "Nothing bound in {group} to copy", "ZH": "{group} 没有已绑定的内容可复制"},
-    "re9.batch_export_ui.paste_done": {
-        "EN": "Pasted {n} binding(s) onto {group}", "ZH": "已向 {group} 粘贴 {n} 项绑定"},
-    "re9.batch_export_ui.paste_nothing": {
-        "EN": "Nothing on the clipboard matches a slot {group} has",
-        "ZH": "剪贴板里的内容没有一项对得上 {group} 现有的槽位"},
 
     # ══════════════════════════════════════════════════════════════════════
     # games/re9/mdf_tex_processor_ui.py
@@ -165,10 +139,9 @@ STRINGS = {
         "EN": "AlphaCavityOcclusionTranslucentMap — R alpha (real opacity), B AO",
         "ZH": "AlphaCavityOcclusionTranslucentMap — R 透明度 (真正的不透明度), B 环境光遮蔽"},
     "re9.shader_defs.ssscot": {
-        "EN": "SSSCavityOcclusionTranslucentMap — R is a fixed constant (no "
-              "opacity data), B AO",
-        "ZH": "SSSCavityOcclusionTranslucentMap — R 为固定常量 (无不透明度数据), "
-              "B 环境光遮蔽"},
+        "EN": "SSSCavityOcclusionTranslucentMap — R SSS (no opacity data), G cavity, B AO",
+        "ZH": "SSSCavityOcclusionTranslucentMap — R 次表面散射 (无不透明度数据), "
+              "G 缝隙遮蔽, B 环境光遮蔽"},
     "re9.shader_defs.nrcm": {
         "EN": "NormalRoughnessCavityMap — R roughness, G/A hemi-octahedral normal, "
               "B a constant (RE9 writes no Cavity data)",
@@ -339,11 +312,11 @@ STRINGS = {
               "Scattering) -- this value round-trips to the exporter, the "
               "preview does not show it. Skin has no translucency channel at "
               "all, so this panel value has nothing to combine with there",
-        "ZH": "半透 (Translucency)。标准/毛发由 "
+        "ZH": "透光 (Translucency)。标准/毛发由 "
               "AlphaCavityOcclusionTranslucentMap.A 真实携带，自发光由 "
               "AlphaTranslucentOcclusionSSSMap.G 真实携带，但 Principled 没有对应"
               "输入 (不等同于次表面散射)——此值仅在导出时生效，预览不会显示。皮肤"
-              "完全没有半透通道，此项在皮肤 spec 上没有对应槽位可以结合"},
+              "完全没有透光通道，此项在皮肤 spec 上没有对应槽位可以结合"},
     "re9.shader_defs.pbr_emission": {
         "EN": "Emission colour. Added to EmissiveMap on the Emissive spec; "
               "Standard/Skin/Hair have no emissive slot, so this panel value "

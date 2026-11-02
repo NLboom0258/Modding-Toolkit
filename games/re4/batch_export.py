@@ -1,12 +1,25 @@
 import bpy
-import json
 import os
 import shutil
 
 from ...core.i18n import T
+from ...core import optional_editors
+from ...core.scheme_batch_export import unlocked_slots
+
+#: What "Ignore Slot Limits" can add to an entry (core/scheme_batch_export.unlocked_slots).
+UNLOCK_EXTS = {"chain": "chain.53", "jcns": "jcns.22", "gpuc": "gpuc.221108868"}
+
+
+def ignore_slot_limits(scene):
+    settings = getattr(scene, "mhw_suite_settings", None)
+    return bool(getattr(settings, "re4_ignore_slot_limits", False))
 from ...core.re_mesh_compat import call_re_mesh_op, re_mesh_op_available
 from ...core import console_export
-from ...core import export_prep
+from ...core import export_autofix
+from ...core import mod_root
+from ...core.export_verify import checked
+from ...core import json_cache
+from ...core import shapekey_export
 
 
 def _get_export_schemes_dir():
@@ -33,11 +46,7 @@ def get_schemes_callback(self, context):
 
 
 def _load_scheme(filename):
-    filepath = os.path.join(_get_export_schemes_dir(), filename)
-    if not os.path.exists(filepath):
-        return None
-    with open(filepath, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    return json_cache.load(os.path.join(_get_export_schemes_dir(), filename))
 
 
 def _make_key(character_id, entry_id, suffix):
@@ -123,6 +132,60 @@ def resolve_mesh_mdf2(scene, character_id, group, entry, use_simplified):
     return mesh_col, mdf2_col
 
 
+def bound_pairs(scene, scheme, use_simplified):
+    """``[(group name, mdf_col, mesh_col)]`` for every distinct mesh / mdf2
+    pair this batch exports -- what auto-fix runs over.  Wider than the check's
+    pairs: an entry with only a mesh bound still gets its weights cleaned.
+    Reads through ``resolve_mesh_mdf2`` like the export loop, so both modes
+    (and simplified mode's shared "empty" binding) resolve the same way."""
+    character_id = scheme["character_id"]
+    out, seen = [], set()
+    for group in scheme.get("groups", []):
+        for entry in group["entries"]:
+            mesh_name, mdf_name = resolve_mesh_mdf2(scene, character_id, group, entry, use_simplified)
+            mesh = bpy.data.collections.get(mesh_name) if mesh_name else None
+            mdf = bpy.data.collections.get(mdf_name) if mdf_name else None
+            key = (mdf.name if mdf else None, mesh.name if mesh else None)
+            if (mdf is None and mesh is None) or key in seen:
+                continue
+            seen.add(key)
+            out.append((group["name"], mdf, mesh))
+    return out
+
+
+#: Scheme character -> the model SKS files RE4 bindings under: its actor
+#: (RE4R/Adapter.lua actor_of_path -- cha000 is Leon, cha200/800/801/803 Ada).
+#: SKS drives no other character's face.
+SKS_ACTORS = {"re4_leon": "leon", "re4_ada": "ada"}
+
+
+def part_id(mesh_path):
+    """SKS's RE4 part ID: the mesh file name without .mesh ("cha000_10")."""
+    return os.path.basename(mesh_path.replace("\\", "/")).split(".mesh", 1)[0]
+
+
+def sks_face_part(scene, scheme, use_simplified):
+    """The exported part with the most shape keys, slot 1x (the head) on a tie,
+    then scheme order; None when no exported mesh has any.  SKS saves a sculpt
+    preset against that part (API.lua primary_part), so the export does too."""
+    best, best_rank = None, None
+    character_id = scheme["character_id"]
+    for group in scheme.get("groups", []):
+        for entry in group["entries"]:
+            if not entry.get("mesh"):
+                continue
+            mesh_name, _mdf = resolve_mesh_mdf2(scene, character_id, group, entry, use_simplified)
+            col = bpy.data.collections.get(mesh_name) if mesh_name else None
+            n = len(shapekey_export.part_names(col)) if col is not None else 0
+            if not n:
+                continue
+            pid = part_id(entry["mesh"])
+            rank = (n, pid.rsplit("_", 1)[-1].startswith("1"))
+            if best_rank is None or rank > best_rank:
+                best, best_rank = pid, rank
+    return best
+
+
 MESH_SETTINGS = {
     "exportAllLODs": True,
     "autoSolveRepeatedUVs": True,
@@ -136,19 +199,22 @@ MESH_SETTINGS = {
 
 def _do_export_mesh(filepath, collection_name):
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
-    call_re_mesh_op('exportfile', filepath=filepath, targetCollection=collection_name, **MESH_SETTINGS)
+    # Shape-key mode and key filter of the batch export running, if any.
+    with shapekey_export.filtered(collection_name):
+        checked(filepath, lambda: call_re_mesh_op('exportfile', filepath=filepath, targetCollection=collection_name,
+                                                  **MESH_SETTINGS, **shapekey_export.export_kwargs()))
 
 def _do_export_mdf2(filepath, collection_name):
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
-    bpy.ops.re_mdf.exportfile(filepath=filepath, targetCollection=collection_name)
+    checked(filepath, lambda: bpy.ops.re_mdf.exportfile(filepath=filepath, targetCollection=collection_name))
 
 def _do_export_chain(filepath, collection_name):
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
-    bpy.ops.re_chain.exportfile(filepath=filepath, targetCollection=collection_name)
+    checked(filepath, lambda: bpy.ops.re_chain.exportfile(filepath=filepath, targetCollection=collection_name))
 
 def _do_export_fbxskel(filepath, armature_name):
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
-    bpy.ops.re_fbxskel.exportfile(filepath=filepath, targetArmature=armature_name)
+    checked(filepath, lambda: bpy.ops.re_fbxskel.exportfile(filepath=filepath, targetArmature=armature_name))
 
 
 def _get_armature_from_collection(col_name):
@@ -198,18 +264,6 @@ class RE4_OT_BatchExport(bpy.types.Operator):
     def execute(self, context):
         show_console = console_export.get_preferences(context).show_console_on_batch_export
         with console_export.kept_open_for_export(show_console):
-            return self._execute_with_triangulation(context)
-
-    def _execute_with_triangulation(self, context):
-        # Triangulation rides on the modifier stack: RE Mesh Editor exports
-        # evaluated geometry, so the mesh data is never touched and the
-        # modifiers come off again even if the export raises.
-        settings = context.scene.mhw_suite_settings
-        if not settings.re4_triangulate_face:
-            return self._run_export(context)
-        with export_prep.triangulated_for_export(context.scene.objects, 're4') as touched:
-            if touched:
-                print("[RE4] triangulating {n} face mesh(es) for export".format(n=len(touched)))
             return self._run_export(context)
 
     def _run_export(self, context):
@@ -220,7 +274,7 @@ class RE4_OT_BatchExport(bpy.types.Operator):
             self.report({'ERROR'}, "RE Mesh Editor not installed")
             return {'CANCELLED'}
 
-        natives_root = scene.get("re4_natives_root", "")
+        natives_root = mod_root.read(scene, "re4_natives_root")
         if not natives_root or not os.path.isdir(natives_root):
             self.report({'ERROR'}, "Set natives root directory first")
             return {'CANCELLED'}
@@ -235,6 +289,45 @@ class RE4_OT_BatchExport(bpy.types.Operator):
             self.report({'ERROR'}, f"Failed to load: {scheme_file}")
             return {'CANCELLED'}
 
+        # Auto-fix only after every check above has passed: an export that
+        # cancels must not leave its fixes behind. Persistent fixes first (one
+        # undo step), then the temporary ones wrap the export itself and come
+        # off again even if it raises.
+        pairs = bound_pairs(scene, scheme, scene.get("re4_use_simplified", True))
+        ids = export_autofix.enabled_items(context, 'RE4')
+        done = export_autofix.apply(context, 'RE4', pairs, ids)
+        meshes = [mesh for _g, _mdf, mesh in pairs if mesh is not None]
+        with export_autofix.temporary(context, 'RE4', pairs, ids) as tmp, \
+                shapekey_export.session(context, 'RE4', meshes, natives_root) as sk:
+            result = self._export(context, scene, settings, natives_root, scheme)
+            self._write_sks(sk, scene, scheme, natives_root)
+        fixed = {k: v for k, v in list(done.items()) + list(tmp.items()) if v}
+        if fixed:
+            print("[RE4] auto-fix: " + ", ".join(f"{k}={v}" for k, v in fixed.items()))
+            self.report({'INFO'}, T("core.pre_export_check_ops.autofix_done").format(
+                n=sum(fixed.values())))
+        return result
+
+    def _write_sks(self, sk, scene, scheme, natives_root):
+        """SKS preset and names table.  The model is the actor and so is its
+        binding's part (Adapter.lua model_of / representative_of: "leon" ->
+        mods/leon/leon.json), which SKS falls back to for every part of that
+        actor; the sculpt preset targets the face part."""
+        if not shapekey_export.writes_sks_files(sk):
+            return
+        actor = SKS_ACTORS.get(scheme["character_id"])
+        if actor is None:
+            print(f"[RE4] SKS: no actor for {scheme['character_id']}, preset and names skipped")
+            self.report({'INFO'}, T("core.shapekey_export.preset_no_model").format(
+                who=scheme["character_id"]))
+            return
+        face = sks_face_part(scene, scheme, scene.get("re4_use_simplified", True))
+        paths, msg = shapekey_export.write_presets(
+            sk, natives_root, actor, actor, face or actor, target_part=face)
+        if msg:
+            self.report({'INFO'}, T(msg).format(n=len(paths)))
+
+    def _export(self, context, scene, settings, natives_root, scheme):
         character_id = scheme["character_id"]
         base_path = scheme["base_path"].replace("\\", "/")
         use_simplified = scene.get("re4_use_simplified", True)
@@ -389,6 +482,25 @@ class RE4_OT_BatchExport(bpy.types.Operator):
                         elif chain_en and use_blank:
                             try_blank("chain", make_full(entry["chain"], grp_bp), f"CHAIN {entry_id}")
 
+                    # jcns / gpuc the vanilla part ships, while their editor is
+                    # installed (core/scheme_batch_export.py does the same).  RE4's
+                    # gpuc is Keep Structure only: a cloth imported from its file.
+                    for slot, path in optional_editors.entry_slots("re4", entry.get("mesh")):
+                        col = _get_binding(scene, character_id, entry_id, slot)
+                        if col and _get_enabled(scene, character_id, entry_id, slot):
+                            try_export(optional_editors.EXPORTERS[optional_editors.slot_type(slot)],
+                                       os.path.join(natives_root, "natives", path.replace("/", os.sep)),
+                                       col, f"{optional_editors.slot_label(slot)} {entry_id}")
+
+                    # "Ignore Slot Limits": the slots the vanilla part lacks.
+                    if ignore_slot_limits(scene):
+                        for slot, rel in unlocked_slots("re4", entry, UNLOCK_EXTS):
+                            col = _get_binding(scene, character_id, entry_id, slot)
+                            if col and _get_enabled(scene, character_id, entry_id, slot):
+                                func = _do_export_chain if slot == "chain" else optional_editors.EXPORTERS[slot]
+                                try_export(func, make_full(rel, grp_bp), col,
+                                           f"{optional_editors.slot_label(slot)} {entry_id}")
+
         # --- FBXSKEL（在 mesh 之后执行，借助 mesh 导出对骨架唯一性的校验）---
         if fbxskel_paths and fbx_enabled:
             if use_body_arm:
@@ -455,45 +567,57 @@ class RE4_OT_BatchExport(bpy.types.Operator):
                             else:
                                 prev_active = context.view_layer.objects.active
                                 prev_sel = [o for o in context.selected_objects]
-                                prev_hidden = user_arm_obj.hide_viewport
                                 for o in prev_sel:
                                     o.select_set(False)
-                                user_arm_obj.hide_viewport = False
-                                context.view_layer.objects.active = user_arm_obj
-                                user_arm_obj.select_set(True)
-                                bpy.ops.object.duplicate()
-                                arm_copy = context.active_object
-                                user_arm_obj.hide_viewport = prev_hidden
-                                user_arm_obj.select_set(False)
-                                if arm_copy is None:
-                                    self.report({'WARNING'}, T("re4.batch_export.fakebone_duplicate_failed"))
+                                # A hand copy rather than bpy.ops.object.duplicate(): that
+                                # works on the selection, and select_set() silently does
+                                # nothing on an armature hidden with H, unselectable, or in a
+                                # hidden collection -- the copy then failed (and before that
+                                # guard existed, the user's own rig was edited and deleted).
+                                # Linked to the scene root, so its visibility is its own.
+                                arm_copy = user_arm_obj.copy()
+                                arm_copy.data = user_arm_obj.data.copy()
+                                copy_data = arm_copy.data
+                                context.scene.collection.objects.link(arm_copy)
+                                arm_copy.hide_viewport = False
+                                arm_copy.hide_select = False
+                                arm_copy.hide_set(False)
+                                context.view_layer.objects.active = arm_copy
+                                arm_copy.select_set(True)
+                                try:
+                                    do_fakebone(context, arm_copy, native_path)
+                                    for fbxskel_path in fbxskel_paths:
+                                        full = os.path.join(natives_root, "natives", "STM", fbxskel_path.replace("/", os.sep))
+                                        label = T("re4.batch_export.label_fakebone")
+                                        try_export(_do_export_fbxskel, full, arm_copy.name, f"{label} {os.path.basename(fbxskel_path)}")
+                                except Exception as err:
+                                    print(f"[RE4] FAILED {T('re4.batch_export.label_fakebone')}: {err}")
                                     fail_count += 1
-                                else:
-                                    try:
-                                        do_fakebone(context, arm_copy, native_path)
-                                        for fbxskel_path in fbxskel_paths:
-                                            full = os.path.join(natives_root, "natives", "STM", fbxskel_path.replace("/", os.sep))
-                                            label = T("re4.batch_export.label_fakebone")
-                                            try_export(_do_export_fbxskel, full, arm_copy.name, f"{label} {os.path.basename(fbxskel_path)}")
-                                    except Exception as err:
-                                        print(f"[RE4] FAILED {T('re4.batch_export.label_fakebone')}: {err}")
-                                        fail_count += 1
-                                    finally:
-                                        if arm_copy is not None and arm_copy.name in bpy.data.objects:
-                                            bpy.data.objects.remove(arm_copy, do_unlink=True)
-                                        context.view_layer.objects.active = prev_active
-                                        for o in prev_sel:
-                                            if o.name in bpy.data.objects:
-                                                o.select_set(True)
+                                finally:
+                                    if context.mode != 'OBJECT':
+                                        try:
+                                            bpy.ops.object.mode_set(mode='OBJECT')
+                                        except RuntimeError:
+                                            pass
+                                    if arm_copy.name in bpy.data.objects:
+                                        bpy.data.objects.remove(arm_copy, do_unlink=True)
+                                    if copy_data.users == 0:
+                                        bpy.data.armatures.remove(copy_data)
+                                    context.view_layer.objects.active = prev_active
+                                    for o in prev_sel:
+                                        if o.name in bpy.data.objects:
+                                            o.select_set(True)
                 else:
                     for fbxskel_path in fbxskel_paths:
                         full = os.path.join(natives_root, "natives", "STM", fbxskel_path.replace("/", os.sep))
                         try_export(_do_export_fbxskel, full, fbx_arm, f"FBXSKEL {os.path.basename(fbxskel_path)}")
 
         if fail_count > 0:
-            self.report({'WARNING'}, f"Done: {export_count} exported, {fail_count} failed, {skip_count} skipped")
+            self.report({'WARNING'}, T("core.export.done_with_fail").format(
+                exported=export_count, failed=fail_count, skipped=skip_count))
         else:
-            self.report({'INFO'}, f"Done: {export_count} exported, {skip_count} skipped")
+            self.report({'INFO'}, T("core.export.done").format(
+                exported=export_count, skipped=skip_count))
         return {'FINISHED'}
 
 
@@ -512,11 +636,16 @@ class RE4_OT_SetNativesRoot(bpy.types.Operator):
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
     def execute(self, context):
-        path = self.directory.rstrip("/\\")
-        if os.path.basename(path).lower() == "natives":
-            path = os.path.dirname(path)
+        # A root picked one level too deep (…/natives, …/natives/STM) or one
+        # too shallow (the folder holding the mod) is corrected here; see
+        # core/mod_root.py for the rules.
+        mod_root.clear_cache()
+        path, status = mod_root.normalize(self.directory.rstrip("/\\"))
         context.scene["re4_natives_root"] = path
-        self.report({'INFO'}, f"RE4 Mod root: {path}")
+        if status == mod_root.AMBIGUOUS:
+            self.report({'WARNING'}, T("core.mod_root.ambiguous"))
+        else:
+            self.report({'INFO'}, f"RE4 Mod root: {path}")
         return {'FINISHED'}
 
 

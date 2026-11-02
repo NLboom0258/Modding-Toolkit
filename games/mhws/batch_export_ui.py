@@ -1,21 +1,30 @@
 import bpy
 from .batch_export import (
-    MHWS_PARTS, DEFAULT_FILE_TYPES,
-    _load_scheme, _resolve_part_file_types, _canonical_order_file_types,
+    MHWS_PARTS,
+    _load_scheme, _canonical_order_file_types,
     _PART_LABEL_KEYS,
-    get_binding, set_binding,
-    get_mhws_armor_callback,
+    get_binding, set_binding, bound_pairs, physics_context,
+    get_mhws_armor_callback, part_slots, vanilla_slots, ignore_slot_limits,
 )
 from ...core.i18n import T
 from ...core import pre_export_check_ops as pec
+from ...core import export_autofix
+from ...core import shapekey_export
+from ...core import mod_root
+from ...core import optional_editors
 
 EXPORTER_WINDOW_WIDTH = 580
+#: Added per column beyond the five (mesh mdf2 chain2 clsp gpuc) the window was
+#: sized for -- i.e. for the jcns column.
+OPTIONAL_COLUMN_WIDTH = 110
 
 _FILETYPE_ICONS = {
     "mesh":   'OUTLINER_OB_MESH',
     "mdf2":   'MATERIAL',
     "chain2": 'LINKED',
     "clsp":   'PHYSICS',
+    "jcns":   'CONSTRAINT_BONE',
+    "gpuc":   'MOD_CLOTH',
 }
 
 _FILETYPE_LABELS = {
@@ -24,6 +33,7 @@ _FILETYPE_LABELS = {
     "chain2": "CHAIN2",
     "clsp":   "CLSP",
     "gpuc":   "GPUC",
+    "jcns":   "JCNS",
 }
 
 
@@ -47,8 +57,10 @@ def _cached(key, items):
 def _get_filtered_collections(filetype):
     result = []
     type_map  = {"mesh": "RE_MESH_COLLECTION", "mdf2": "RE_MDF_COLLECTION",
-                 "chain2": "RE_CHAIN_COLLECTION", "clsp": "RE_CHAIN_COLLECTION"}
-    sfx_map   = {"mesh": ".mesh", "mdf2": ".mdf2", "chain2": ".chain2", "clsp": ".clsp"}
+                 "chain2": "RE_CHAIN_COLLECTION", "clsp": "RE_CHAIN_COLLECTION",
+                 **{ft: optional_editors.collection_type(ft) for ft in optional_editors.EDITORS}}
+    sfx_map   = {"mesh": ".mesh", "mdf2": ".mdf2", "chain2": ".chain2", "clsp": ".clsp",
+                 "jcns": ".jcns", "gpuc": ".gpuc"}
     col_type  = type_map.get(filetype, "")
     name_sfx  = sfx_map.get(filetype, "")
     for c in bpy.data.collections:
@@ -68,6 +80,25 @@ def _get_filtered_collections(filetype):
     return _cached(f"mhws_collection_{filetype}", result)
 
 
+def _slot_table(context):
+    """``(armor_set, active_parts, {part: slots}, columns)`` for the armor and
+    variant picked in the dialog; the columns are the file types any part has."""
+    settings = context.scene.mhw_suite_settings
+    scheme_file = settings.mhws_armor_scheme
+    scheme = _load_scheme(scheme_file) if scheme_file and scheme_file != 'NONE' else None
+    armor_set = next((a for a in scheme.get("armor_sets", [])
+                      if a["id"] == settings.mhws_selected_armor), None) if scheme else None
+    parts_mask = armor_set.get("parts_mask", 0b11111) if armor_set else 0b11111
+    active_parts = [(pid, pname) for pid, pname in MHWS_PARTS
+                    if parts_mask & (1 << (int(pid) - 1))]
+    unlocked = ignore_slot_limits(context.scene)
+    per_part = {pid: part_slots(armor_set, settings.mhws_armor_variant, pid, unlocked)
+                for pid, _name in active_parts}
+    columns = _canonical_order_file_types(
+        {optional_editors.slot_type(sl) for slots in per_part.values() for sl in slots})
+    return armor_set, active_parts, per_part, columns
+
+
 # ── Pick Collection ────────────────────────────────────────────
 
 class MHWS_OT_PickCollection(bpy.types.Operator):
@@ -82,7 +113,7 @@ class MHWS_OT_PickCollection(bpy.types.Operator):
     filetype:  bpy.props.StringProperty()
     collection_name: bpy.props.EnumProperty(
         name="Collection",
-        items=lambda self, ctx: _get_filtered_collections(self.filetype)
+        items=lambda self, ctx: _get_filtered_collections(optional_editors.slot_type(self.filetype))
     )
 
     def invoke(self, context, event):
@@ -178,7 +209,9 @@ class MHWS_OT_BatchExportDialog(bpy.types.Operator):
         return T("mhws.batch_export_ui.batch_export_dialog_desc")
 
     def invoke(self, context, event):
-        return context.window_manager.invoke_props_dialog(self, width=EXPORTER_WINDOW_WIDTH)
+        _armor_set, _parts, _slots, columns = _slot_table(context)
+        width = EXPORTER_WINDOW_WIDTH + OPTIONAL_COLUMN_WIDTH * max(0, len(columns) - 5)
+        return context.window_manager.invoke_props_dialog(self, width=width)
 
     def draw(self, context):
         layout = self.layout
@@ -195,7 +228,7 @@ class MHWS_OT_BatchExportDialog(bpy.types.Operator):
                      icon='DOWNARROW_HLT')
 
         # ── Natives Root ──
-        natives_root = scene.get("mhws_natives_root", "")
+        natives_root = mod_root.read(scene, "mhws_natives_root")
         row = layout.row(align=True)
         row.operator("mhws.set_natives_root", text="Mod Root", icon='FILE_FOLDER')
         if natives_root:
@@ -213,31 +246,7 @@ class MHWS_OT_BatchExportDialog(bpy.types.Operator):
             layout.label(text=T("mhws.batch_export_ui.select_armor_to_configure"), icon='INFO')
             return
 
-        # Get armor_set data
-        scheme_file = settings.mhws_armor_scheme
-        scheme = _load_scheme(scheme_file) if scheme_file and scheme_file != 'NONE' else None
-        if scheme:
-            armor_set = next(
-                (a for a in scheme.get("armor_sets", []) if a["id"] == armor_id), None
-            )
-        else:
-            armor_set = None
-
-        parts_mask = armor_set.get("parts_mask", 0b11111) if armor_set else 0b11111
-        active_parts = [(pid, pname) for pid, pname in MHWS_PARTS
-                        if parts_mask & (1 << (int(pid) - 1))]
-
-        # Compute per-part file types and the union across all parts
-        per_part_fts = {}
-        all_file_types = []
-        for part_id, part_name in active_parts:
-            fts = _canonical_order_file_types(
-                _resolve_part_file_types(armor_set, part_id)) if armor_set else DEFAULT_FILE_TYPES
-            per_part_fts[part_id] = fts
-            for ft in fts:
-                if ft not in all_file_types:
-                    all_file_types.append(ft)
-        all_file_types = _canonical_order_file_types(all_file_types)
+        armor_set, active_parts, per_part_slots, all_file_types = _slot_table(context)
 
         layout.separator()
 
@@ -251,61 +260,119 @@ class MHWS_OT_BatchExportDialog(bpy.types.Operator):
         for part_id, part_name in active_parts:
             row = layout.row(align=False)
             row.label(text=f"{part_id}  {T(_PART_LABEL_KEYS.get(part_id, part_name))}")
-            part_fts = per_part_fts[part_id]
+            part_slots_ = per_part_slots[part_id]
+            vanilla = vanilla_slots(armor_set, variant, part_id)
             for ft in all_file_types:
-                sub = row.row(align=True)
-                if ft not in part_fts:
+                slots = [sl for sl in part_slots_ if optional_editors.slot_type(sl) == ft]
+                if not slots:
                     # This file type does not apply to this part
-                    sub.label(text="")
+                    row.row(align=True).label(text="")
                     continue
-
-                if ft == "gpuc":
-                    # gpuc is always blank-copied, no collection binding
-                    sub.label(text="AUTO", icon='FILE_BLANK')
-                    continue
-
-                cur = get_binding(scene, armor_id, variant, part_id, ft)
-                op = sub.operator(
-                    "mhws.pick_collection",
-                    text=cur if cur else "—",
-                    icon='DOWNARROW_HLT' if not cur else _FILETYPE_ICONS[ft]
-                )
-                op.armor_id = armor_id
-                op.variant  = variant
-                op.part     = part_id
-                op.filetype = ft
-                if cur:
-                    op_c = sub.operator("mhws.clear_binding", text="", icon='X')
-                    op_c.armor_id = armor_id
-                    op_c.variant  = variant
-                    op_c.part     = part_id
-                    op_c.filetype = ft
+                # A part can ship several jcns: one picker each, stacked in the cell.
+                cell = row.column(align=True) if len(slots) > 1 else row
+                for slot in slots:
+                    self._draw_slot(cell.row(align=True), scene, armor_id, variant, part_id,
+                                    slot, slot in vanilla)
 
         layout.separator()
         row = layout.row(align=True)
         row.prop(settings, "mhws_use_blank_export", text=T("ui.prop.use_blank_export"), icon='FILE_BLANK')
-        row.prop(settings, "mhws_cleanup_before_export", text=T("ui.prop.cleanup_before_export"), icon='BRUSH_DATA')
-        row.prop(settings, "mhws_triangulate_face", text=T("ui.prop.triangulate_face"), icon='MOD_TRIANGULATE')
+        row.prop(settings, "mhws_ignore_slot_limits", text=T("ui.prop.ignore_slot_limits"),
+                 icon='UNLOCKED')
+        export_autofix.draw_toggle(row, settings, 'MHWS')
+        shapekey_export.draw(layout, scene, 'MHWS',
+                             [m for _p, _d, m in bound_pairs(scene, armor_id, variant) if m is not None], natives_root)
 
-        self._draw_bonesystem(layout, settings)
+        self._draw_body_reshape(layout, settings, scene, armor_id, variant)
 
         pairs = _gather_check_pairs(scene, armor_id, variant, active_parts)
-        pec.draw_inline_summary(self, layout, context, 'MHWS', pairs, natives_root)
+        hints = {}
+        vdata = (armor_set or {}).get("variants", {}).get(variant) or {}
+        base = vdata.get("base_path", "").replace("\\", "/")
+        if base.lower().startswith("natives/stm/art/"):
+            hints['tex_base_hint'] = base[len("natives/STM/Art/"):]
+        pec.draw_inline_summary(self, layout, context, 'MHWS', pairs, natives_root,
+                                autofix_pairs=bound_pairs(scene, armor_id, variant),
+                                hints=hints,
+                                physics=physics_context(scene, armor_id, variant, armor_set))
 
-    def _draw_bonesystem(self, layout, settings):
+    @staticmethod
+    def _draw_slot(sub, scene, armor_id, variant, part_id, slot, vanilla):
+        ft = optional_editors.slot_type(slot)
+        if ft == "gpuc" and not optional_editors.available("gpuc"):
+            # gpuc is always blank-copied, no collection binding
+            sub.label(text="AUTO", icon='FILE_BLANK')
+            return
+        cur = get_binding(scene, armor_id, variant, part_id, slot)
+        # An unbound vanilla gpuc is still blank-copied, as without the editor.
+        unbound = "AUTO" if ft == "gpuc" and vanilla else "—"
+        suffix = optional_editors.slot_suffix(slot)
+        text = cur if cur else unbound
+        if suffix:
+            text = f"{suffix}  {text}"
+        op = sub.operator(
+            "mhws.pick_collection",
+            text=text,
+            icon='DOWNARROW_HLT' if not cur else _FILETYPE_ICONS[ft]
+        )
+        op.armor_id = armor_id
+        op.variant  = variant
+        op.part     = part_id
+        op.filetype = slot
+        if cur:
+            op_c = sub.operator("mhws.clear_binding", text="", icon='X')
+            op_c.armor_id = armor_id
+            op_c.variant  = variant
+            op_c.part     = part_id
+            op_c.filetype = slot
+
+    def _draw_body_reshape(self, layout, settings, scene, armor_id, variant):
+        """Bonesystem and the Wilds lua bone system side by side: they are two
+        alternative ways to reshape the body, at most one on (the props' update
+        callbacks switch the other off), so one box shows the choice and then
+        the settings of whichever is on."""
         layout.separator()
         box = layout.box()
         row = box.row(align=True)
         row.prop(settings, "mhws_use_bonesystem",
                  text=T("mhws.batch_export_ui.use_bonesystem_label"), icon='ARMATURE_DATA')
-        if not settings.mhws_use_bonesystem:
-            return
+        row.prop(settings, "mhws_use_lua_bone_system",
+                 text=T("mhws.batch_export_ui.use_lua_bone_system_label"), icon='ARMATURE_DATA')
+        if settings.mhws_use_bonesystem:
+            self._draw_bonesystem(box, settings)
+        elif settings.mhws_use_lua_bone_system:
+            self._draw_lua_bone_system(box, settings, scene, armor_id, variant)
 
+    def _draw_bonesystem(self, box, settings):
         col = box.column(align=False)
         col.prop(settings, "mhws_bs_armature", text=T("mhws.batch_export_ui.armature_label"))
         name_row = col.row(align=True)
         name_row.prop(settings, "mhws_fbxskel_name", text=T("mhws.batch_export_ui.fbxskel_name_label"))
         name_row.operator("mhws.bonesystem_settings", text="", icon='PREFERENCES')
+
+    def _draw_lua_bone_system(self, box, settings, scene, armor_id, variant):
+        box.prop(settings, "mhws_bs_armature", text=T("mhws.batch_export_ui.armature_label"))
+
+        head_row = box.row(align=False)
+        head_row.label(text=T("mhws.batch_export_ui.lua_bone_head_label"))
+        for ft in ("mesh", "mdf2"):
+            sub = head_row.row(align=True)
+            cur = get_binding(scene, armor_id, variant, "head", ft)
+            op = sub.operator(
+                "mhws.pick_collection",
+                text=cur if cur else "—",
+                icon='DOWNARROW_HLT' if not cur else _FILETYPE_ICONS[ft]
+            )
+            op.armor_id = armor_id
+            op.variant  = variant
+            op.part     = "head"
+            op.filetype = ft
+            if cur:
+                op_c = sub.operator("mhws.clear_binding", text="", icon='X')
+                op_c.armor_id = armor_id
+                op_c.variant  = variant
+                op_c.part     = "head"
+                op_c.filetype = ft
 
     def execute(self, context):
         bpy.ops.mhws.batch_export()

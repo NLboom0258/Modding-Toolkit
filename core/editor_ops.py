@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 from .i18n import T
+from .compat import HAS_DIALOG_TITLE
 from . import ui_config, bone_mapper
 from .bone_mapper import BoneMapManager, STANDARD_BONE_NAMES
 
@@ -282,6 +283,7 @@ class MODDER_OT_SaveXPreset(bpy.types.Operator):
         try:
             with open(filepath, 'w', encoding='utf-8') as f:
                 json.dump(final_data, f, indent=2, ensure_ascii=False)
+            _invalidate_mapping_preview()
             self.report({'INFO'}, T("core.editor_ops.preset_saved").format(
                 kind=('X' if is_x else 'Y'), filename=filename))
         except Exception as e:
@@ -337,6 +339,16 @@ class MODDER_OT_LoadXPreset(bpy.types.Operator):
             kind=('X' if is_x else 'Y'), name=display_name, n=loaded_count))
         return {'FINISHED'}
 
+def _invalidate_mapping_preview():
+    """The main panel's "Show Mapping Details" caches the loaded presets by name;
+    after a save or delete it kept showing the old mapping until restart."""
+    try:
+        from ..ui import main_panel
+        main_panel._mapping_detail_cache.clear()
+    except Exception:
+        pass
+
+
 # === 删除预设 ===
 class MODDER_OT_DeleteXPreset(bpy.types.Operator):
     bl_idname = "modder.delete_x_preset"
@@ -348,6 +360,12 @@ class MODDER_OT_DeleteXPreset(bpy.types.Operator):
         return T("core.editor_ops.delete_preset_desc")
 
     def invoke(self, context, event):
+        # Name the file in the confirmation: the dropdown is shared with the
+        # converter, so "Delete Preset?" alone does not say which one goes.
+        name = _get_selected_filename(context, context.scene.mhw_preset_editor.edit_mode == 'X')
+        if HAS_DIALOG_TITLE and name:
+            return context.window_manager.invoke_confirm(
+                self, event, message=T("core.editor_ops.delete_confirm").format(name=name))
         return context.window_manager.invoke_confirm(self, event)
 
     def execute(self, context):
@@ -359,20 +377,27 @@ class MODDER_OT_DeleteXPreset(bpy.types.Operator):
             return {'CANCELLED'}
 
         filepath = os.path.join(_get_preset_dir(is_x), real_filename)
-        if os.path.exists(filepath):
-            try:
-                os.remove(filepath)
-                suite = context.scene.mhw_suite_settings
-                if is_x:
-                    suite.import_preset_enum = "NONE"
-                else:
-                    suite.target_preset_enum = "NONE"
-                self.report({'INFO'}, T("core.editor_ops.deleted").format(name=real_filename))
-            except Exception as e:
-                self.report({'ERROR'}, T("core.editor_ops.delete_failed").format(err=e))
-        else:
+        if not os.path.exists(filepath):
             self.report({'ERROR'}, T("core.editor_ops.file_not_exist"))
-
+            return {'CANCELLED'}
+        try:
+            os.remove(filepath)
+        except Exception as e:
+            self.report({'ERROR'}, T("core.editor_ops.delete_failed").format(err=e))
+            return {'CANCELLED'}
+        # Back to AUTO, which always exists.  This used to assign "NONE", an item
+        # only present when the folder is empty: the assignment raised after the
+        # file was already gone, and the except above reported "Delete failed".
+        suite = context.scene.mhw_suite_settings
+        try:
+            if is_x:
+                suite.import_preset_enum = "AUTO"
+            else:
+                suite.target_preset_enum = "AUTO"
+        except TypeError:
+            pass
+        _invalidate_mapping_preview()
+        self.report({'INFO'}, T("core.editor_ops.deleted").format(name=real_filename))
         return {'FINISHED'}
 
 # === 打开预设文件夹 ===

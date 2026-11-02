@@ -25,18 +25,50 @@ class REChainConfig:
     apply_angle_ramp_iter: int = 4
 
 
-def _patch_chain_cleanup(disable=True):
-    """批量替换 alignChains + setChainBoneColor 为 no-op 或恢复。"""
+def _patch_chain_cleanup():
+    """把所有模块里的 alignChains + setChainBoneColor 换成 no-op，返回原函数。
+
+    返回值必须交给 _restore_chain_cleanup() 还原。早先的版本靠"再调一次本函数"来
+    恢复，但那一遍只是重新收集**当前**属性——也就是 lambda——什么都没还原，于是
+    第一次建链之后 RE Chain Editor / MHW Model Editor 的对齐与骨骼着色在整个会话里
+    都是空函数。
+    """
     saved = []
-    for mod in sys.modules.values():
+    for mod in list(sys.modules.values()):
         has_align = hasattr(mod, 'alignChains') and callable(mod.alignChains)
         has_color = hasattr(mod, 'setChainBoneColor') and callable(mod.setChainBoneColor)
         if has_align and has_color:
             saved.append((mod, mod.alignChains, mod.setChainBoneColor))
-            if disable:
-                mod.alignChains = lambda: None
-                mod.setChainBoneColor = lambda x: None
+            mod.alignChains = lambda: None
+            mod.setChainBoneColor = lambda x: None
     return saved
+
+
+def _restore_chain_cleanup(saved):
+    for mod, align, color in saved:
+        mod.alignChains = align
+        mod.setChainBoneColor = color
+
+
+def _chain_cleanup_host(saved, category, op_name):
+    """saved 里属于 bpy.ops.<category>.<op_name> 所在插件的那一项，找不到时取第一项。
+
+    同时装着上游与 fork（或 RE Chain 与 MHW Model Editor）时，sys.modules 里排第一的
+    未必是正在被驱动的那个插件，收尾的那一次对齐必须调它自己的。
+    """
+    if not saved:
+        return None
+    cls = bpy.types.Operator.bl_rna_get_subclass_py(f"{category.upper()}_OT_{op_name}")
+    owner = getattr(cls, '__module__', '').split('.')
+    def shared(entry):
+        n = 0
+        for a, b in zip(entry[0].__name__.split('.'), owner):
+            if a != b:
+                break
+            n += 1
+        return n
+    best = max(saved, key=shared)
+    return best if shared(best) else saved[0]
 
 
 # ============================================================
@@ -64,6 +96,9 @@ def _patch_chain_cleanup(disable=True):
 
 _FAST_IMPORT_MARK = "_mtk_fast_chain_import"
 
+#: Groups / settings a .chain or .chain2 can hold (ubyte counts in the header).
+CHAIN_UBYTE_LIMIT = 255
+
 
 def _modules_with_attr(attr):
     """所有把 attr 作为可调用属性暴露出来的已加载模块。"""
@@ -75,6 +110,19 @@ def _modules_with_attr(attr):
                 yield mod
         except Exception:
             continue
+
+
+def _owner_first(saved, original):
+    """*saved* ``[(host, fn)]`` with the host from *original*'s own addon first."""
+    owner = (getattr(original, "__module__", "") or "").split(".")
+    def shared(entry):
+        n = 0
+        for a, b in zip(getattr(entry[0], "__name__", "").split("."), owner):
+            if a != b:
+                break
+            n += 1
+        return n
+    return sorted(saved, key=shared, reverse=True)
 
 
 def _make_fast_import(original, align_hosts):
@@ -95,8 +143,10 @@ def _make_fast_import(original, align_hosts):
                 except Exception:
                     pass
             # 循环外补一次：最后一次 per-group 调用本来就会扫全场景，
-            # 所以只调一次的终态与逐组调用的终态相同
-            for _host, fn in saved[:1]:
+            # 所以只调一次的终态与逐组调用的终态相同。
+            # 调的必须是这次导入所属插件自己的 alignChains：上游和 fork 同时加载时，
+            # saved 里排第一的可能是另一个插件的。
+            for _host, fn in _owner_first(saved, original)[:1]:
                 try:
                     t = time.perf_counter()
                     fn()
@@ -221,6 +271,15 @@ def _sync_chain_file_type(*_args):
 @bpy.app.handlers.persistent
 def _resubscribe_chain_type_sync(*_args):
     install_chain_type_sync()
+    # The fast-import patch is otherwise only attempted for ~10 s after this
+    # addon registers (__init__._patch_chain_import): RE Chain Editor, or its
+    # fork, enabled later -- or a switch between the two mid-session -- stayed
+    # on the O(G^2) import.  A file load is a cheap moment to catch up; the
+    # install is idempotent.
+    try:
+        install_fast_chain_import()
+    except Exception as e:
+        print(f"[ChainImport] fast import patch skipped: {e}", file=sys.stderr)
 
 
 def install_chain_type_sync():
@@ -312,6 +371,55 @@ def _decompose_chains(head_pb, armature, physics_bones):
     return paths
 
 
+def _existing_chain_paths(col):
+    """已在 col 里的每条链的骨骼序列，读法与导出器相同：从 Chain Group 起逐级跟
+    RE_CHAIN_NODE 子对象，取各节点 BoneName 约束的 subtarget。子组与 jiggle 不跟。"""
+    paths = set()
+    for grp in col.all_objects:
+        if grp.get("TYPE") != "RE_CHAIN_CHAINGROUP":
+            continue
+        seq = []
+        node = next((c for c in grp.children if c.get("TYPE") == "RE_CHAIN_NODE"), None)
+        while node is not None:
+            con = node.constraints.get("BoneName")
+            seq.append(con.subtarget if con else "")
+            node = next((c for c in node.children if c.get("TYPE") == "RE_CHAIN_NODE"), None)
+        if seq:
+            paths.add(tuple(seq))
+    return paths
+
+
+def _collect_chain_entries(chain_heads, armature, physics_bones, existing=()):
+    """把各链首分解出的路径收成 [(head_pb, paths, path)]，同一条骨骼序列只留一份。
+
+    去重不能省：分叉骨的物理子骨同时被标成 branch_head，而 _decompose_chains 从
+    主链首往下走时本来就会把每条分支拆出来，于是分支会作为链首再被分解一次——
+    每条分支生成两遍，嵌套分叉里的生成三遍。head 排在 branch_head 前面，重复的
+    路径就留主链首那份（GUESS 模式按链首分类，结果因此是确定的）。
+
+    existing 是目标集合里已有链的骨骼序列，重复点生成时不再叠一份。
+    返回 (entries, 跳过的重复条数)。
+    """
+    ordered = sorted(chain_heads, key=lambda pb: pb.get("chain_role") != "head")
+    seen = set(existing)
+    entries = []
+    dup = 0
+    for head_pb in ordered:
+        paths = _decompose_chains(head_pb, armature, physics_bones)
+        for path in paths:
+            if len(path) < 2:
+                print(f"[ChainGen] skip single-bone path: {path[0] if path else '?'} "
+                      f"(RE Chain requires at least head + tail)", file=sys.stderr)
+                continue
+            key = tuple(path)
+            if key in seen:
+                dup += 1
+                continue
+            seen.add(key)
+            entries.append((head_pb, paths, path))
+    return entries, dup
+
+
 def _is_valid_chain_collection(col):
     """与 RE Chain Editor 的 filterChainCollection 逻辑一致"""
     t = col.get("~TYPE", "")
@@ -348,6 +456,15 @@ def _build_physics_bones_set(context, armature):
     return {b.name for b in armature.data.bones if b.name not in preset_bones}
 
 
+def _file_type_for_format(chain_format, fallback):
+    """RE Chain Editor's chainFileType for a chain format ('.chain' / '.chain2')."""
+    if chain_format == '.chain2':
+        return 'chain2'
+    if chain_format == '.chain':
+        return 'chain'
+    return fallback
+
+
 def _auto_create_chain_collection(config: REChainConfig):
     """创建集合 + Chain Header 并应用游戏特调。
 
@@ -366,8 +483,13 @@ def _auto_create_chain_collection(config: REChainConfig):
         # Must be set before create_chain_header so the header object gets the right data type.
         # createChainCollection (inside create_chain_header) will also set chainFileType based
         # on the collection name, so we don't restore it here — the caller owns that.
-        toolpanel.chainFileType = config.chain_file_type
+        # From the format being created, not from a per-game constant: the
+        # dialog lets the user pick .chain or .chain2, and upstream reads this
+        # flag *before* it corrects it from the name, so a mismatch gave the
+        # header the other format's data class.
+        toolpanel.chainFileType = _file_type_for_format(config.chain_format, config.chain_file_type)
 
+        before = set(bpy.data.collections.keys())
         result = bpy.ops.re_chain.create_chain_header(
             collectionName=config.collection_name,
             chainFormat=config.chain_format,
@@ -375,8 +497,18 @@ def _auto_create_chain_collection(config: REChainConfig):
         if result != {'FINISHED'}:
             return None, None, "create_chain_header failed"
 
-        full_name = config.collection_name + config.chain_format
-        col = bpy.data.collections.get(full_name)
+        # Upstream builds with collections.new(), so a taken name comes back as
+        # "X.chain2.001" -- and points chainCollection at it.  Looking the
+        # requested name up instead returned the *old* collection: a second
+        # run (or MHWS's name prefilled from the vanilla import) built every
+        # chain into the previous result and left the new one holding only a
+        # header.
+        full_name = config.collection_name.strip() + config.chain_format
+        col = toolpanel.chainCollection
+        if col is None or col.name not in (set(bpy.data.collections.keys()) - before):
+            created = [n for n in set(bpy.data.collections.keys()) - before
+                       if n == full_name or n.startswith(full_name + ".")]
+            col = bpy.data.collections.get(created[0]) if len(created) == 1 else None
         if col is None:
             return None, None, f"Collection not found: {full_name}"
 
@@ -384,6 +516,8 @@ def _auto_create_chain_collection(config: REChainConfig):
             (o for o in col.all_objects if o.get("TYPE") == "RE_CHAIN_HEADER"),
             None
         )
+        if header is None:
+            return None, None, f"No chain header in {col.name}"
 
         if config.tuning:
             h = header.re_chain_header
@@ -521,7 +655,8 @@ def _apply_angle_ramp_all(context, armature, col, max_angle, iterations):
               file=sys.stderr)
         return
 
-    if not hasattr(bpy.ops.re_chain, 'apply_angle_limit_ramp'):
+    from .compat import op_available
+    if not op_available('re_chain', 'apply_angle_limit_ramp'):
         print("[ChainGen] apply_angle_ramp: operator re_chain.apply_angle_limit_ramp unavailable",
               file=sys.stderr)
         return
@@ -633,7 +768,7 @@ def _create_chains_guess(armature, toolpanel, col, all_entries, chain_heads, phy
     return created, skipped
 
 
-def auto_create_re_chains(context, armature, config: REChainConfig):
+def auto_create_re_chains(context, armature, config: REChainConfig, report=None):
     """核心 RE Chain 创建逻辑，按游戏参数化配置。"""
     col = None
 
@@ -661,7 +796,11 @@ def auto_create_re_chains(context, armature, config: REChainConfig):
         return {'CANCELLED'}
     toolpanel.chainCollection = col
     saved_file_type = toolpanel.chainFileType
-    toolpanel.chainFileType = config.chain_file_type
+    # The collection decides, not the game: an existing target can be either
+    # format, and forcing the game's constant gave a .chain the chain2 settings
+    # vocabulary (65536 = CollisionCharacter in chain2 is ScaleAnimation in v1).
+    from .chain_convert import chain_file_type_for
+    toolpanel.chainFileType = chain_file_type_for(col.name) or config.chain_file_type
 
     chain_heads = [pb for pb in armature.pose.bones if pb.get("chain_role") in ("head", "branch_head")]
     if not chain_heads:
@@ -682,18 +821,32 @@ def auto_create_re_chains(context, armature, config: REChainConfig):
         chain_heads = [pb for pb in armature.pose.bones if pb.get("chain_role") in ("head", "branch_head")]
 
     t_decompose = time.perf_counter()
-    all_entries = []
-    for head_pb in chain_heads:
-        paths = _decompose_chains(head_pb, armature, physics_bones)
-        for path in paths:
-            if len(path) < 2:
-                print(f"[ChainGen] skip single-bone path: {path[0] if path else '?'} "
-                      f"(RE Chain requires at least head + tail)", file=sys.stderr)
-                continue
-            all_entries.append((head_pb, paths, path))
+    all_entries, dup = _collect_chain_entries(
+        chain_heads, armature, physics_bones, _existing_chain_paths(col))
     t_decompose = time.perf_counter() - t_decompose
     print(f"[ChainGen] _decompose_chains: {t_decompose:.4f}s  "
-          f"({len(chain_heads)} heads -> {len(all_entries)} paths)", file=sys.stderr)
+          f"({len(chain_heads)} heads -> {len(all_entries)} paths, "
+          f"{dup} duplicate(s) skipped)", file=sys.stderr)
+
+    # .chain / .chain2 store their group and settings counts as ubyte (RE Chain
+    # Editor's file_re_chain header): past 255 its exporter dies on a bare
+    # struct.error long after this has built everything.  SEPARATE makes one
+    # settings per chain, so both limits are the same count there.
+    existing = sum(1 for o in col.all_objects if o.get("TYPE") == "RE_CHAIN_CHAINGROUP")
+    if existing + len(all_entries) > CHAIN_UBYTE_LIMIT:
+        from .i18n import T
+        msg = T("core.re_chain_utils.too_many_chains").format(
+            n=existing + len(all_entries), existing=existing, limit=CHAIN_UBYTE_LIMIT)
+        print(f"[ChainGen] {msg}", file=sys.stderr)
+        if report is not None:
+            report({'ERROR'}, msg)
+        toolpanel.chainFileType = saved_file_type
+        if config.auto_create_collection:
+            # Created a moment ago for this run and still holding only its header.
+            for obj in list(col.all_objects):
+                bpy.data.objects.remove(obj, do_unlink=True)
+            bpy.data.collections.remove(col)
+        return {'CANCELLED'}
 
     created = 0
     skipped = 0
@@ -708,7 +861,7 @@ def auto_create_re_chains(context, armature, config: REChainConfig):
             return {'CANCELLED'}
 
     saved_experimental = getattr(toolpanel, 'experimentalPoseModeOptions', False)
-    _patches = _patch_chain_cleanup(disable=True)
+    _patches = _patch_chain_cleanup()
 
     t_loop = time.perf_counter()
     try:
@@ -726,9 +879,10 @@ def auto_create_re_chains(context, armature, config: REChainConfig):
                 else:
                     skipped += 1
     finally:
-        _patch_chain_cleanup(disable=False)
-        if _patches and created > 0:
-            mod, _align, _color = _patches[0]
+        _restore_chain_cleanup(_patches)
+        host = _chain_cleanup_host(_patches, 're_chain', 'create_chain_settings')
+        if host and created > 0:
+            mod, _align, _color = host
             _align()
             _color(armature)
         toolpanel.experimentalPoseModeOptions = saved_experimental

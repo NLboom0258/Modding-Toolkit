@@ -2,8 +2,9 @@ import bpy
 
 from ...core.i18n import T
 from ...core.color_grade import color_grade_items, DEFAULT_MODE_INDEX
-from ...core.mdf_tex_processor_base import _CH_ENUM_ITEMS, octahedral_normals_prop
+from ...core.mdf_tex_processor_base import _CH_ENUM_ITEMS, octahedral_normals_prop, mip_strategy_prop
 from .mdf_tex_processor import (
+    SLOT_NULLS,
     MHRS_SLOT_CHANNEL_MAPS, MHRS_NULL_TEX_BY_TYPE, MHRS_TEXTURE_TYPE_ABBREV,
     MHRS_TEX_VERSION,
 )
@@ -12,7 +13,10 @@ from ...core.mdf_generator_base import (
     load_preset_enum_items,
     _find_meshes_by_material, mesh_collection_poll,
     MdfGenRefreshBase, MdfGenProcessBase,
+    register_generator, unregister_generator,
 )
+from ...core.stable_enum import stable_enum
+from ...core import poll_msg
 
 # ── MHRS constants ──────────────────────────────────────────────────────────────
 
@@ -31,7 +35,8 @@ def _mhrs_get_presets(self, context):
 
 class MHRSGenMaterialEntry(bpy.types.PropertyGroup):
     blender_material: bpy.props.StringProperty(name="Blender Material")
-    material_preset:  bpy.props.EnumProperty(
+    material_preset:  stable_enum(
+        "material_preset",
         name="Preset",
         description="MDF2 material preset from RE Mesh Editor",
         items=_mhrs_get_presets,
@@ -53,6 +58,14 @@ class MHRSGenMaterialEntry(bpy.types.PropertyGroup):
     #: toon / AO options do not apply (AO comes from the shader) and a choice of
     #: which panel to read appears instead.
     uses_packed_shader: bpy.props.BoolProperty(default=False)
+    #: Same as MhwsGenMaterialEntry: set by Refresh when the material was
+    #: converted with a bundled prefab (a path outside material_preset's own
+    #: Presets/ scan), shown read-only, and read ahead of material_preset.
+    #: Without these two fields Refresh's assignment fell into its
+    #: `except AttributeError: pass` and the lock was silently dropped, so
+    #: guess_best_preset by material name won instead.
+    preset_locked: bpy.props.BoolProperty(default=False)
+    preset_path_override: bpy.props.StringProperty(default="")
     shader_source: bpy.props.EnumProperty(
         name="Shader Source",
         items=get_shader_source_items,
@@ -77,6 +90,16 @@ class MHRSGenMaterialEntry(bpy.types.PropertyGroup):
     )
     ao_ch:            bpy.props.EnumProperty(name="", items=_CH_ENUM_ITEMS, default='R')
     ao_inv:           bpy.props.BoolProperty(name="Invert", default=False)
+    # Set by Refresh for the dialog: where each PBR channel comes from, as text
+    # (file name, constant, "ALB.A"...), and how many meshes use the material.
+    src_color:     bpy.props.StringProperty()
+    src_normal:    bpy.props.StringProperty()
+    src_roughness: bpy.props.StringProperty()
+    src_metallic:  bpy.props.StringProperty()
+    src_alpha:     bpy.props.StringProperty()
+    src_emissive:  bpy.props.StringProperty()
+    mesh_count:    bpy.props.IntProperty(default=0)
+    slots_expanded: bpy.props.BoolProperty(default=False)
     native_size_color:     bpy.props.IntProperty(default=0)
     native_size_normal:    bpy.props.IntProperty(default=0)
     native_size_roughness: bpy.props.IntProperty(default=0)
@@ -117,6 +140,8 @@ class MHRSGenSettings(bpy.types.PropertyGroup):
     )
     material_list:     bpy.props.CollectionProperty(type=MHRSGenMaterialEntry)
     material_list_idx: bpy.props.IntProperty()
+    options_expanded:  bpy.props.BoolProperty(default=False)
+    clipboard_json:    bpy.props.StringProperty()   # mhw.gen_copy_material
     flip_normal_g:     bpy.props.BoolProperty(
         name="Normal OpenGL -> DirectX",
         description="When enabled, connected OpenGL normal maps are converted directly to DX format, "
@@ -138,6 +163,7 @@ class MHRSGenSettings(bpy.types.PropertyGroup):
         description="Override every material's own Generate MipMaps checkbox and skip mipmap generation entirely",
         default=False,
     )
+    global_mip_quality: mip_strategy_prop()
     global_use_toon:   bpy.props.BoolProperty(
         name="Use Toon Shading (Global)",
         description="Override every material's own Use Toon Shading checkbox and force it on for all of them",
@@ -163,6 +189,7 @@ class MHRS_OT_MdfGenProcess(MdfGenProcessBase):
     _abbrev_map        = MHRS_TEXTURE_TYPE_ABBREV
     _channel_maps      = MHRS_SLOT_CHANNEL_MAPS
     _null_tex_by_type  = MHRS_NULL_TEX_BY_TYPE
+    _slot_nulls        = SLOT_NULLS
     _log_tag           = "MHRS Gen"
 
 
@@ -183,16 +210,14 @@ class MHRS_OT_SelectSameMaterial(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         """必须有激活 MESH 物体，且其材质已设置，mesh_collection 已选择"""
+        if not poll_msg.active_mesh(cls, context):
+            return False
         obj = context.active_object
-        if not obj or obj.type != 'MESH':
-            return False
-        if not obj.material_slots:
-            return False
-        settings = context.scene.mhrs_mdf_generator
-        if not settings.mesh_collection:
-            return False
-        mat = obj.material_slots[obj.active_material_index].material
-        return mat is not None
+        if not context.scene.mhrs_mdf_generator.mesh_collection:
+            return poll_msg.deny(cls, "core.poll.need_mesh_collection")
+        mat = (obj.material_slots[obj.active_material_index].material
+               if obj.material_slots else None)
+        return poll_msg.require(cls, mat is not None, "core.poll.need_material_slot")
 
     def execute(self, context):
         settings = context.scene.mhrs_mdf_generator
@@ -251,9 +276,12 @@ def register():
         bpy.utils.register_class(cls)
     bpy.types.Scene.mhrs_mdf_generator = bpy.props.PointerProperty(
         type=MHRSGenSettings)
+    # For the pre-export check's 「使用生成器快捷生成」
+    register_generator('MHRS', MHRS_OT_MdfGenProcess)
 
 
 def unregister():
+    unregister_generator('MHRS')
     del bpy.types.Scene.mhrs_mdf_generator
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)

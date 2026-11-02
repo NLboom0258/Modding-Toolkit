@@ -84,7 +84,7 @@ class MHW_OT_GeneralTools(bpy.types.Operator):
             selected_names = []
             if context.mode == 'POSE':
                 selected_names = [b.name for b in context.selected_pose_bones]
-            elif context.mode == 'EDIT':
+            elif context.mode == 'EDIT_ARMATURE':
                 selected_names = [b.name for b in context.selected_editable_bones]
             else:
                 selected_names = [b.name for b in arm_obj.data.bones if b.select]
@@ -109,7 +109,7 @@ class MHW_OT_GeneralTools(bpy.types.Operator):
                 self.report({'ERROR'}, translated)
 
         elif self.action == 'SIMPLIFY_CHAIN':
-            if context.mode != 'EDIT':
+            if context.mode != 'EDIT_ARMATURE':
                 bpy.ops.object.mode_set(mode='EDIT')
 
             selected_bones = list(context.selected_editable_bones)
@@ -120,10 +120,10 @@ class MHW_OT_GeneralTools(bpy.types.Operator):
             selected_names = [b.name for b in selected_bones]
 
             # Gather bound meshes (used for tail-bone detection)
-            mesh_objects = [o for o in bpy.data.objects
-                            if o.type == 'MESH' and
-                            any(m.type == 'ARMATURE' and m.object == arm_obj
-                                for m in o.modifiers)]
+            # attached_meshes, not a modifier filter: a mesh whose Armature modifier has an
+            # empty target (or none, parented by hand) still carries this rig's weights.
+            from . import pose_bake
+            mesh_objects = pose_bake.attached_meshes(arm_obj)
 
             # Group into chains
             chains = weight_utils.build_bone_chains(selected_names, arm_obj)
@@ -149,7 +149,7 @@ class MHW_OT_GeneralTools(bpy.types.Operator):
             self.report({'INFO'}, T("ui.main_panel.gt_info_chain_simplified").format(n=len(pairs)))
 
         elif self.action == 'MERGE_TO_ACTIVE':
-            if context.mode != 'EDIT':
+            if context.mode != 'EDIT_ARMATURE':
                 bpy.ops.object.mode_set(mode='EDIT')
 
             active = context.active_bone
@@ -170,7 +170,7 @@ class MHW_OT_GeneralTools(bpy.types.Operator):
 
         elif self.action == 'MERGE_CHAINS':
             # Get the active bone name and selected bone names (EDIT and POSE mode both supported)
-            if context.mode == 'EDIT':
+            if context.mode == 'EDIT_ARMATURE':
                 active = context.active_bone
                 selected_names = [b.name for b in context.selected_editable_bones]
             elif context.mode == 'POSE':
@@ -189,7 +189,7 @@ class MHW_OT_GeneralTools(bpy.types.Operator):
             selected_set = set(selected_names)
 
             # Filter out non-active candidate chain heads: skip bones whose ancestor is also selected
-            if context.mode != 'EDIT':
+            if context.mode != 'EDIT_ARMATURE':
                 bpy.ops.object.mode_set(mode='EDIT')
 
             edit_bones = arm_obj.data.edit_bones

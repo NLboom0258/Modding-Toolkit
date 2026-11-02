@@ -3,45 +3,11 @@ from mathutils import Vector
 
 from . import pose_bake, twist_chain
 
-def merge_weights_and_delete_bones(armature_obj, bone_pairs):
-    """
-    bone_pairs: List of (keep_bone_name, delete_bone_name)
-    """
-    # 构建辅助结构：被删除骨骼集合，以及子→父映射
-    deleted_set = {delete for _, delete in bone_pairs}
-    child_to_parent = {child: parent for parent, child in bone_pairs}
+def merge_vertex_groups(mesh_objects, merge_map):
+    """把 merge_map {被合并组名: 目标组名} 里每个组的权重累加进目标组，再删掉被合并组。
 
-    def find_final_target(bone_name):
-        """沿父骨链向上，找到第一个不被删除的骨骼（最终存活祖先）。"""
-        visited = set()
-        current = bone_name
-        while current in deleted_set and current not in visited:
-            visited.add(current)
-            parent = child_to_parent.get(current)
-            if parent is None:
-                break
-            current = parent
-        return current
-
-    # 为每个被删除骨骼，直接计算其最终存活祖先（跳过中间已删除的骨骼）
-    merge_map = {delete: find_final_target(parent)
-                 for parent, delete in bone_pairs}
-
-    # 1. 找到受该骨架影响的所有网格
-    # 主：通过姿态修改器绑定
-    bound_meshes = {o for o in bpy.data.objects
-                    if o.type == 'MESH' and
-                    any(m.type == 'ARMATURE' and m.object == armature_obj for m in o.modifiers)}
-    # 补充：未绑定修改器但作为该骨架子级、且含有待删除骨骼同名顶点组的网格
-    delete_names = set(merge_map.keys())
-    extra_meshes = {o for o in bpy.data.objects
-                    if o.type == 'MESH' and o not in bound_meshes and
-                    o.parent == armature_obj and
-                    any(vg.name in delete_names for vg in o.vertex_groups)}
-    mesh_objects = bound_meshes | extra_meshes
-
-    # 2. 遍历网格，将每个被删除骨骼的权重直接合并到其最终存活祖先
-    #
+    只动顶点组，不碰骨骼——骨架不在手边（或骨骼本来就不打算建）时也能用。目标组不
+    存在会新建。"""
     # 按**顶点**扫一遍，而不是「每根待删骨 × 全部顶点」。后者是这里原本的写法，代价
     # O(待删骨数 × 顶点数)，且每个顶点都要靠 vertex_group.weight() 抛 RuntimeError 来
     # 判断「不在这个组里」—— 异常在 Python 里极贵。合并整套表情骨时这是 370 × 全网格
@@ -83,6 +49,120 @@ def merge_weights_and_delete_bones(armature_obj, bone_pairs):
             delete_vg = vg.get(delete)
             if delete_vg is not None:
                 vg.remove(delete_vg)
+
+
+def co_weight(mesh_objects, owner):
+    """按 *owner* {顶点组名: 归属键} 统计权重交叉。
+
+    返回 (mass, pair)：mass {键: 权重总和}；pair {(键a, 键b): 同一顶点上两者较小一方的
+    权重之和}，键按字典序排。用来判断哪些物理子树共用顶点、拆开会撕裂。"""
+    mass, pair = {}, {}
+    for obj in mesh_objects:
+        idx = {vg.index: owner[vg.name] for vg in obj.vertex_groups if vg.name in owner}
+        if not idx:
+            continue
+        for v in obj.data.vertices:
+            per = {}
+            for g in v.groups:
+                k = idx.get(g.group)
+                if k is not None and g.weight > 0:
+                    per[k] = per.get(k, 0.0) + g.weight
+            for k, w in per.items():
+                mass[k] = mass.get(k, 0.0) + w
+            if len(per) > 1:
+                ks = sorted(per)
+                for i, a in enumerate(ks):
+                    for b in ks[i + 1:]:
+                        pair[(a, b)] = pair.get((a, b), 0.0) + min(per[a], per[b])
+    return mass, pair
+
+
+def split_vertex_groups(mesh_objects, splits):
+    """把 splits {被拆组名: share} 里每个组的权重按顶点位置拆给若干目标组，再删掉被拆组。
+
+    *share(world_co)* 返回 [(目标组名, 比例), ...]，比例之和应为 1。和 merge_vertex_groups
+    一样按顶点扫一遍、先收集再写入；目标组不存在会新建。"""
+    for obj in mesh_objects:
+        vg = obj.vertex_groups
+        sources = {vg[name].index: share for name, share in splits.items() if name in vg}
+        if not sources:
+            continue
+        mw = obj.matrix_world
+        pending = {}
+        for vert in obj.data.vertices:
+            for g in vert.groups:
+                share = sources.get(g.group)
+                if share is None or not g.weight:
+                    continue
+                for target, frac in share(mw @ vert.co):
+                    if frac > 0:
+                        pending.setdefault(target, []).append((vert.index, g.weight * frac))
+        for target, entries in pending.items():
+            target_vg = vg.get(target) or vg.new(name=target)
+            for vert_index, weight in entries:
+                target_vg.add([vert_index], weight, 'ADD')
+        for name in splits:
+            src_vg = vg.get(name)
+            if src_vg is not None:
+                vg.remove(src_vg)
+
+
+def bone_weight_mass(mesh_objects, names):
+    """{骨名: 该骨在所有网格上的顶点权重之和}，只统计 names 里的骨，缺省为 0.0。"""
+    wanted = set(names)
+    mass = dict.fromkeys(wanted, 0.0)
+    for obj in mesh_objects:
+        idx2name = {vg.index: vg.name for vg in obj.vertex_groups if vg.name in wanted}
+        if not idx2name:
+            continue
+        for vert in obj.data.vertices:
+            for g in vert.groups:
+                n = idx2name.get(g.group)
+                if n is not None:
+                    mass[n] += g.weight
+    return mass
+
+
+def merge_weights_and_delete_bones(armature_obj, bone_pairs):
+    """
+    bone_pairs: List of (keep_bone_name, delete_bone_name)
+    """
+    # 构建辅助结构：被删除骨骼集合，以及子→父映射
+    deleted_set = {delete for _, delete in bone_pairs}
+    child_to_parent = {child: parent for parent, child in bone_pairs}
+
+    def find_final_target(bone_name):
+        """沿父骨链向上，找到第一个不被删除的骨骼（最终存活祖先）。"""
+        visited = set()
+        current = bone_name
+        while current in deleted_set and current not in visited:
+            visited.add(current)
+            parent = child_to_parent.get(current)
+            if parent is None:
+                break
+            current = parent
+        return current
+
+    # 为每个被删除骨骼，直接计算其最终存活祖先（跳过中间已删除的骨骼）
+    merge_map = {delete: find_final_target(parent)
+                 for parent, delete in bone_pairs}
+
+    # 1. 找到受该骨架影响的所有网格
+    # 主：通过姿态修改器绑定
+    bound_meshes = {o for o in bpy.data.objects
+                    if o.type == 'MESH' and
+                    any(m.type == 'ARMATURE' and m.object == armature_obj for m in o.modifiers)}
+    # 补充：未绑定修改器但作为该骨架子级、且含有待删除骨骼同名顶点组的网格
+    delete_names = set(merge_map.keys())
+    extra_meshes = {o for o in bpy.data.objects
+                    if o.type == 'MESH' and o not in bound_meshes and
+                    o.parent == armature_obj and
+                    any(vg.name in delete_names for vg in o.vertex_groups)}
+    mesh_objects = bound_meshes | extra_meshes
+
+    # 2. 遍历网格，将每个被删除骨骼的权重直接合并到其最终存活祖先
+    #    （按顶点扫描的实现与耗时实测见 merge_vertex_groups）
+    merge_vertex_groups(mesh_objects, merge_map)
 
     # 3. 删除骨骼
     bpy.context.view_layer.objects.active = armature_obj
@@ -173,10 +253,42 @@ def rename_or_merge_vgroup(obj, old_name, new_name):
     return True
 
 
+# Outer-surface normalisation (mouth groups): the reference displacement is this
+# percentile of the displacement over outer-surface vertices, not the mesh maximum.
+SURFACE_REF_PERCENTILE = 0.95
+# Inside/outside test: a vertex is "inside" (mouth cavity, teeth, tongue) when a
+# ray cast forward from it hits the same mesh again.
+_INTERIOR_RAY_DIR = (0.0, -1.0, 0.0)
+_INTERIOR_RAY_START_OFFSET = 0.0005
+_INTERIOR_RAY_MAX_DIST = 0.06
+
+
+def _interior_depths(me):
+    """Per vertex: distance to the surface in front of it, or None for outer surface.
+
+    The ray starts a hair in front of the vertex so it does not hit its own faces.
+    Distances are in the mesh's local units, like the displacements.
+    """
+    from mathutils import Vector
+    from mathutils.bvhtree import BVHTree
+
+    bvh = BVHTree.FromPolygons([v.co.copy() for v in me.vertices],
+                               [tuple(p.vertices) for p in me.polygons])
+    fwd = Vector(_INTERIOR_RAY_DIR)
+    depths = [None] * len(me.vertices)
+    for v in me.vertices:
+        hit = bvh.ray_cast(v.co + fwd * _INTERIOR_RAY_START_OFFSET, fwd,
+                           _INTERIOR_RAY_MAX_DIST)
+        if hit[0] is not None:
+            depths[v.index] = hit[3]
+    return depths
+
+
 def shape_key_to_weights(obj, active_kb, basis_kb, ignore_threshold=0.001,
                          weight_strength=1.0, smooth_factor=0.5,
                          smooth_iters=10, sync_seams=True, direction=None,
-                         vg_name=None):
+                         vg_name=None, surface_ref=False, interior_falloff=None,
+                         side=None, dry_run=False):
     """
     Convert a shape key to a vertex group using normalized, Laplacian-smoothed weights.
 
@@ -188,6 +300,23 @@ def shape_key_to_weights(obj, active_kb, basis_kb, ignore_threshold=0.001,
     projects positively onto this axis contribute; weight = dot product magnitude.
     This lets you split a single shape key (e.g. blink) into per-direction groups
     (upper eyelid vs lower eyelid) by running the operator twice with opposite signs.
+
+    surface_ref: normalise by the SURFACE_REF_PERCENTILE of the displacement over
+    outer-surface vertices instead of the whole-mesh maximum. For an open mouth the
+    teeth, tongue and cavity wall move further than the lips, so the maximum leaves
+    the lips with only a fraction of the weight. Falls back to the maximum when no
+    outer-surface vertex moves.
+
+    interior_falloff: optional (d0, d1) in local units. Interior vertices (see
+    _interior_depths) keep full weight up to depth d0, then fade linearly to 0 at d1.
+
+    side: +1 / -1 keeps only vertices whose rest position lies on the +X / -X side of the
+    object's world origin. For a key that moves both eyes at once (blink), this is how one
+    eye's group is cut out of it.
+
+    dry_run: stop after the displacement scan and return what a real run would return,
+    without touching vertex groups -- lets a caller test whether a key is usable before
+    committing to it.
 
     Returns the number of affected vertices, or None if no valid displacement is found.
     """
@@ -201,7 +330,7 @@ def shape_key_to_weights(obj, active_kb, basis_kb, ignore_threshold=0.001,
     world_mat3 = obj.matrix_world.to_3x3() if filter_dir is not None else None
 
     seam_groups = []
-    if sync_seams:
+    if sync_seams and not dry_run:
         coincident = {}
         for i, v in enumerate(vertices):
             key = (round(v.co.x, 5), round(v.co.y, 5), round(v.co.z, 5))
@@ -223,7 +352,11 @@ def shape_key_to_weights(obj, active_kb, basis_kb, ignore_threshold=0.001,
                     sub.append([v_idx])
             seam_groups.extend(sg for sg in sub if len(sg) > 1)
 
+    mat_world = obj.matrix_world if side is not None else None
+
     for i in range(v_count):
+        if side is not None and (mat_world @ basis_kb.data[i].co).x * side <= 0:
+            continue
         disp = active_kb.data[i].co - basis_kb.data[i].co
         if filter_dir is not None:
             val = (world_mat3 @ disp).dot(filter_dir)
@@ -240,10 +373,25 @@ def shape_key_to_weights(obj, active_kb, basis_kb, ignore_threshold=0.001,
 
     if valid_count == 0 or max_val == 0:
         return None
+    if dry_run:
+        return valid_count
+
+    depths = (_interior_depths(obj.data)
+              if surface_ref or interior_falloff is not None else None)
+
+    ref_val = max_val
+    if surface_ref:
+        surface_vals = sorted(raw_weights[i] for i in range(v_count)
+                              if raw_weights[i] > 0 and depths[i] is None)
+        if surface_vals:
+            ref_val = surface_vals[int(SURFACE_REF_PERCENTILE * (len(surface_vals) - 1))]
 
     for i in range(v_count):
         if raw_weights[i] > 0:
-            raw_weights[i] = min(1.0, (raw_weights[i] / max_val) * weight_strength)
+            raw_weights[i] = min(1.0, (raw_weights[i] / ref_val) * weight_strength)
+            if interior_falloff is not None and depths[i] is not None:
+                d0, d1 = interior_falloff
+                raw_weights[i] *= max(0.0, min(1.0, 1.0 - (depths[i] - d0) / (d1 - d0)))
 
     for group in seam_groups:
         avg = sum(raw_weights[idx] for idx in group) / len(group)

@@ -2,12 +2,16 @@ import bpy
 
 from ...core.i18n import T
 from ...core import pre_export_check_ops as pec
+from ...core import export_autofix
+from ...core import shapekey_export
+from ...core import mod_root
 from .batch_export import (
     MHRS_PARTS, MHRS_PART_LABEL_KEYS,
     _load_scheme, _resolve_part_file_types, _canonical_order_file_types,
     get_binding, set_binding,
-    get_mhrs_armor_callback,
+    get_mhrs_armor_callback, bound_pairs, jcns_slots, part_file_types, ignore_slot_limits,
 )
+from ...core import optional_editors
 
 EXPORTER_WINDOW_WIDTH = 580
 
@@ -16,6 +20,7 @@ _FILETYPE_ICONS = {
     "mdf2":  'MATERIAL',
     "chain": 'CONSTRAINT_BONE',
     "user":  'FILE_BLANK',
+    "jcns":  'CONSTRAINT_BONE',
 }
 
 _FILETYPE_LABELS = {
@@ -23,6 +28,7 @@ _FILETYPE_LABELS = {
     "mdf2":  "MDF2",
     "chain": "CHAIN",
     "user":  "USER",
+    "jcns":  "JCNS",
 }
 
 
@@ -45,8 +51,9 @@ def _cached(key, items):
 
 def _get_filtered_collections(filetype):
     result = []
-    type_map = {"mesh": "RE_MESH_COLLECTION", "mdf2": "RE_MDF_COLLECTION", "chain": "RE_CHAIN_COLLECTION"}
-    sfx_map  = {"mesh": ".mesh", "mdf2": ".mdf2", "chain": ".chain"}
+    type_map = {"mesh": "RE_MESH_COLLECTION", "mdf2": "RE_MDF_COLLECTION", "chain": "RE_CHAIN_COLLECTION",
+                "jcns": optional_editors.collection_type("jcns")}
+    sfx_map  = {"mesh": ".mesh", "mdf2": ".mdf2", "chain": ".chain", "jcns": ".jcns"}
     col_type = type_map.get(filetype, "")
     name_sfx = sfx_map.get(filetype, "")
     for c in bpy.data.collections:
@@ -76,7 +83,7 @@ class MHRS_OT_PickCollection(bpy.types.Operator):
     filetype: bpy.props.StringProperty()
     collection_name: bpy.props.EnumProperty(
         name="Collection",
-        items=lambda self, ctx: _get_filtered_collections(self.filetype)
+        items=lambda self, ctx: _get_filtered_collections(optional_editors.slot_type(self.filetype))
     )
 
     def invoke(self, context, event):
@@ -190,7 +197,7 @@ class MHRS_OT_BatchExportDialog(bpy.types.Operator):
                      icon='DOWNARROW_HLT')
 
         # ── Natives Root ──
-        natives_root = scene.get("mhrs_natives_root", "")
+        natives_root = mod_root.read(scene, "mhrs_natives_root")
         row = layout.row(align=True)
         row.operator("mhrs.set_natives_root", text="Mod Root", icon='FILE_FOLDER')
         if natives_root:
@@ -221,16 +228,18 @@ class MHRS_OT_BatchExportDialog(bpy.types.Operator):
         active_parts = [(pid, pname) for idx, (pid, pname) in enumerate(MHRS_PARTS)
                         if parts_mask & (1 << idx)]
 
+        unlocked = ignore_slot_limits(scene)
         per_part_fts = {}
         all_file_types = []
         for part_id, part_name in active_parts:
-            fts = _canonical_order_file_types(
-                _resolve_part_file_types(armor_set if armor_set else {}, part_id))
-            per_part_fts[part_id] = fts
+            fts = part_file_types(armor_set, part_id, unlocked)
+            per_part_fts[part_id] = fts + jcns_slots(armor_set, gender, part_id, unlocked)
             for ft in fts:
                 if ft not in all_file_types:
                     all_file_types.append(ft)
         all_file_types = _canonical_order_file_types(all_file_types)
+        if any(optional_editors.slot_type(sl) == "jcns" for v in per_part_fts.values() for sl in v):
+            all_file_types.append("jcns")
 
         layout.separator()
 
@@ -244,43 +253,51 @@ class MHRS_OT_BatchExportDialog(bpy.types.Operator):
             row.label(text=f"{part_id}  {T(MHRS_PART_LABEL_KEYS[part_id])}")
             part_fts = per_part_fts[part_id]
             for ft in all_file_types:
-                sub = row.row(align=True)
-                if ft not in part_fts:
-                    sub.label(text="")
+                slots = [sl for sl in part_fts if optional_editors.slot_type(sl) == ft]
+                if not slots:
+                    row.row(align=True).label(text="")
                     continue
+                # A part can ship several jcns: one picker each, stacked in the cell.
+                cell = row.column(align=True) if len(slots) > 1 else row
+                for slot in slots:
+                    sub = cell.row(align=True)
+                    if slot == "user":
+                        # 不可绑定集合：始终由内置模板复制而来（受"未选项使用空模型"开关控制）
+                        sub.label(text="AUTO", icon='FILE_BLANK')
+                        continue
 
-                if ft == "user":
-                    # 不可绑定集合：始终由内置模板复制而来（受"未选项使用空模型"开关控制）
-                    sub.label(text="AUTO", icon='FILE_BLANK')
-                    continue
-
-                cur = get_binding(scene, armor_id, gender, part_id, ft)
-                op = sub.operator(
-                    "mhrs.pick_collection",
-                    text=cur if cur else "—",
-                    icon='DOWNARROW_HLT' if not cur else _FILETYPE_ICONS[ft]
-                )
-                op.armor_id = armor_id
-                op.gender   = gender
-                op.part     = part_id
-                op.filetype = ft
-                if cur:
-                    op_c = sub.operator("mhrs.clear_binding", text="", icon='X')
-                    op_c.armor_id = armor_id
-                    op_c.gender   = gender
-                    op_c.part     = part_id
-                    op_c.filetype = ft
+                    cur = get_binding(scene, armor_id, gender, part_id, slot)
+                    suffix = optional_editors.slot_suffix(slot)
+                    text = cur if cur else "—"
+                    op = sub.operator(
+                        "mhrs.pick_collection",
+                        text=f"{suffix}  {text}" if suffix else text,
+                        icon='DOWNARROW_HLT' if not cur else _FILETYPE_ICONS[ft]
+                    )
+                    op.armor_id = armor_id
+                    op.gender   = gender
+                    op.part     = part_id
+                    op.filetype = slot
+                    if cur:
+                        op_c = sub.operator("mhrs.clear_binding", text="", icon='X')
+                        op_c.armor_id = armor_id
+                        op_c.gender   = gender
+                        op_c.part     = part_id
+                        op_c.filetype = slot
 
         layout.separator()
         row = layout.row(align=True)
         row.prop(settings, "mhrs_use_blank_export", text=T("ui.prop.use_blank_export"), icon='FILE_BLANK')
-        row.prop(settings, "mhrs_cleanup_before_export", text=T("ui.prop.cleanup_before_export"), icon='BRUSH_DATA')
-        row.prop(settings, "mhrs_triangulate_face", text=T("ui.prop.triangulate_face"), icon='MOD_TRIANGULATE')
+        row.prop(settings, "mhrs_ignore_slot_limits", text=T("ui.prop.ignore_slot_limits"), icon='UNLOCKED')
+        export_autofix.draw_toggle(row, settings, 'MHRS')
+        shapekey_export.draw(layout, scene, 'MHRS',
+                             [m for _p, _d, m in bound_pairs(scene, armor_id, gender) if m is not None], natives_root)
 
         self._draw_shadow(layout, settings, scene, armor_id, gender, parts_mask)
 
         pairs = _gather_check_pairs(scene, armor_id, gender, active_parts)
-        pec.draw_inline_summary(self, layout, context, 'MHRS', pairs, natives_root)
+        pec.draw_inline_summary(self, layout, context, 'MHRS', pairs, natives_root,
+                                autofix_pairs=bound_pairs(scene, armor_id, gender))
 
     def _draw_shadow(self, layout, settings, scene=None, armor_id=None, gender=None, parts_mask=None):
         layout.separator()

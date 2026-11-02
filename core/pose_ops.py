@@ -16,7 +16,7 @@ import math
 import os
 import copy
 import mathutils
-from .i18n import T
+from .i18n import T, get_lang
 from .bone_mapper import BoneMapManager, STANDARD_BONE_NAMES, resolve_preset
 from .bone_utils import get_import_presets_callback
 
@@ -31,7 +31,10 @@ def _get_pose_presets_dir():
     os.makedirs(d, exist_ok=True)
     return d
 
-_pose_preset_cache = []
+#: (stamp, items).  Same rule as the skeleton presets in core/bone_utils.py: an
+#: unchanged folder hands back the same list object, both for Blender's
+#: string-lifetime trap and because core/stable_enum.py calls this from get().
+_pose_preset_cache = (None, [])
 
 def _read_pose_preset_name(filepath, fallback):
     try:
@@ -42,17 +45,22 @@ def _read_pose_preset_name(filepath, fallback):
 
 def get_pose_presets_callback(self, context):
     global _pose_preset_cache
-    _pose_preset_cache = []
     d = _get_pose_presets_dir()
-    if os.path.exists(d):
-        for f in sorted(os.listdir(d)):
-            if f.endswith('.json'):
-                fallback = f[:-5]  # strip .json
-                name = _read_pose_preset_name(os.path.join(d, f), fallback)
-                _pose_preset_cache.append((f, name, ""))
-    if not _pose_preset_cache:
-        _pose_preset_cache.append(('NONE', T("core.pose_ops.no_record"), ""))
-    return _pose_preset_cache
+    try:
+        files = tuple(sorted((e.name, e.stat().st_mtime_ns) for e in os.scandir(d)
+                             if e.is_file() and e.name.endswith('.json')))
+    except OSError:
+        files = ()
+    # The empty-folder label goes through T(), so the language is part of the key.
+    stamp = (files, get_lang())
+    if _pose_preset_cache[0] == stamp:
+        return _pose_preset_cache[1]
+    items = [(f, _read_pose_preset_name(os.path.join(d, f), f[:-5]), "")
+             for f, _mtime in files]
+    if not items:
+        items = [('NONE', T("core.pose_ops.no_record"), "")]
+    _pose_preset_cache = (stamp, items)
+    return items
 
 
 # ============================================================
@@ -365,19 +373,68 @@ _REE_SIGNATURE_BONES = {
 _REE_MIN_COVERAGE = 0.3
 
 
+#: 躯干核心骨：只用来回答"这是不是一具 REE 骨架"，不参与识别是哪个游戏，也不参与归零。
+#: 给残缺骨架（只有脸/头发/饰品，一根四肢骨都没有）用——名单里一根都对不上时，
+#: 它们仍然带着 root/Hip/Spine_0 这一串。
+_REE_CORE_BONES = ("root", "COG", "Hip", "Spine_0", "Spine_1", "Spine_2",
+                   "Neck_0", "Neck_1", "Head", "Head_0")
+_REE_CORE_MIN = 4
+
+
 def _detect_ree_game(arm_obj):
-    """在私有 REE 游戏名单里按骨骼名覆盖率找最匹配的游戏，返回 game_code 或 None。
-    在 _REE_SIGNATURE_BONES 里登记过特征骨的游戏，特征骨缺一根就不参与竞争。"""
+    """在私有 REE 游戏名单里找最匹配的游戏，返回 game_code 或 None。
+    在 _REE_SIGNATURE_BONES 里登记过特征骨的游戏，特征骨缺一根就不参与竞争。
+
+    先按覆盖率（完整骨架走这条，行为与以往逐位相同）；覆盖率不够的残缺骨架——游戏里
+    脸、头发、饰品是单独的骨架，只带了躯干和几根手臂辅助骨——退到按**命中根数**选。
+    不能把门槛直接调低：ch001_00_10 这种骨架上 SF6 名单命中 2/40 = 0.05，荒野只命中
+    6/148 = 0.04，按比例会认成 SF6；按根数是 6 对 2，荒野胜出。
+    平手无害：family A 各游戏共用同一个归零基、没有修正矩阵，选哪份名单只影响"哪些骨
+    在场"，而在场的骨本来就只会被它自己那份名单命中。RE9 的骨名与其他游戏没有交集，
+    不会平手。"""
     existing = arm_obj.data.bones.keys()
-    best_code, best_ratio = None, 0.0
+    candidates = []
     for code, bone_list in _REE_TPOSE_BONES.items():
         signature = _REE_SIGNATURE_BONES.get(code)
         if signature and not all(name in existing for name in signature):
             continue
-        ratio = sum(1 for name in bone_list if name in existing) / len(bone_list)
-        if ratio > best_ratio:
-            best_code, best_ratio = code, ratio
-    return best_code if best_ratio >= _REE_MIN_COVERAGE else None
+        candidates.append((code, sum(1 for name in bone_list if name in existing), len(bone_list)))
+
+    best_code, best_ratio = None, 0.0
+    for code, hit, total in candidates:
+        if hit / total > best_ratio:
+            best_code, best_ratio = code, hit / total
+    if best_ratio >= _REE_MIN_COVERAGE:
+        return best_code
+
+    if not _looks_like_ree_skeleton(arm_obj):
+        # 按根数选没有覆盖率那道门槛，一具无关骨架碰巧有 L_Hand 之类的同名骨就会被掰动
+        return None
+    best_code, best_hit = None, 0
+    for code, hit, _total in candidates:      # 字典序即优先级，严格大于才换
+        if hit > best_hit:
+            best_code, best_hit = code, hit
+    return best_code
+
+
+def _looks_like_ree_skeleton(arm_obj):
+    """名单里一根都对不上时的兜底：看躯干核心骨在不在，免得把别的骨架误当成 REE。"""
+    existing = arm_obj.data.bones.keys()
+    return sum(1 for name in _REE_CORE_BONES if name in existing) >= _REE_CORE_MIN
+
+
+def _has_reme_re9_axes(arm_obj):
+    """RE Mesh Editor 已经把这具 RE9 骨架的轴向换成了 family A 约定。
+
+    REME（Dimcirui fork, 1c30d7a 起）导入 RE9 时默认这么做，导出时再换回去，并在骨架
+    数据上留 ``REMeshBoneAxes = "RE9"``，每根骨骼上留 ``reAxisCorrection``（行主序 3×3
+    的 C，文件旋转 = Blender 旋转 @ C）。身体骨的 C 与 _build_re9_correction /
+    _build_re9_c_supplement 完全一致，所以对这种骨架再乘一次自己的 C 就是重复修正。
+    只看数据上的标记，不看 REME 当前是否启用：标记随 .blend 保存，跟插件在不在无关。
+    没有标记的 RE9 骨架（旧导入、或关掉了导入选项）仍是文件轴向，照旧走修正表。
+    """
+    data = getattr(arm_obj, "data", None)
+    return data is not None and data.get("REMeshBoneAxes") == "RE9"
 
 
 def _bone_depth(bone):
@@ -487,12 +544,20 @@ class MODDER_OT_ReeToTPose(bpy.types.Operator):
 
         game_code = _detect_ree_game(arm_obj)
         if game_code is None:
+            if _looks_like_ree_skeleton(arm_obj):
+                # 残缺部件骨架（脸/头发/饰品）：没有任何会被归零的四肢骨，转换本来就是
+                # 空操作。不烘焙姿态——没有骨骼被改动，烘焙只会把用户手摆的姿态固化。
+                self.report({'INFO'}, T("core.pose_ops.ree_to_tpose_nothing"))
+                return {'FINISHED'}
             self.report({'ERROR'}, T("core.pose_ops.ree_game_not_recognized"))
             return {'CANCELLED'}
 
         bones = arm_obj.data.bones
         bone_names = [name for name in _REE_TPOSE_BONES[game_code] if name in bones]
-        corrections = _REE_BONE_CORRECTION.get(game_code)
+        # REME 换过轴的 RE9 骨架已经是 family A 约定：骨骼名单照旧用 RE9 的，但直接归零到
+        # _REE_ZERO_BASIS，辅助骨也就不带 C。
+        corrections = (None if _has_reme_re9_axes(arm_obj)
+                       else _REE_BONE_CORRECTION.get(game_code))
 
         extra_names, extra_corrections = _expand_inchain_helpers(arm_obj, bone_names, corrections)
         bone_names += extra_names
@@ -824,7 +889,50 @@ class MODDER_OT_DeletePosePreset(bpy.types.Operator):
 # 共用的网格处理函数
 # ============================================================
 
+def _needs_modifier_bake(arm_obj, meshes):
+    """True when core.pose_bake's linear blend skinning would not reproduce what
+    the Armature modifier shows: dual-quaternion (Preserve Volume), multi-modifier,
+    a vertex-group mask, envelopes, or B-Bone segments on a deform bone."""
+    for obj in meshes:
+        for mod in obj.modifiers:
+            if mod.type == 'ARMATURE' and mod.object == arm_obj and (
+                    mod.use_deform_preserve_volume or mod.use_multi_modifier
+                    or mod.vertex_group or mod.use_bone_envelopes):
+                return True
+    return any(b.use_deform and b.bbone_segments > 1 for b in arm_obj.data.bones)
+
+
 def _apply_and_rebind(arm_obj):
+    """Make the current pose the rest pose, carrying the deformed meshes with it.
+
+    Done by core.pose_bake.bake_pose_to_rest, which applies only the armature's
+    deformation.  The previous way -- convert(target='MESH') on every recursive
+    child, then a fresh Armature modifier linked onto them -- applied *every*
+    modifier (Subsurf, Mirror, Solidify...), dropped every shape key (MMD morphs
+    before MMD Face Weights), only baked meshes that were children of the rig, and
+    rebound nothing when the active child happened not to be a mesh.  That path is
+    kept only for the modifier settings the bake does not model.
+    """
+    from . import pose_bake
+    bpy.ops.object.mode_set(mode='OBJECT')
+    meshes = pose_bake.bound_meshes(arm_obj)
+    if _needs_modifier_bake(arm_obj, meshes):
+        return _apply_and_rebind_by_convert(arm_obj)
+    for obj in meshes:
+        obj.hide_set(False)
+    pose_bake.bake_pose_to_rest(arm_obj)
+    bpy.ops.object.select_all(action='DESELECT')
+    arm_obj.select_set(True)
+    for obj in arm_obj.children_recursive:
+        try:
+            obj.select_set(True)
+        except RuntimeError:
+            pass
+    bpy.context.view_layer.objects.active = arm_obj
+    return len(meshes)
+
+
+def _apply_and_rebind_by_convert(arm_obj):
     bpy.ops.object.mode_set(mode='OBJECT')
     
     mesh_children = [obj for obj in bpy.data.objects 

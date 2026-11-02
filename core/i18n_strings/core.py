@@ -3,7 +3,7 @@ core/i18n_strings/core.py — bilingual STRINGS table for core/*.py.
 
 Covers: core/standard_ops.py, core/pose_ops.py, core/editor_ops.py,
 core/editor_props.py, core/mdf_tex_processor_base.py, core/mdf_generator_base.py,
-core/mdf_material_convert_base.py, core/update_ops.py.
+core/mdf_material_convert_base.py.
 
 Key naming convention: "core.<module_name_without_.py>.<short_purpose>".
 Keys are namespaced per source module even where wording is repeated, so this
@@ -30,16 +30,14 @@ STRINGS = {
         "EN": "Align the body bones of the target game armature to the source preset bones (select target armature last)",
         "ZH": "将目标游戏骨架的身体骨骼对齐来源预设骨骼（后选要修改的目标骨架）"},
     "core.standard_ops.smart_graft_desc": {
-        "EN": "Smart physics bone graft (with end-bone extension):\n"
-              "1. Copy physics bones (direct world-space alignment).\n"
-              "2. Auto-generate _End bones at the tip of physics chains (before verticalizing).\n"
-              "3. Force-disconnect bones to prevent position snapping.\n"
-              "4. Reset all grafted bones to point straight up (Z+).",
-        "ZH": "智能物理骨移植 (末端延伸版):\n"
-              "1. 复制物理骨骼 (直接世界坐标对齐)。\n"
-              "2. 【新功能】自动为物理链末端添加 _End 骨骼 (在竖直重置前生成)。\n"
-              "3. 强制断开连接，防止位置吸附。\n"
-              "4. 统一将所有移植骨骼重置为竖直向上 (Z+)。"},
+        "EN": "Graft the source armature's physics bones onto the target.\n"
+              "A dialog picks the clean-ups: drop helper bones, halve chains, resolve branches, "
+              "add tail (_End) bones; for MHWI also the skirt's front chain and the slot estimate.\n"
+              "Grafted bones are disconnected and point straight up (Z+).",
+        "ZH": "把来源骨架的物理骨移植到目标骨架。\n"
+              "弹窗里选择要用的优化：剔除辅助骨、简化物理链（折半）、处理支链、添加尾骨骼；"
+              "MHWI 另有拆除裙子正前物理链和名额估算。\n"
+              "移植的骨骼断开连接，统一竖直向上 (Z+)。"},
     "core.standard_ops.merge_physics_weights_desc": {
         "EN": "Merge physics bone vertex group weights into their nearest base bone (determined by X preset).\n"
               "For downgrade scenarios where physics is unsupported or unneeded",
@@ -66,9 +64,25 @@ STRINGS = {
         "EN": "Clear the chain_role mark on selected bones, reverting them to regular body bones (deep blue)",
         "ZH": "清除选中骨骼的 chain_role 标记，恢复为普通体骨（深蓝色）"},
     "core.standard_ops.merge_into_parent_desc": {
-        "EN": "Merge selected bone vertex weights into its parent bone and delete the selected bone.\n"
+        "EN": "Merge into the parent: the bone's vertex weights go to its parent bone and the bone is deleted.\n"
+              "Armature in Pose/Edit Mode: works on the selected bones.\n"
+              "Mesh active: works on its active vertex group -- the bone of that name in the armature the mesh is\n"
+              "parented to, or else the one its Armature modifier uses.\n"
               "For cleaning up functional root bones (connector bones without physics simulation, such as hair_root)",
-        "ZH": "将选中骨骼的顶点权重合并到其父骨骼，并删除选中骨骼。\n用于清理功能性根骨（如 hair_root 等无物理模拟的连接器骨骼）"},
+        "ZH": "合并到父级：把骨骼的顶点权重并进它的父骨，并删除这根骨骼。\n"
+              "骨架在姿态/编辑模式：处理选中的骨骼。\n"
+              "活动物体是网格：处理它的活动顶点组——在网格的父级骨架（没有就用姿态修改器绑的骨架）里找同名骨骼。\n"
+              "用于清理功能性根骨（如 hair_root 等无物理模拟的连接器骨骼）"},
+    "core.standard_ops.merge_no_active_vgroup": {
+        "EN": "This mesh has no active vertex group", "ZH": "这个网格没有活动顶点组"},
+    "core.standard_ops.merge_mesh_needs_armature": {
+        "EN": "Bind the mesh to an armature first!", "ZH": "请先给网格绑定一个骨架！"},
+    "core.standard_ops.merge_vgroup_no_bone": {
+        "EN": "Armature {armature} has no bone named {group}",
+        "ZH": "骨架 {armature} 里没有名为 {group} 的骨骼"},
+    "core.standard_ops.merge_armature_hidden": {
+        "EN": "Armature {armature} is hidden; unhide it first",
+        "ZH": "骨架 {armature} 被隐藏了，请先取消隐藏"},
 
     # ── Shared error / status fragments ─────────────────────────────────────
     "core.standard_ops.correctives_merged": {
@@ -200,6 +214,59 @@ STRINGS = {
     "core.standard_ops.graft_done": {
         "EN": "Graft complete: processed {n} bone(s) (including auto-generated end bones)",
         "ZH": "移植完成: 处理 {n} 根骨骼 (含自动生成的末端骨)"},
+    "core.standard_ops.graft_excluded_merged": {
+        "EN": "{n} excluded control bone(s) carried weights; merged into the nearest mapped parent instead of grafting: {names}",
+        "ZH": "{n} 根被排除的控制骨带有权重，未移植，权重已并入最近的映射父骨: {names}"},
+    "core.standard_ops.graft_fork_summary": {
+        "EN": "MHWI fork handling: dropped {stubs} empty chain root(s) / light trunk(s), picked {auto_continue} continuation(s), kept {branch_forks} fork(s) as branch chains",
+        "ZH": "MHWI 分叉处理: 删除 {stubs} 个空链首/很轻的主干，自动选定 {auto_continue} 处主链延续，{branch_forks} 处分叉保留为分支链"},
+    "core.standard_ops.graft_unlocked_plugin": {
+        "EN": "Use the \"Remove Physics Limit\" plugin (arm / wst / leg same as body)",
+        "ZH": "使用「解除物理上限」插件（arm / wst / leg 与 body 等同）"},
+    "core.standard_ops.graft_dissolve_centre": {
+        "EN": "Remove the skirt's front chain (weights to the chains beside it)",
+        "ZH": "拆除裙子正前物理链（权重分给左右两条链）"},
+    "core.standard_ops.graft_dissolve_centre_named": {
+        "EN": "Remove the skirt's front chain: {names}",
+        "ZH": "拆除裙子正前物理链: {names}"},
+    "core.standard_ops.graft_decimate": {
+        "EN": "Simplify chains (halve: keep ends, drop every other bone)",
+        "ZH": "简化物理链（折半：保留首尾，隔一根删一根）"},
+    "core.standard_ops.graft_drop_helpers": {
+        "EN": "Drop helper bones (no weight anywhere in their subtree)",
+        "ZH": "剔除辅助骨（整条都没有权重的骨骼）"},
+    "core.standard_ops.graft_resolve_forks": {
+        "EN": "Resolve branches (drop empty roots, continue the main branch)",
+        "ZH": "处理支链（删掉空的根骨，识别主链延续）"},
+    "core.standard_ops.graft_add_end": {
+        "EN": "Add tail bones (_End)", "ZH": "添加尾骨骼（_End）"},
+    "core.standard_ops.graft_count": {
+        "EN": "{n} physics bones will be grafted ({e} of them tail bones)",
+        "ZH": "将移植 {n} 根物理骨骼（其中尾骨骼 {e} 根）"},
+    "core.standard_ops.graft_budget_header": {
+        "EN": "Estimated MHWI slots (base skeleton {base} bones):",
+        "ZH": "MHWI 名额估算（本体 {base} 根骨）："},
+    "core.standard_ops.graft_slot_physics": {
+        "EN": "(physics {n}/{cap}, tail {t}/{cap_t})",
+        "ZH": "(物理 {n}/{cap}，末端 {t}/{cap_t})"},
+    "core.standard_ops.graft_budget_line": {
+        "EN": "Estimated slots: {slots}",
+        "ZH": "名额估算: {slots}"},
+    "core.standard_ops.graft_budget_over": {
+        "EN": "{n} bone(s) fit in no slot",
+        "ZH": "还有 {n} 根骨放不下"},
+    "core.standard_ops.graft_budget_fits": {
+        "EN": "Everything fits",
+        "ZH": "全部放得下"},
+    "core.standard_ops.graft_helpers_note": {
+        "EN": "{n} helper bone(s) without any weight will not be grafted",
+        "ZH": "{n} 根整条都没权重的辅助骨不移植"},
+    "core.standard_ops.graft_simplify_summary": {
+        "EN": "Simplify: {helpers} helper bone(s) not grafted, {centre} centre chain(s) dissolved, {decimated} bone(s) decimated",
+        "ZH": "精简: {helpers} 根辅助骨不移植，拆掉 {centre} 条中央链，抽稀删掉 {decimated} 根"},
+    "core.standard_ops.graft_fork_skipped": {
+        "EN": "{n} second-level branch(es) get no chain (bones and weights kept, physics-free): {names}",
+        "ZH": "{n} 处第二层分支不生成链（骨骼与权重保留，无物理）: {names}"},
     "core.standard_ops.merge_physics_done": {
         "EN": "Physics weight downgrade complete: merged {groups} physics vertex group(s) across {meshes} mesh(es)",
         "ZH": "物理权重降级完成: 在 {meshes} 个网格上合并了 {groups} 个物理顶点组"},
@@ -270,6 +337,11 @@ STRINGS = {
         "EN": "Could not recognize a supported RE Engine game from this armature's bone names "
               "(supports Wilds / RE4R / RE9 / SF6 / MHRS / DMC5)",
         "ZH": "未能从骨骼名识别出受支持的 RE Engine 游戏（支持荒野/生化4重制/生化9/街霸6/崛起/鬼泣5）"},
+    "core.pose_ops.ree_to_tpose_nothing": {
+        "EN": "This is a partial RE Engine skeleton (face / hair / accessory) with none of the limb "
+              "bones the T-pose conversion adjusts - nothing to convert, left unchanged",
+        "ZH": "这是残缺的 RE Engine 部件骨架（脸/头发/饰品），不含任何需要转 T-pose 的四肢骨，"
+              "无需转换，已保持原样"},
     "core.pose_ops.record_name_label": {"EN": "Name", "ZH": "名称"},
     "core.pose_ops.record_name_desc": {
         "EN": "Filename for the saved transform record (e.g. MMD A-Pose to T-Pose)",
@@ -368,7 +440,45 @@ STRINGS = {
     "core.editor_ops.preset_loaded": {
         "EN": "Successfully loaded {kind} preset: {name} ({n} mapping(s))",
         "ZH": "成功加载{kind}预设: {name} ({n} 个映射)"},
+    "core.mhwi_batch_port.step_raised": {
+        "EN": "A step of this part failed with an error; see the system console",
+        "ZH": "这个部位有一步出错了，详情见系统控制台"},
+    # ── core/bone_utils.py: the skeleton preset dropdowns ──
+    "core.bone_utils.auto_detect": {"EN": "Auto Detect", "ZH": "自动识别"},
+    "core.bone_utils.auto_detect_desc": {
+        "EN": "Pick the preset that covers the most of this armature's bones",
+        "ZH": "根据骨架骨骼覆盖率自动选择最匹配的预设"},
+    "core.bone_utils.cat_monster_hunter": {"EN": "Monster Hunter", "ZH": "怪猎系"},
+    "core.bone_utils.cat_re_engine": {"EN": "Capcom RE Engine", "ZH": "Capcom RE引擎"},
+    "core.bone_utils.cat_generic": {"EN": "Generic Platforms", "ZH": "通用平台"},
+    "core.bone_utils.cat_other": {"EN": "Other Games", "ZH": "其他游戏"},
+    "core.bone_utils.load_preset": {"EN": "Load the {name} preset", "ZH": "加载 {name} 预设"},
+    "core.bone_utils.no_presets": {"EN": "No preset files", "ZH": "无预设文件"},
+    "core.bone_utils.no_folder": {"EN": "Preset folder not found", "ZH": "未找到文件夹"},
+    "core.bone_utils.no_folder_desc": {"EN": "Check the addon's assets folder", "ZH": "请检查 assets 目录"},
+    "core.bone_utils.no_armature": {"EN": "No armature available", "ZH": "无可用骨架"},
+    "core.re_chain_utils.too_many_chains": {
+        "EN": "{n} chains ({existing} already in the collection) -- a .chain/.chain2 holds at "
+              "most {limit}. Mark fewer chain heads",
+        "ZH": "共 {n} 条链（集合里已有 {existing} 条）——.chain/.chain2 最多只能放 {limit} 条。"
+              "请少标一些链头"},
+    # RE4 / RE9 / Onimusha batch export summary
+    "core.export.done_with_fail": {
+        "EN": "Done: {exported} exported, {failed} failed, {skipped} skipped (see the console)",
+        "ZH": "完成: 导出 {exported}, 失败 {failed}, 跳过 {skipped}（详见控制台）"},
+    "core.export.done": {
+        "EN": "Done: {exported} exported, {skipped} skipped",
+        "ZH": "完成: 导出 {exported}, 跳过 {skipped}"},
+    "core.chain_convert_ops.frames_same_rig": {
+        "EN": "{n} chain node(s) were already constrained to the target rig (the mesh was "
+              "ported in place first), so their angle limits keep the source convention. "
+              "Port the chain before the mesh, or port the mesh to a copy",
+        "ZH": "有 {n} 个链节点的约束已经指向目标骨架（网格先做了原地移植），它们的角度限制"
+              "仍是源游戏的朝向约定。请先移植链再移植网格，或把网格移植成副本"},
     "core.editor_ops.deleted": {"EN": "Deleted: {name}", "ZH": "已删除: {name}"},
+    "core.editor_ops.delete_confirm": {
+        "EN": "Delete the preset file {name}? This cannot be undone.",
+        "ZH": "删除预设文件 {name}？此操作无法撤销。"},
     "core.editor_ops.delete_failed": {"EN": "Delete failed: {err}", "ZH": "删除失败: {err}"},
     "core.editor_ops.file_not_exist": {"EN": "File does not exist", "ZH": "文件不存在"},
     "core.editor_ops.folder_not_exist": {"EN": "Folder does not exist: {path}", "ZH": "文件夹不存在: {path}"},
@@ -401,14 +511,15 @@ STRINGS = {
     # ══════════════════════════════════════════════════════════════════════
 
     "core.mdf_tex_processor_base.pbr_color": {"EN": "Base Color (Albedo)", "ZH": "基础色 (Albedo)"},
-    "core.mdf_tex_processor_base.pbr_alpha": {"EN": "Alpha Mask", "ZH": "Alpha 遮罩"},
+    "core.mdf_tex_processor_base.pbr_alpha": {"EN": "Alpha Mask", "ZH": "Alpha 遮罩 (透明遮罩)"},
     "core.mdf_tex_processor_base.pbr_emissive": {"EN": "Emissive", "ZH": "自发光 (Emissive)"},
     "core.mdf_tex_processor_base.pbr_normal": {"EN": "Normal", "ZH": "法线 (Normal)"},
     "core.mdf_tex_processor_base.pbr_roughness": {"EN": "Roughness", "ZH": "粗糙度 (Roughness)"},
     "core.mdf_tex_processor_base.pbr_metallic": {"EN": "Metallic", "ZH": "金属度 (Metallic)"},
     "core.mdf_tex_processor_base.pbr_ao": {"EN": "AO", "ZH": "AO"},
     "core.mdf_tex_processor_base.pbr_cavity": {"EN": "Cavity", "ZH": "Cavity (缝隙遮蔽)"},
-    "core.mdf_tex_processor_base.pbr_translucency": {"EN": "Translucency", "ZH": "Translucency (半透)"},
+    "core.mdf_tex_processor_base.pbr_translucency": {"EN": "Translucency", "ZH": "Translucency (透光)"},
+    "core.mdf_tex_processor_base.pbr_sss": {"EN": "SSS", "ZH": "SSS (次表面散射)"},
 
     "core.mdf_tex_processor_base.prop_invert": {"EN": "Invert", "ZH": "反相"},
     "core.mdf_tex_processor_base.normal_flip_g_desc": {
@@ -428,6 +539,94 @@ STRINGS = {
     "core.mdf_tex_processor_base.mode_skip": {"EN": "No Change", "ZH": "不修改"},
     "core.mdf_tex_processor_base.mode_skip_desc": {
         "EN": "Keep the existing path unchanged", "ZH": "保持现有路径不变"},
+    "core.mdf_tex_processor_base.mode_auto": {"EN": "Auto", "ZH": "自动"},
+    "core.mdf_tex_processor_base.mode_auto_desc": {
+        "EN": "Use the direct image if one is set, otherwise compose from the inputs this slot reads, "
+              "otherwise leave the slot as it is (or keep its null texture)",
+        "ZH": "设了直接图片就用它，否则用本槽位读取的输入合成，都没有就保持原样（原本是空贴图的写入空贴图）"},
+    # Processor dialog (core/mdf_tex_processor_ui_base.py).
+    "core.mdf_tex_processor_ui_base.not_set": {"EN": "Not set", "ZH": "未设置"},
+    "core.mdf_tex_processor_ui_base.select_and_refresh": {
+        "EN": "Select an MDF collection and click refresh", "ZH": "选择 MDF 集合后点击刷新"},
+    "core.mdf_tex_processor_ui_base.common_textures": {"EN": "Common textures", "ZH": "常用贴图"},
+    "core.mdf_tex_processor_ui_base.other_textures": {"EN": "Other textures ({n})", "ZH": "其他贴图（{n}）"},
+    "core.mdf_tex_processor_ui_base.inputs": {"EN": "Inputs ({n}/{total} set)", "ZH": "输入（已设 {n}/{total}）"},
+    "core.mdf_tex_processor_ui_base.inputs_unread": {
+        "EN": "Not read by this material's slots: {names}", "ZH": "本材质的槽位不读取：{names}"},
+    "core.mdf_tex_processor_ui_base.fixed": {"EN": "fixed {v}", "ZH": "固定 {v}"},
+    "core.mdf_tex_processor_ui_base.neutral": {"EN": "no input, neutral {v}", "ZH": "无输入，中性值 {v}"},
+    "core.mdf_tex_processor_ui_base.no_input": {"EN": "no input", "ZH": "无输入"},
+    "core.mdf_tex_processor_ui_base.inverted_rule": {"EN": "(inverted by the slot)", "ZH": "（槽位规则反相）"},
+    "core.mdf_tex_processor_ui_base.untouched": {"EN": "untouched", "ZH": "未配置"},
+    # The tool window (core/tex_window.py)
+    "core.tex_window.window_open": {
+        "EN": "The texture window is already open", "ZH": "贴图窗口已经打开"},
+    # Feature-mask channels shared across games (core/mdf_tex_processor_base.py)
+    "core.feature.film": {"EN": "Film (thin-film sheen)", "ZH": "薄膜 (Film 彩虹膜)"},
+    "core.feature.wave_emit": {"EN": "Wave emit", "ZH": "波纹发光 (WaveEmit)"},
+    "core.feature.fuzz": {"EN": "Fuzz", "ZH": "绒毛散射 (Fuzz)"},
+    "core.feature.unknown": {"EN": "unknown", "ZH": "未知"},
+    "core.feature.unused": {"EN": "unused", "ZH": "未使用"},
+    "core.feature.flip_y": {"EN": "Flip Y", "ZH": "翻转 Y"},
+    "core.feature.cmm_r": {
+        "EN": "Recolour area R (alpha armour: recolourable; beta: fixed colour)",
+        "ZH": "变色区域 R（α 装备可变色 / β 装备固定色）"},
+    "core.feature.cmm_g": {
+        "EN": "Recolour area G (beta armour: recolourable; alpha: fixed colour)",
+        "ZH": "变色区域 G（β 装备可变色 / α 装备固定色）"},
+    "core.feature.cmm_alpha": {
+        "EN": "Transparency / glow strength (weapons)",
+        "ZH": "透明度 / 发光强度（武器）"},
+    # Slot status badges -- what processing will actually do to the slot.
+    "core.mdf_tex_slot_status.compose": {"EN": "Compose", "ZH": "合成"},
+    "core.mdf_tex_slot_status.direct": {"EN": "Direct", "ZH": "直接"},
+    "core.mdf_tex_slot_status.default": {"EN": "Null", "ZH": "空贴图"},
+    "core.mdf_tex_slot_status.skip": {"EN": "Unchanged", "ZH": "不变"},
+    "core.mdf_tex_slot_status.placeholder": {"EN": "Placeholder", "ZH": "占位贴图"},
+    "core.gen_slot_plan.compose": {"EN": "Compose", "ZH": "合成"},
+    "core.gen_slot_plan.solid": {"EN": "Solid", "ZH": "纯色"},
+    "core.gen_slot_plan.direct": {"EN": "Direct", "ZH": "直连"},
+    "core.gen_slot_plan.toon": {"EN": "Toon (= albedo)", "ZH": "三渲二（同反照率）"},
+    "core.gen_slot_plan.placeholder": {"EN": "Placeholder", "ZH": "占位贴图"},
+    "core.gen_slot_plan.null": {"EN": "Null", "ZH": "空贴图"},
+    "core.gen_slot_plan.keep": {"EN": "As preset", "ZH": "保持预设"},
+    "core.gen_slot_plan.path": {"EN": "Path only", "ZH": "仅写路径"},
+    "core.mdf_generator_ui_base.no_preset": {"EN": "No preset", "ZH": "未选预设"},
+    "core.mdf_generator_ui_base.tag_slots": {"EN": "Game slots", "ZH": "游戏槽位"},
+    "core.mdf_generator_ui_base.tag_direct": {"EN": "Direct {n}", "ZH": "直连 {n}"},
+    "core.mdf_generator_ui_base.tag_bake": {"EN": "Bake {n}", "ZH": "烘焙 {n}"},
+    "core.mdf_generator_ui_base.tag_toon": {"EN": "Toon", "ZH": "三渲二"},
+    "core.mdf_generator_ui_base.tag_path_only": {"EN": "Material only", "ZH": "仅材质"},
+    "core.mdf_generator_ui_base.options": {"EN": "Export options", "ZH": "导出选项"},
+    "core.mdf_generator_ui_base.opt_defaults": {"EN": "defaults", "ZH": "默认"},
+    "core.mdf_generator_ui_base.opt_octahedral": {"EN": "Octahedral", "ZH": "八面体法线"},
+    "core.mdf_generator_ui_base.opt_no_mip": {"EN": "No mipmaps", "ZH": "不生成 mip"},
+    "core.mdf_generator_ui_base.opt_toon": {"EN": "Toon for all", "ZH": "全部三渲二"},
+    "core.mdf_generator_ui_base.mip_quality": {"EN": "Mipmaps", "ZH": "Mip 生成方式"},
+    "core.mdf_generator_ui_base.flip_g": {"EN": "Normal OpenGL -> DirectX", "ZH": "法线 OpenGL → DirectX"},
+    "core.mdf_generator_ui_base.meshes": {"EN": "{n} mesh(es)", "ZH": "{n} 个网格"},
+    "core.mdf_generator_ui_base.read": {"EN": "Read", "ZH": "读取"},
+    "core.mdf_generator_ui_base.skip": {"EN": "Material only", "ZH": "仅生成材质"},
+    "core.mdf_generator_ui_base.toon": {"EN": "Toon", "ZH": "三渲二"},
+    "core.mdf_generator_ui_base.ao_strength": {"EN": "Strength", "ZH": "强度"},
+    "core.mdf_generator_ui_base.bake": {"EN": "Bake", "ZH": "烘焙"},
+    "core.mdf_generator_ui_base.bake_no_mesh": {
+        "EN": "Needs a bake, but no mesh in the collection uses this material",
+        "ZH": "需要烘焙，但集合里没有网格使用这个材质"},
+    "core.mdf_generator_ui_base.slots": {"EN": "Slot results", "ZH": "槽位结果"},
+    "core.mdf_generator_ui_base.copy_desc": {
+        "EN": "Copy this material's settings (preset, toggles, AO)",
+        "ZH": "复制这个材质的设置（预设、开关、AO）"},
+    "core.mdf_generator_ui_base.paste_desc": {
+        "EN": "Paste copied settings onto this material. A locked prefab keeps its preset",
+        "ZH": "把复制的设置粘贴到这个材质；锁定的预制材质保留自己的预设"},
+    "core.mdf_tex_slot_status.missing_file": {"EN": "file not found", "ZH": "文件不存在"},
+    "core.mdf_tex_slot_status.no_inputs": {"EN": "no inputs, writes null", "ZH": "无输入，将写入空贴图"},
+    "core.mdf_tex_slot_status.no_recipe": {"EN": "cannot be composed", "ZH": "该槽位无法合成"},
+    "core.mdf_tex_slot_status.no_null": {"EN": "no null texture, unchanged", "ZH": "无对应空贴图，保持不变"},
+    "core.mdf_tex_slot_status.summary": {
+        "EN": "{compose} compose · {direct} direct · {default} null · {skip} unchanged",
+        "ZH": "合成 {compose} · 直接 {direct} · 空贴图 {default} · 不变 {skip}"},
 
     # Only shown for the modes that actually write a texture (PBR Compose /
     # Direct); Default/No Change never convert anything, so an sRGB flag there
@@ -458,27 +657,31 @@ STRINGS = {
               "转换, 改变的只是着色器读到的标记。"},
 
     "core.mdf_tex_processor_base.generate_mipmaps_label": {"EN": "Generate MipMaps", "ZH": "生成 MipMaps"},
+    "core.mdf_generator_base.tex_name_collision": {
+        "EN": "{n} name(s) are shared by more than one material once Blender's .001 suffix "
+              "is dropped, so they write the same texture files and MDF material name "
+              "(the later one wins). Fine for import duplicates; otherwise rename one: {names}",
+        "ZH": "有 {n} 个名字在去掉 Blender 的 .001 后缀后被多个材质共用，它们会写同一组贴图文件、"
+              "同一个 MDF 材质名（后处理的覆盖先处理的）。导入产生的副本无妨；否则请改名其中一个: {names}"},
     "core.mdf_generator_base.unresolved_channels": {
         "EN": "{n} PBR channel(s) had no usable source and fell back to a null texture. "
               "Their node chain is too complex to read and the bake did not run: {names}",
         "ZH": "{n} 个 PBR 通道找不到可用的源, 已退回空贴图。它们的节点链读不出来, 烘培也没跑: {names}"},
     "core.color_grade.label": {"EN": "Colour Grade", "ZH": "色彩处理"},
-    "core.color_grade.none": {
-        "EN": "None (pick this if the textures come out too dark)",
-        "ZH": "无 (做出的贴图发黑再选这个)"},
+    "core.color_grade.none": {"EN": "None", "ZH": "无"},
     "core.color_grade.none_desc": {
         "EN": "Copy colour textures through unchanged. Colorimetrically the correct "
               "option -- this game's own albedo textures are sRGB-tagged and sRGB-encoded, "
-              "exactly like a normal source PNG. Pick it when the sRGB option makes the "
-              "result too dark, which means the source was already in the game's range",
+              "exactly like a normal source PNG",
         "ZH": "颜色贴图原样搬运。这是色彩学上正确的一档——本作原版反照率贴图就是 sRGB "
-              "标记 + sRGB 编码, 和普通源图一致。当 sRGB 那一档做出来偏黑时选它, "
-              "那说明源图本来就已经在游戏的口径里了"},
+              "标记 + sRGB 编码, 和普通源图一致"},
     "core.color_grade.srgb": {"EN": "sRGB -> Linear", "ZH": "sRGB 处理"},
     "core.color_grade.srgb_desc": {
-        "EN": "One sRGB-to-linear pass over every colour texture. A power curve: crushes "
-              "midtones and shadows, leaves white untouched (255 stays 255)",
-        "ZH": "对颜色贴图做一次 sRGB→线性。幂曲线: 压中间调和暗部, 白点不动 (255 仍是 255)"},
+        "EN": "One sRGB-to-linear pass over every colour texture, which darkens it. "
+              "A power curve: crushes midtones and shadows, leaves white untouched "
+              "(255 stays 255). Only for sources that look washed out in game",
+        "ZH": "对颜色贴图做一次 sRGB→线性, 会变暗。幂曲线: 压中间调和暗部, 白点不动 "
+              "(255 仍是 255)。只在源图进游戏后明显发白时用"},
     "core.color_grade.exposure": {"EN": "Exposure Down", "ZH": "降曝处理"},
     "core.color_grade.exposure_desc": {
         "EN": "Exposure -1.5EV, brightness -30, vibrance +30. A multiply plus an offset: "
@@ -662,6 +865,19 @@ STRINGS = {
         "EN": "Texture(s) not found, fell back to the destination default -- please check and fill in yourself: {paths}",
         "ZH": "未找到贴图，回退默认路径，请自行检查并补充：{paths}"},
     "core.mdf_port_ops.and_n_more": {"EN": " (+{n} more)", "ZH": "（及其他 {n} 个）"},
+    "core.mdf_port_ops.routed_emissive": {
+        "EN": "{n} material(s) are opaque with a custom emissive texture, so they use the "
+              "target's emissive shader: {names}",
+        "ZH": "{n} 个材质 alpha 纯白且带自定义自发光贴图，已改用目标游戏的自发光 shader：{names}"},
+    "core.mdf_port_ops.alpha_unknown": {
+        "EN": "Could not read the alpha of {n} emissive material(s), so they keep the shader "
+              "that keeps the alpha and lose their glow. Set the source Mod Root to decide: {names}",
+        "ZH": "{n} 个带自发光的材质读不到 alpha，按保留透明的 shader 处理，自发光会丢失。"
+              "设置源游戏 Mod 根目录后可正确判断：{names}"},
+    "core.mdf_port_ops.emissive_dropped": {
+        "EN": "{n} material(s) have a custom emissive texture the target shader has no slot "
+              "for, so it was not carried over: {names}",
+        "ZH": "{n} 个材质的自定义自发光贴图在目标 shader 上没有对应槽位，未移植：{names}"},
     "core.mdf_port_ops.null_fallback_warning": {
         "EN": "{n} slot(s) with no vanilla default fell back to a null texture (skin will look "
               "pallid). Set the destination Mod Root and enable texture conversion to write the "
@@ -689,18 +905,6 @@ STRINGS = {
               "贴图: 已写出 {tex}, 占位 {placeholder} 张 (无原版默认可用), "
               "待写出 {pending} (未设置目标 Mod 根目录), "
               "原版跳过 {vskip}, 无对应槛位跳过 {noslot}, 未找到源贴图 {nosrc}"},
-
-    # ══════════════════════════════════════════════════════════════════════
-    # core/update_ops.py
-    # ══════════════════════════════════════════════════════════════════════
-
-    "core.update_ops.check_updates_desc": {"EN": "Check for addon updates", "ZH": "检查插件更新"},
-    "core.update_ops.new_version_found": {
-        "EN": "New version found: v{remote} (current: v{local})", "ZH": "发现新版本: v{remote} (当前: v{local})"},
-    "core.update_ops.already_latest": {
-        "EN": "You are already on the latest version", "ZH": "当前已是最新版本"},
-    "core.update_ops.check_failed": {
-        "EN": "Update check failed: {err}", "ZH": "检查更新失败: {err}"},
 
     # ══════════════════════════════════════════════════════════════════════
     # core/tex_convert_base.py
@@ -789,6 +993,12 @@ STRINGS = {
 
     # ── MT_OT_TexConvertDialog ───────────────────────────────────────────────
     "core.tex_convert_base.dialog_title": {"EN": "Texture Conversion", "ZH": "贴图处理"},
+    "core.tex_convert_base.preview_show": {"EN": "Show", "ZH": "显示"},
+    "core.tex_convert_base.preview_output": {"EN": "Result", "ZH": "结果"},
+    "core.tex_convert_base.preview_hint": {
+        "EN": "Result preview at {size}px; updates as you change settings",
+        "ZH": "结果按 {size}px 预览，改设置会自动更新"},
+    "core.tex_convert_base.convert": {"EN": "Convert", "ZH": "转换"},
     "core.tex_convert_base.dialog_desc": {
         "EN": "Convert a single image directly to the target game's .tex texture: manually pick the format "
               "(with filename pre-guessing), single/RGB+A/per-channel modes for channel filtering and inversion",
@@ -819,6 +1029,14 @@ STRINGS = {
     "core.tex_convert_base.detail_map_name": {"EN": "Detail Map", "ZH": "细节图"},
     "core.tex_convert_base.detail_tiling_x_name": {"EN": "Tiling X", "ZH": "Tiling X"},
     "core.tex_convert_base.detail_tiling_y_name": {"EN": "Tiling Y", "ZH": "Tiling Y"},
+    "core.tex_convert_base.detail_mask_enabled_name": {"EN": "Use Mask", "ZH": "使用遮罩"},
+    "core.tex_convert_base.detail_mask_path_name": {"EN": "Mask Image", "ZH": "遮罩图"},
+    "core.tex_convert_base.detail_mask_channel_name": {"EN": "Channel", "ZH": "通道"},
+    "core.tex_convert_base.detail_mask_invert_name": {"EN": "Invert Mask", "ZH": "反转遮罩"},
+    "core.tex_convert_base.detail_mask_hint": {
+        "EN": "White = full detail, black = source kept as-is", "ZH": "白色=完整叠加细节，黑色=保持原图不变"},
+    "core.tex_convert_base.detail_mask_missing": {
+        "EN": "Mask image not found, please check the mask path", "ZH": "找不到遮罩图，请检查遮罩路径"},
     "core.tex_convert_base.detail_blend_failed": {
         "EN": "Detail map blend failed, please check the detail image", "ZH": "细节图混合失败，请检查细节图片"},
 
@@ -1224,9 +1442,48 @@ STRINGS = {
     "core.chain_convert_ops.export_with": {
         "EN": "Export with {op}, version {version}",
         "ZH": "请用 {op} 导出，版本 {version}"},
+    "core.chain_convert_ops.header_set": {
+        "EN": "Set {n} chain2 header field(s) to {game}'s values",
+        "ZH": "已把 {n} 个 chain2 Header 字段改成 {game} 的取值"},
+    "core.chain_convert_ops.version_unsupported": {
+        "EN": "The enabled chain editor cannot export version {version}, which {game} "
+              "needs -- enable the RE-Chain-Editor fork that offers it",
+        "ZH": "当前启用的 Chain 编辑器导不出 {game} 需要的 {version} 版本——请改用提供该版本的 RE-Chain-Editor 分支"},
     "core.chain_convert_ops.blocked": {
         "EN": "Cannot convert: some colliders would end up bound to nothing",
         "ZH": "无法转换：部分碰撞体会绑到不存在的骨骼上"},
+
+    # --- scheme_batch_export: RE9 / ONI batch export dialog ---------------------
+
+    "core.scheme_batch_export.will_align_native_skeleton": {
+        "EN": "Will align to native skeleton: {name}", "ZH": "将对齐原生骨架: {name}"},
+    "core.scheme_batch_export.native_skeleton_not_found": {
+        "EN": "Native skeleton file not found; the selected armature will be exported directly",
+        "ZH": "未找到原生骨架文件，将直接导出选中骨架"},
+    "core.scheme_batch_export.copy_bindings": {"EN": "Copy", "ZH": "复制"},
+    "core.scheme_batch_export.copy_bindings_desc": {
+        "EN": "Copy this group's bound collections (Mesh/MDF2/SFUR/CHAIN2/CLSP), so they "
+              "can be pasted onto another group",
+        "ZH": "复制这个部位当前绑定的集合（Mesh/MDF2/SFUR/CHAIN2/CLSP），供粘贴到别的部位",
+    },
+    "core.scheme_batch_export.paste_bindings": {"EN": "Paste", "ZH": "粘贴"},
+    "core.scheme_batch_export.paste_bindings_desc": {
+        "EN": "Apply the copied bindings to this group -- only for the slots this group "
+              "actually has; anything else is skipped",
+        "ZH": "把复制的绑定应用到这个部位——只应用这个部位实际存在的槽位，其余的跳过",
+    },
+    "core.scheme_batch_export.copy_done": {
+        "EN": "Copied {n} binding(s) from {group}", "ZH": "已从 {group} 复制 {n} 项绑定"},
+    "core.scheme_batch_export.copy_nothing": {
+        "EN": "Nothing bound in {group} to copy", "ZH": "{group} 没有已绑定的内容可复制"},
+    "core.scheme_batch_export.paste_done": {
+        "EN": "Pasted {n} binding(s) onto {group}", "ZH": "已向 {group} 粘贴 {n} 项绑定"},
+    "core.scheme_batch_export.paste_nothing": {
+        "EN": "Nothing on the clipboard matches a slot {group} has",
+        "ZH": "剪贴板里的内容没有一项对得上 {group} 现有的槽位"},
+    "core.scheme_batch_export.gpuc_blank": {
+        "EN": "blank, written whenever this part's mesh is replaced",
+        "ZH": "空文件，替换本部位 mesh 时一并写出"},
 
     # --- mesh_port_ops: cross-game rig port -------------------------------------
     "core.mesh_port_ops.desc": {
@@ -1634,7 +1891,7 @@ STRINGS = {
     "core.mrl3_port_ops.params_basic_desc": {
         "EN": "Metallic, roughness and translucency only -- the three whose meaning "
               "and 0..1 scale are the same in both engines",
-        "ZH": "只迁移金属度、粗糙度、半透明度 —— 这三个在两个引擎里含义与 0..1 "
+        "ZH": "只迁移金属度、粗糙度、透光 —— 这三个在两个引擎里含义与 0..1 "
               "量纲都相同"},
     "core.mrl3_port_ops.params_all": {"EN": "All", "ZH": "全部"},
     "core.mrl3_port_ops.params_all_desc": {
@@ -1730,9 +1987,285 @@ STRINGS = {
     "core.ref_model_ops.import_failed": {
         "EN": "Import produced no armature", "ZH": "导入后未得到骨架"},
     "core.ref_model_ops.posed": {"EN": "T-posed", "ZH": "已转 T-Pose"},
+    "core.ref_model_ops.mesh_collection": {
+        "EN": "Create Mesh Collection", "ZH": "创建 Mesh 集合"},
+    "core.ref_model_ops.mesh_collection_skipped": {
+        "EN": "RE Mesh Editor not found, so no mesh collection was created",
+        "ZH": "未找到 RE Mesh Editor，未创建 Mesh 集合"},
     "core.ref_model_ops.done": {
         "EN": "Imported {name}: {facial} facial bone(s) merged, {aux} auxiliary, {pose}",
         "ZH": "已导入 {name}：合并面部骨 {facial} 根，辅助骨 {aux} 根，{pose}"},
+
+    # ══════════════════════════════════════════════════════════════════════
+    # core/export_autofix.py -- 「导出前自动修正」 and its gear dropdown
+    # ══════════════════════════════════════════════════════════════════════
+    "core.export_autofix.toggle": {
+        "EN": "Auto-fix Before Export", "ZH": "导出前自动修正"},
+    "core.export_autofix.toggle_tip": {
+        "EN": "Before export, fix the problems that need no decision: face triangulation, "
+              "weight cleanup, mirrored transforms, texture path spelling, empty texture "
+              "paths, missing vertex colours, non-English material names, physics constraint "
+              "targets (vertex colours and physics targets: MH Wilds only). The gear chooses which",
+        "ZH": "导出前自动修掉不需要判断的问题：面部三角化、权重清理、镜像变换、贴图路径写法、"
+              "空贴图路径、顶点色补齐、材质名转英文、物理约束目标补齐（顶点色与物理两项仅荒野）。齿轮里可以选修哪些"},
+    "core.export_autofix.item_triangulate": {"EN": "Triangulate Face", "ZH": "面部三角化"},
+    "core.export_autofix.tip_triangulate": {
+        "EN": "Temporarily triangulate meshes weighted to the head bone; removed after export",
+        "ZH": "导出时临时三角化挂在头骨上的网格，导出后移除"},
+    "core.export_autofix.item_weights": {"EN": "Weight Cleanup", "ZH": "权重清理"},
+    "core.export_autofix.tip_weights": {
+        "EN": "Remove loose geometry and empty vertex groups, drop deform weights under 0.002, "
+              "keep at most as many per vertex as the game takes (12 in MH Wilds, 8 elsewhere), "
+              "normalise. Deform groups only",
+        "ZH": "删孤立点与空顶点组，清掉低于 0.002 的形变权重，每顶点最多保留游戏允许的个数"
+              "（荒野 12 个，其他 8 个），再归一化。只动形变组"},
+    "core.export_autofix.item_mirror": {"EN": "Mirrored Transforms", "ZH": "镜像变换"},
+    "core.export_autofix.tip_mirror": {
+        "EN": "Apply a mirrored object transform with its split normals kept",
+        "ZH": "应用镜像的物体变换，同时保住自定义法向"},
+    "core.export_autofix.item_tex_paths": {"EN": "Texture Path Spelling", "ZH": "贴图路径写法"},
+    "core.export_autofix.tip_tex_paths": {
+        "EN": "Backslashes, a natives/ prefix and a .tex.<version> suffix in texture paths",
+        "ZH": "贴图路径里的反斜杠、natives/ 前缀与 .tex.版本号 后缀"},
+    "core.export_autofix.item_tex_empty": {"EN": "Empty Texture Paths", "ZH": "空贴图路径"},
+    "core.export_autofix.tip_tex_empty": {
+        "EN": "Fill empty texture slots with the game's null texture",
+        "ZH": "给空的贴图槽位填上游戏的 null 贴图"},
+    "core.export_autofix.item_vcolor": {"EN": "Fill Vertex Colours", "ZH": "顶点色补齐"},
+    "core.export_autofix.tip_vcolor": {
+        "EN": "When some submeshes of a .mesh have vertex colours, temporarily give the rest "
+              "normal-encoded ones instead of RE Mesh's near-black fill; removed after export",
+        "ZH": "同一 .mesh 里有的子网格带顶点色时，导出期间给其余子网格临时写入法向顶点色，"
+              "代替 RE Mesh 补的近黑色；导出后移除"},
+    "core.export_autofix.item_mat_names": {"EN": "Material Names to English", "ZH": "材质名转英文"},
+    "core.export_autofix.tip_mat_names": {
+        "EN": "Rename material names outside A-Z, 0-9 and _ (Chinese as pinyin, kana as romaji), "
+              "on the mdf material, its meshes and the Blender material together",
+        "ZH": "把含 A-Z、0-9、_ 以外字符的材质名改成英文（中文转拼音、假名转罗马音），"
+              "mdf 材质、对应网格与 Blender 材质三处一起改"},
+    "core.export_autofix.item_phys_target": {
+        "EN": "Physics Constraint Targets", "ZH": "物理约束目标补齐"},
+    "core.export_autofix.tip_phys_target": {
+        "EN": "Give chain and clsp bone constraints that name a bone but no armature the "
+              "armature that has that bone; RE Chain Editor refuses to export them otherwise",
+        "ZH": "给写了骨骼、却没设目标骨架的 chain / clsp 骨骼约束补上含这根骨的骨架；"
+              "否则 RE Chain Editor 拒绝导出"},
+    "core.export_autofix.item_legacy": {"EN": "Compat: Legacy Cleanup", "ZH": "兼容：旧版清理"},
+    "core.export_autofix.tip_legacy": {
+        "EN": "Make Weight Cleanup run RE Mesh Editor's own four cleanup operators instead, "
+              "exactly as the old Clean Mesh Before Export did",
+        "ZH": "让「权重清理」改为直接调用 RE Mesh Editor 的四个清理操作符，即旧版「导出前清理」的行为"},
+    "core.mod_root.ambiguous": {
+        "EN": "This folder holds several natives folders; pick the specific mod folder instead",
+        "ZH": "这个目录下有多个 natives，请选到具体的 mod 目录"},
+    "core.export_autofix.n_meshes": {"EN": "{n} mesh(es)", "ZH": "{n} 个网格"},
+    "core.export_autofix.n_paths": {"EN": "{n} path(s)", "ZH": "{n} 条路径"},
+    "core.export_autofix.n_slots": {"EN": "{n} slot(s)", "ZH": "{n} 个槽位"},
+    "core.export_autofix.n_names": {"EN": "{n} name(s)", "ZH": "{n} 处名字"},
+    "core.export_autofix.n_constraints": {"EN": "{n} constraint(s)", "ZH": "{n} 个约束"},
+
+    # ══════════════════════════════════════════════════════════════════════
+    # core/pre_export_physics.py -- the report's physics lines
+    # ══════════════════════════════════════════════════════════════════════
+    "core.pre_export_physics.st_no_header": {"EN": "no Header", "ZH": "没有 Header"},
+    "core.pre_export_physics.st_many_headers": {
+        "EN": "{n} Headers; only one is allowed", "ZH": "有 {n} 个 Header，只能有一个"},
+    "core.pre_export_physics.st_header_parented": {
+        "EN": "the Header cannot have a parent", "ZH": "Header 不能挂在别的对象下"},
+    "core.pre_export_physics.st_node_no_frame": {"EN": "node has no Frame", "ZH": "节点没有 Frame"},
+    "core.pre_export_physics.st_node_many_frames": {
+        "EN": "node has more than one Frame", "ZH": "节点挂了多个 Frame"},
+    "core.pre_export_physics.st_parent": {
+        "EN": "in the wrong place; it belongs under {want}", "ZH": "挂错了层级，应挂在 {want} 下"},
+    "core.pre_export_physics.st_no_constraint": {
+        "EN": "no bone constraint", "ZH": "缺少骨骼约束"},
+    "core.pre_export_physics.st_constraint_no_bone": {
+        "EN": "its bone constraint names no bone", "ZH": "骨骼约束没填骨骼"},
+    "core.pre_export_physics.st_constraint_no_target": {
+        "EN": "its bone constraint has no armature", "ZH": "骨骼约束没有目标骨架"},
+    "core.pre_export_physics.st_group_empty": {"EN": "group has no node", "ZH": "Group 里没有节点"},
+    "core.pre_export_physics.st_capsule_single": {
+        "EN": "shape is Capsule but it has only one end", "ZH": "形状设成胶囊，但只有一端"},
+    "core.pre_export_physics.st_capsule_no_start": {
+        "EN": "capsule has no start point", "ZH": "胶囊缺起点"},
+    "core.pre_export_physics.st_capsule_no_end": {
+        "EN": "capsule has no end point", "ZH": "胶囊缺终点"},
+    "core.pre_export_physics.st_capsule_many_start": {
+        "EN": "capsule has more than one start point", "ZH": "胶囊有多个起点"},
+    "core.pre_export_physics.st_capsule_many_end": {
+        "EN": "capsule has more than one end point", "ZH": "胶囊有多个终点"},
+    "core.pre_export_physics.st_link_not_group": {
+        "EN": "an end of the link is not a Group", "ZH": "Link 的端点不是 Group"},
+    "core.pre_export_physics.want_group": {"EN": "a Group or a node", "ZH": "Group 或节点"},
+    "core.pre_export_physics.want_settings": {"EN": "a Settings", "ZH": "Settings"},
+    "core.pre_export_physics.want_header": {"EN": "the Header", "ZH": "Header"},
+    "core.pre_export_physics.want_header_or_wind": {
+        "EN": "the Header or a Wind", "ZH": "Header 或 Wind"},
+    "core.pre_export_physics.item_many_chains": {
+        "EN": "{ftype} · {n} chains point at bones that are not on the armature: {names}, ... "
+              "(is the right mesh bound?)",
+        "ZH": "{ftype} · 共 {n} 条链的骨骼不在骨架里：{names} 等（是不是绑错了 mesh？）"},
+    "core.pre_export_physics.item_many_colliders": {
+        "EN": "{ftype} · {n} colliders point at bones that do not exist: {names}, ...",
+        "ZH": "{ftype} · 共 {n} 个碰撞体的骨骼找不到：{names} 等"},
+    "core.pre_export_physics.item_single_node": {
+        "EN": "Group \"{grp}\" — only 1 node", "ZH": "Group「{grp}」— 只有 1 个节点"},
+    "core.pre_export_physics.item_terminal_missing": {
+        "EN": "Group \"{grp}\" — its last bone {bones} is not on the armature; the whole chain does nothing",
+        "ZH": "Group「{grp}」— 末端骨骼 {bones} 不在骨架里，整条链不生效"},
+    "core.pre_export_physics.item_terminal_empty": {
+        "EN": "Group \"{grp}\" — its last node names no bone; the whole chain does nothing",
+        "ZH": "Group「{grp}」— 末端节点没有指定骨骼，整条链不生效"},
+    "core.pre_export_physics.item_node_missing": {
+        "EN": "Group \"{grp}\" — not on the armature: {bones}",
+        "ZH": "Group「{grp}」— 骨架里没有 {bones}"},
+    "core.pre_export_physics.item_path": {
+        "EN": "Group \"{grp}\" — the nodes don't follow the bone hierarchy; in game it drives "
+              "{first} … {last} ({n} bones)",
+        "ZH": "Group「{grp}」— 节点与骨骼层级对不上，游戏里实际驱动 {first} … {last}（共 {n} 根）"},
+    "core.pre_export_physics.item_path_short": {
+        "EN": "Group \"{grp}\" — {n} nodes, more than there are bones above its last one",
+        "ZH": "Group「{grp}」— {n} 个节点，比末端骨骼往上的骨骼还多"},
+    "core.pre_export_physics.item_no_weight": {
+        "EN": "Group \"{grp}\" — none of its bones carries mesh weights; physics moves nothing",
+        "ZH": "Group「{grp}」— 这些骨骼都没带网格权重，物理带不动模型"},
+    "core.pre_export_physics.item_duplicate": {
+        "EN": "\"{b}\" duplicates \"{a}\"", "ZH": "「{b}」重复「{a}」"},
+    "core.pre_export_physics.item_contained": {
+        "EN": "\"{a}\" lies inside \"{b}\"; those bones are driven twice",
+        "ZH": "「{a}」在「{b}」里面，同一段骨骼被驱动两次"},
+    "core.pre_export_physics.item_crossing": {
+        "EN": "\"{a}\" and \"{b}\" share {n} bone(s)", "ZH": "「{a}」与「{b}」共用 {n} 根骨骼"},
+    "core.pre_export_physics.item_collider_bone": {
+        "EN": "collider \"{obj}\" → \"{bone}\" — no such bone",
+        "ZH": "碰撞体「{obj}」→「{bone}」— 找不到这根骨骼"},
+    "core.pre_export_physics.item_link_dangling": {
+        "EN": "Link \"{link}\" — its end \"{grp}\" is not a group of this chain2; the link is ignored",
+        "ZH": "Link「{link}」— 端点「{grp}」不在这个 chain2 里，连接会被忽略"},
+    "core.pre_export_physics.item_clsp_unbound": {
+        "EN": "chain2 has {n} collider(s) but no clsp is bound; by default they have no effect",
+        "ZH": "chain2 里有 {n} 个碰撞体，但没绑定 clsp，默认不生效"},
+
+    # ══════════════════════════════════════════════════════════════════════
+    # core/pre_export_fix_ops.py -- the pre-export report's fix buttons
+    # ══════════════════════════════════════════════════════════════════════
+    "core.pre_export_fix_ops.align_desc": {
+        "EN": "Rename each mesh to the mdf material name it was paired with",
+        "ZH": "把网格名 __ 后面的部分改成与之配对的 mdf 材质名"},
+    "core.pre_export_fix_ops.align_done": {"EN": "Aligned {n} name(s)", "ZH": "已对齐 {n} 处名字"},
+    "core.pre_export_fix_ops.separate_desc": {
+        "EN": "Split these meshes per material, name the pieces, and check again",
+        "ZH": "把这些网格按材质分离、给碎片命名，然后重新检查"},
+    "core.pre_export_fix_ops.separate_done": {
+        "EN": "Separated into {n} new mesh(es)", "ZH": "已分离出 {n} 个新网格"},
+    "core.pre_export_fix_ops.unused_blender_desc": {
+        "EN": "Use the mesh whose Blender material carries the unused mdf material's name: "
+              "separate it if it has several materials, otherwise rename it",
+        "ZH": "用 Blender 材质与多余材质同名的网格来接上它：多材质的分离，单材质的改名"},
+    "core.pre_export_fix_ops.unused_blender_done": {
+        "EN": "Fixed {n} mesh(es)", "ZH": "已修复 {n} 个网格"},
+    "core.pre_export_fix_ops.delete_unused_desc": {
+        "EN": "Delete the mdf materials no mesh uses, then renumber the rest",
+        "ZH": "删掉没有网格使用的 mdf 材质，再给其余材质重新编号"},
+    "core.pre_export_fix_ops.delete_unused_done": {
+        "EN": "Deleted {n} material(s)", "ZH": "已删除 {n} 个材质"},
+    "core.pre_export_fix_ops.outdated_desc": {
+        "EN": "Bring each material to its shader's vanilla layout from the bundled snapshot: "
+              "padding fixed, new properties and slots added with vanilla defaults, retired ones "
+              "removed, properties reordered. Values you set are kept",
+        "ZH": "按内置的原版快照把材质对齐到它所用着色器的原版布局：修正 padding，"
+              "补上新增的属性与贴图槽（用原版默认值），删掉已移除的，按原版顺序重排。你设的值保留"},
+    "core.pre_export_fix_ops.outdated_done": {
+        "EN": "Updated {n} material(s) against {snap}", "ZH": "已按 {snap} 更新 {n} 个材质"},
+    "core.pre_export_fix_ops.outdated_mmtrs": {
+        "EN": "These materials carry mmtrs index data, which a reorder does not update: {names}",
+        "ZH": "这些材质带有 mmtrs 索引数据，重排属性不会同步更新它：{names}"},
+    "core.pre_export_fix_ops.fix_textures_desc": {
+        "EN": "Rewrite the texture files that are built wrong, in place: another game's version "
+              "(container only, pixels untouched), sides that are not powers of two, and DDS or image "
+              "files renamed to .tex",
+        "ZH": "原地重写做错了的贴图文件：别的游戏的版本（只换容器，像素不动）、边长不是 2 的幂、"
+              "改了后缀的 DDS 或图片"},
+    "core.pre_export_fix_ops.fix_textures_no_root": {
+        "EN": "Set the Mod Root first", "ZH": "请先设置 Mod 根目录"},
+    "core.pre_export_fix_ops.fix_textures_done": {"EN": "Fixed {n} texture(s)", "ZH": "已修复 {n} 张贴图"},
+    "core.pre_export_fix_ops.fix_textures_failed": {
+        "EN": "{n} texture(s) could not be fixed; see the system console",
+        "ZH": "{n} 张贴图修复失败，详见系统控制台"},
+    "core.pre_export_fix_ops.ascii_desc": {
+        "EN": "Rename non-English bones to pinyin/romaji in every armature involved, and update "
+              "vertex groups, chain constraints and chain joint fields to match",
+        "ZH": "把所有相关骨架里的非英文骨骼名转成拼音/罗马音，并同步顶点组、chain 约束与 chain 关节字段"},
+    "core.pre_export_fix_ops.ascii_done": {"EN": "Renamed {n} bone name(s)", "ZH": "已改名 {n} 个骨骼名"},
+    "core.pre_export_fix_ops.ascii_reexport": {
+        "EN": "Re-export the whole armor set: files exported before still carry the old names",
+        "ZH": "请整套重新导出：之前导出的文件里还是旧名字"},
+    "core.pre_export_fix_ops.select_unweighted_desc": {
+        "EN": "Select the vertices with no usable weight in Edit Mode, ready to paint",
+        "ZH": "在编辑模式下选中没有有效权重的顶点，方便补权重"},
+    "core.pre_export_fix_ops.select_unweighted_done": {
+        "EN": "Selected {n} vertex(es) on {objs} mesh(es)", "ZH": "已在 {objs} 个网格上选中 {n} 个顶点"},
+    "core.pre_export_fix_ops.select_unweighted_none": {
+        "EN": "No unweighted vertices left", "ZH": "已经没有无权重的顶点了"},
+    "core.pre_export_fix_ops.quick_desc": {
+        "EN": "Generate the materials the mdf lacks from the meshes' Blender materials; "
+              "only the preset is chosen, everything else uses the generator's defaults",
+        "ZH": "用网格的 Blender 材质当场生成 mdf 里缺的材质；只选预设，其余全按生成器默认值"},
+    "core.pre_export_fix_ops.quick_title": {
+        "EN": "Quick Generate With the Generator", "ZH": "使用生成器快捷生成"},
+    "core.pre_export_fix_ops.quick_confirm": {"EN": "Generate", "ZH": "生成"},
+    "core.pre_export_fix_ops.quick_no_generator": {
+        "EN": "No material generator is available for this game",
+        "ZH": "这个游戏没有可用的材质生成器"},
+    "core.pre_export_fix_ops.quick_row": {
+        "EN": "{mdf}  ← Blender material \"{mat}\"", "ZH": "{mdf}  ← Blender 材质「{mat}」"},
+    "core.pre_export_fix_ops.quick_no_material": {
+        "EN": "no Blender material to generate from", "ZH": "没有 Blender 材质，无法生成"},
+    "core.pre_export_fix_ops.quick_base_path": {
+        "EN": "Texture Path (under Art/)", "ZH": "贴图路径（Art/ 之下）"},
+    "core.pre_export_fix_ops.quick_need_base": {
+        "EN": "Fill in the texture path first", "ZH": "请先填写贴图路径"},
+    "core.pre_export_fix_ops.quick_failed": {
+        "EN": "{n} material(s) failed to generate; see the system console",
+        "ZH": "{n} 个材质生成失败，详见系统控制台"},
+    "core.pre_export_fix_ops.quick_done": {
+        "EN": "Generated {n} material(s)", "ZH": "已生成 {n} 个材质"},
+    "core.pre_export_fix_ops.phys_reparent_desc": {
+        "EN": "Move chain objects hung in the wrong place under their first valid parent, "
+              "keeping where they are: a group under the first Settings; Settings, Wind, "
+              "colliders and links under the Header",
+        "ZH": "把挂错层级的 chain 对象挂到首个合法父级下，位置不变：Group 挂到第一个 Settings 下；"
+              "Settings、Wind、碰撞体与 Link 挂到 Header 下"},
+    "core.pre_export_fix_ops.phys_reparent_done": {
+        "EN": "Moved {n} object(s)", "ZH": "已移动 {n} 个对象"},
+    "core.pre_export_fix_ops.phys_retarget_desc": {
+        "EN": "Point nodes and colliders at the bone whose name differs only in capitals",
+        "ZH": "把节点与碰撞体改指向只差大小写的那根骨骼"},
+    "core.pre_export_fix_ops.phys_retarget_done": {
+        "EN": "Retargeted {n} reference(s)", "ZH": "已改指向 {n} 处"},
+    "core.pre_export_fix_ops.phys_dedupe_desc": {
+        "EN": "Delete chains that drive the same bones as another (the first by name stays) "
+              "and chains that lie inside another",
+        "ZH": "删掉与另一条驱动同一段骨骼的链（保留名字最前的一条），以及被另一条包含的链"},
+    "core.pre_export_fix_ops.phys_single_desc": {
+        "EN": "Delete chain groups with a single node, which simulate nothing",
+        "ZH": "删掉只有 1 个节点的 Group，它们什么也不模拟"},
+    "core.pre_export_fix_ops.phys_removed": {
+        "EN": "Removed {n} chain(s)", "ZH": "已删除 {n} 条链"},
+    "core.pre_export_fix_ops.phys_select_desc": {
+        "EN": "Select the chain groups that share bones, to decide which one keeps them",
+        "ZH": "选中共用骨骼的 Group，由你决定骨骼归哪条链"},
+    "core.pre_export_fix_ops.phys_select_done": {
+        "EN": "Selected {n} chain(s)", "ZH": "已选中 {n} 条链"},
+    "core.pre_export_fix_ops.phys_bind_desc": {
+        "EN": "Bind each part's clsp slot to its chain2 collection, so the colliders in it "
+              "are exported as the clsp",
+        "ZH": "把各部位的 clsp 槽位绑定到它的 chain2 集合，让里面的碰撞体作为 clsp 导出"},
+    "core.pre_export_fix_ops.phys_bind_done": {
+        "EN": "Bound clsp on {n} part(s)", "ZH": "已为 {n} 个部位绑定 clsp"},
+    "core.pre_export_fix_ops.phys_bind_unavailable": {
+        "EN": "Binding clsp works from the batch export dialog",
+        "ZH": "请从批量导出对话框里使用「绑定 clsp」"},
 
     # ══════════════════════════════════════════════════════════════════════
     # core/pre_export_check_ops.py
@@ -1778,8 +2311,7 @@ STRINGS = {
     "core.pre_export_check_ops.run_match": {
         "EN": "Check that meshes and materials match", "ZH": "检查网格与材质是否匹配"},
     "core.pre_export_check_ops.run_names": {
-        "EN": "Check naming, duplicate materials and multi-material meshes",
-        "ZH": "检查命名、重复材质与多材质网格"},
+        "EN": "Check naming and duplicate materials", "ZH": "检查命名与重复材质"},
     "core.pre_export_check_ops.skip_tex_no_root": {
         "EN": "Skip the texture check — Mod Root is not set",
         "ZH": "跳过贴图检查 —— 未设置 Mod 根目录"},
@@ -1790,134 +2322,263 @@ STRINGS = {
         "EN": "Skip material matching — no Mesh collection chosen",
         "ZH": "跳过材质匹配 —— 未选择 Mesh 集合"},
 
-    # ── Category headings (the scrollable left column) ─────────────────────
-    "core.pre_export_check_ops.cat_tex_missing": {
-        "EN": "Missing Textures", "ZH": "贴图缺失"},
-    "core.pre_export_check_ops.cat_tex_root_wrong": {
-        "EN": "No Texture Found At All", "ZH": "找不到任何贴图"},
-    "core.pre_export_check_ops.cat_tex_empty": {
-        "EN": "Empty Texture Path", "ZH": "贴图路径为空"},
-    "core.pre_export_check_ops.cat_tex_not_pow2": {
-        "EN": "Texture Size Not A Power Of Two", "ZH": "贴图边长不是 2 的幂"},
-    "core.pre_export_check_ops.cat_tex_unreadable": {
-        "EN": "Not A Readable .tex", "ZH": "无法识别为 .tex"},
-    "core.pre_export_check_ops.cat_mesh_unmatched": {
-        "EN": "Dangling Meshes", "ZH": "悬空网格"},
-    "core.pre_export_check_ops.cat_mat_unmatched": {
-        "EN": "Dangling Materials", "ZH": "悬空材质"},
-    "core.pre_export_check_ops.cat_mat_duplicate": {
-        "EN": "Duplicate Materials", "ZH": "重复材质"},
-    "core.pre_export_check_ops.cat_name_illegal": {
-        "EN": "Illegal Names", "ZH": "命名不合法"},
-    "core.pre_export_check_ops.cat_mesh_multi": {
-        "EN": "Multi-material Meshes", "ZH": "多材质网格"},
-    "core.pre_export_check_ops.cat_weight_not_normalized": {
-        "EN": "Weights not normalized", "ZH": "权重未归一化"},
-    "core.pre_export_check_ops.desc_weight_not_normalized": {
-        "EN": "These vertices' bone-deform weights do not sum to 1. Both exporters "
-              "divide by the sum before quantising, so this does not break the export "
-              "-- but it is a hazard while editing: painting on such a vertex makes "
-              "Auto Normalize scale the leftovers up, turning invisible residue into "
-              "visible influences. Fix it with Normalize Deform Weights.",
-        "ZH": "这些顶点的骨骼形变权重总和不为 1。两个导出器都会先除以总和再量化，"
-              "所以导出本身不会坏——但它在编辑期是隐患：在这种顶点上刷一笔，"
-              "Auto Normalize 会把残留按比例放大，幽灵权重就从看不见变成看得见的"
-              "错误影响。用「归一化形变权重」修。"},
-    "core.pre_export_check_ops.cat_weight_unweighted": {
-        "EN": "Vertices with no deform weight", "ZH": "没有形变权重的顶点"},
-    "core.pre_export_check_ops.desc_weight_unweighted": {
-        "EN": "These vertices carry no bone-deform weight at all. Normalizing cannot "
-              "help (0/0), and both exporters write an all-zero weight row for them, "
-              "so in game they stay at the rig origin. They need weights assigned.",
-        "ZH": "这些顶点完全没有骨骼形变权重。归一化救不了（0/0），而两个导出器都会"
-              "为它们写出全零的权重行，进游戏后会留在骨架原点。必须补权重。"},
-    "core.pre_export_check_ops.cat_xform_mirrored": {
-        "EN": "Mirrored Transform (Normals Will Die)", "ZH": "镜像变换（法向会全废）"},
-    "core.pre_export_check_ops.cat_xform_degenerate": {
-        "EN": "Collapsed Transform", "ZH": "变换已塌缩"},
+    # ── Categories (the scrollable left column). At most four: grouping the
+    #    old flat list of thirteen is the point -- see docs/pre_export_check_plan.md
+    "core.pre_export_check_ops.cat_tex": {"EN": "Textures", "ZH": "贴图"},
+    "core.pre_export_check_ops.cat_mat": {"EN": "Materials", "ZH": "材质"},
+    "core.pre_export_check_ops.cat_bone": {"EN": "Bones & Weights", "ZH": "骨骼与权重"},
+    "core.pre_export_check_ops.cat_phys": {"EN": "Physics", "ZH": "物理"},
+    "core.pre_export_check_ops.cat_autofix": {"EN": "Auto-fixable", "ZH": "可自动修复"},
 
-    # ── Category detail (the right column) ────────────────────────────────
-    "core.pre_export_check_ops.desc_tex_missing": {
-        "EN": "These texture paths are neither vanilla assets nor present under the Mod "
-              "Root. The game cannot load them.",
-        "ZH": "以下贴图路径既不是原版资源，也不在 Mod 根目录下，游戏无法加载。"},
-    "core.pre_export_check_ops.desc_tex_root_wrong": {
-        "EN": "None of the {n} custom texture path(s) could be found under:\n{root}\n"
-              "Either the Mod Root points at the wrong folder, or the textures have not "
-              "been built yet -- every one of them is failing for the same single reason. "
-              "The unique path(s), to help tell the two apart:",
-        "ZH": "全部 {n} 条自定义贴图路径都无法在下面的目录中找到：\n{root}\n"
-              "要么是 Mod 根目录选错了位置，要么是贴图还没做好——它们失败的原因完全相同。"
-              "去重后的路径，方便自行判断是哪一种："},
-    "core.pre_export_check_ops.desc_xform_mirrored": {
-        "EN": "These objects have a mirrored world transform (a negative determinant -- "
-              "an applied mirror, or an odd number of negative scale axes). RE Mesh "
-              "bakes the object transform into the mesh it writes, and that bake does "
-              "not carry the custom split normals across a mirror: a normal is stored "
-              "relative to a basis derived from the surrounding geometry, and mirroring "
-              "flips the basis. Measured on one face mesh with only the matrix's sign "
-              "changing, 76% of corners came out more than 90 degrees off. The winding "
-              "is not reordered, so triangulating first does not help -- that guards a "
-              "different mechanism. Fix it with Safe Apply Base Transform before exporting.",
-        "ZH": "以下物体的世界变换是镜像的（行列式为负——应用过镜像，或负缩放轴个数为奇数）。"
-              "RE Mesh 会把物体变换烘进导出的网格，而这一步无法让自定义拆分法向跳过镜像："
-              "法向存的是在「由周围几何推出的基底」里的编码，镜像会翻转这个基底。"
-              "实测一张脸，只改矩阵行列式的正负，76% 的角点就偏出 90 度以上。"
-              "绕序并没有被重排，所以先三角化没用——那个选项防的是另一套机制。"
-              "导出前用「安全应用基础变换」修掉。"},
-    "core.pre_export_check_ops.desc_xform_degenerate": {
-        "EN": "These objects have a collapsed world transform -- at least one scale axis "
-              "is zero, so the mesh has no volume to export.",
-        "ZH": "以下物体的世界变换已塌缩——至少有一个缩放轴为零，网格没有体积可导。"},
+    # ── Each category's two header lines: what happens, then what to do ────
+    "core.pre_export_check_ops.effect_tex": {
+        "EN": "The game will load forever (stuck on a black screen) or even crash.",
+        "ZH": "进游戏会无限加载（卡黑屏），甚至崩溃。"},
+    "core.pre_export_check_ops.action_tex": {
+        "EN": "Build the missing textures under the Mod Root, or correct the paths.",
+        "ZH": "把缺的贴图生成到 Mod 根目录下，或修正路径。"},
+    "core.pre_export_check_ops.effect_mat": {
+        "EN": "The export fails or the game hangs on loading; even if it loads, the "
+              "model turns black or shows a yellow-white checkerboard.",
+        "ZH": "无法正常导出或游戏卡加载；即使能进游戏，模型也会整个变黑或显示为黄白棋盘格。"},
+    "core.pre_export_check_ops.action_mat": {
+        "EN": "Make the part after __ in each mesh name match an mdf material name.",
+        "ZH": "让网格名 __ 后面的部分与 mdf 材质名一致。"},
+    "core.pre_export_check_ops.effect_bone": {
+        "EN": "The export fails, physics stops working, or the model deforms badly in game.",
+        "ZH": "无法正常导出，或物理失效，或进游戏后模型严重变形。"},
+    "core.pre_export_check_ops.effect_phys": {
+        "EN": "Physics does nothing (hair and skirts hang still or clip), or the physics file "
+              "does not export.",
+        "ZH": "物理不生效（头发、裙摆不动或穿模），或者物理文件导不出来。"},
+    "core.pre_export_check_ops.effect_autofix": {
+        "EN": "Export would fix these on its own, but the matching options are off.",
+        "ZH": "这些问题导出时本可以自动处理，但对应的选项关着。"},
+    "core.pre_export_check_ops.action_autofix": {
+        "EN": "Click Fix Now once, or switch the items on in the gear next to Auto-fix Before Export.",
+        "ZH": "点「立即修复」处理一次，或在「导出前自动修正」旁的齿轮里打开对应选项。"},
+    "core.pre_export_check_ops.btn_autofix_now": {"EN": "Fix Now", "ZH": "立即修复"},
+    "core.pre_export_check_ops.autofix_now_desc": {
+        "EN": "Run the listed auto-fixes once, without changing the export options",
+        "ZH": "把列出的自动修正执行一次，不改导出选项"},
+    "core.pre_export_check_ops.autofix_temp_note": {
+        "EN": "Face triangulation and vertex colour filling only exist during export, "
+              "so they cannot be fixed now",
+        "ZH": "面部三角化与顶点色补齐只在导出期间临时处理，无法立即修复"},
+    "core.pre_export_check_ops.autofix_done": {
+        "EN": "Auto-fixed {n} item(s)", "ZH": "已自动修复 {n} 项"},
+    "core.pre_export_check_ops.action_by_reason": {
+        "EN": "Handle each line as its reason says.",
+        "ZH": "按每条后面写的原因处理。"},
+
+    # ── Groups inside a category ───────────────────────────────────────────
+    "core.pre_export_check_ops.sub_phys_structure": {"EN": "Structure Errors", "ZH": "结构错误"},
+    "core.pre_export_check_ops.sub_phys_parent": {"EN": "In the Wrong Place", "ZH": "层级挂错"},
+    "core.pre_export_check_ops.sub_phys_bone_retarget": {
+        "EN": "Bone Name Differs Only in Case", "ZH": "骨骼名只差大小写"},
+    "core.pre_export_check_ops.sub_phys_bone_missing": {
+        "EN": "Node Bone Not Found", "ZH": "节点指向的骨骼不存在"},
+    "core.pre_export_check_ops.sub_phys_bone_path": {
+        "EN": "Nodes Don't Follow the Bones", "ZH": "节点与骨骼层级对不上"},
+    "core.pre_export_check_ops.sub_phys_collider_bone": {
+        "EN": "Collider Bone Not Found", "ZH": "碰撞体指向的骨骼不存在"},
+    "core.pre_export_check_ops.sub_phys_no_weight": {
+        "EN": "Chain Moves No Mesh", "ZH": "整条链都没有权重"},
+    "core.pre_export_check_ops.sub_phys_duplicate": {"EN": "Duplicate Chains", "ZH": "重复链"},
+    "core.pre_export_check_ops.sub_phys_crossing": {"EN": "Crossing Chains", "ZH": "交叉链"},
+    "core.pre_export_check_ops.sub_phys_clsp_unbound": {
+        "EN": "Colliders but No clsp", "ZH": "碰撞体在 chain2 里，clsp 没绑定"},
+    "core.pre_export_check_ops.sub_phys_link_dangling": {
+        "EN": "Link to Nowhere", "ZH": "chainlink 端点悬空"},
+    "core.pre_export_check_ops.sub_phys_single_node": {
+        "EN": "Single-node Chains", "ZH": "单节点链"},
+    "core.pre_export_check_ops.sub_tex_root_wrong": {
+        "EN": "None Found At All", "ZH": "一张都找不到"},
+    "core.pre_export_check_ops.sub_tex_missing": {"EN": "Not Found", "ZH": "找不到"},
+    "core.pre_export_check_ops.sub_tex_wrong_version": {
+        "EN": "Built for Another Game", "ZH": "版本不对"},
+    "core.pre_export_check_ops.sub_tex_not_pow2": {
+        "EN": "Size Not a Power of Two", "ZH": "边长不是 2 的幂"},
+    "core.pre_export_check_ops.sub_tex_unreadable": {
+        "EN": "Not a Valid .tex", "ZH": "不是有效的 .tex"},
+    "core.pre_export_check_ops.sub_tex_empty": {"EN": "Empty Path", "ZH": "空路径"},
+    "core.pre_export_check_ops.sub_mat_pair": {
+        "EN": "Names Don't Match", "ZH": "名字对不上"},
+    "core.pre_export_check_ops.sub_mesh_unmatched": {
+        "EN": "Material Missing From the mdf", "ZH": "网格要的材质不存在"},
+    "core.pre_export_check_ops.sub_mat_unused": {
+        "EN": "Material No Mesh Uses", "ZH": "mdf 里的材质没人用"},
+    "core.pre_export_check_ops.sub_mat_pair_weak": {
+        "EN": "Names Don't Match (a rename, or a new material?)",
+        "ZH": "名字对不上（可能是改名，也可能是新材质）"},
+    "core.pre_export_check_ops.sub_mat_unused_fixable": {
+        "EN": "Unused Material, Fixable From a Blender Material",
+        "ZH": "mdf 里的材质没人用（可按 Blender 材质修复）"},
+    "core.pre_export_check_ops.sub_mat_outdated": {
+        "EN": "Outdated Material", "ZH": "材质过时"},
+    "core.pre_export_check_ops.sub_mat_snapshot_stale": {
+        "EN": "Material Snapshot Out of Date", "ZH": "材质快照与游戏版本不符"},
+    "core.pre_export_check_ops.sub_mesh_multi_color": {
+        "EN": "Several Base Colours on One Mesh", "ZH": "多种底色的网格"},
+    "core.pre_export_check_ops.sub_mat_duplicate": {
+        "EN": "Duplicate Names", "ZH": "重名"},
+    "core.pre_export_check_ops.sub_name_illegal": {
+        "EN": "Illegal Names", "ZH": "命名不合法"},
+    "core.pre_export_check_ops.sub_unweighted": {
+        "EN": "Vertices With No Usable Weight", "ZH": "没有有效权重的顶点"},
+    "core.pre_export_check_ops.sub_mesh_structure": {
+        "EN": "Collection Structure", "ZH": "集合结构不对"},
+    "core.pre_export_check_ops.sub_bone_non_ascii": {
+        "EN": "Bone Names Not in English", "ZH": "骨骼名不是英文"},
+    "core.pre_export_check_ops.sub_vgroup_no_bone": {
+        "EN": "Vertex Groups With No Bone", "ZH": "顶点组找不到对应骨骼"},
+    "core.pre_export_check_ops.sub_xform_mirrored": {
+        "EN": "Mirrored Transform", "ZH": "镜像变换"},
+    "core.pre_export_check_ops.sub_xform_degenerate": {
+        "EN": "Collapsed Transform", "ZH": "变换塌缩"},
+
+    # ── Item lines ─────────────────────────────────────────────────────────
+    "core.pre_export_check_ops.item_root_wrong": {
+        "EN": "No custom texture found under the Mod Root ({n} in total): {root}",
+        "ZH": "Mod 根目录下找不到任何自定义贴图（共 {n} 条）：{root}"},
+    "core.pre_export_check_ops.item_wrong_version": {
+        "EN": "{path} — only a .tex.{have} exists, built for another game",
+        "ZH": "{path} — 只有 .tex.{have}，是给别的游戏转的"},
+    "core.pre_export_check_ops.item_wrong_header": {
+        "EN": "{path} — its header says version {have}", "ZH": "{path} — 文件头写的是版本 {have}"},
+    "core.pre_export_check_ops.item_unreadable_kind": {
+        "EN": "{path} — really a {kind} file", "ZH": "{path} — 实际是 {kind} 文件"},
+    "core.pre_export_check_ops.item_unreadable": {
+        "EN": "{path} — not a file format that can be recognised",
+        "ZH": "{path} — 认不出是什么格式"},
+    "core.pre_export_check_ops.item_tex_corrupt": {
+        "EN": "{path} — the .tex file is damaged", "ZH": "{path} — .tex 文件已损坏"},
+    "core.pre_export_check_ops.item_pair": {
+        "EN": "Mesh wants \"{mesh}\", the mdf has \"{mdf}\"",
+        "ZH": "网格要「{mesh}」，mdf 里是「{mdf}」"},
+    "core.pre_export_check_ops.item_pair_weak": {
+        "EN": "Mesh wants \"{mesh}\", the only unused mdf material is \"{mdf}\"",
+        "ZH": "网格要「{mesh}」，mdf 里只剩「{mdf}」没人用"},
+    "core.pre_export_check_ops.item_mesh_unmatched": {
+        "EN": "{obj} — no \"{mat}\" in the mdf", "ZH": "{obj} — mdf 里没有「{mat}」"},
+    "core.pre_export_check_ops.item_mat_unused": {
+        "EN": "\"{mat}\" in the mdf — no mesh uses it",
+        "ZH": "mdf 里的「{mat}」— 没有网格使用"},
+    "core.pre_export_check_ops.hint_unused_blender": {
+        "EN": " (mesh \"{obj}\" has a Blender material of that name)",
+        "ZH": "（网格「{obj}」的 Blender 材质与它同名）"},
+    "core.pre_export_check_ops.hint_unused_elsewhere": {
+        "EN": " (may belong to the {where} mesh collection)",
+        "ZH": "（可能属于「{where}」的 mesh 集合）"},
+    "core.pre_export_check_ops.item_multi_color": {
+        "EN": "{obj} — {n} different base colours; in game the whole mesh shows one material",
+        "ZH": "{obj} — 用了 {n} 种底色，进游戏整块只显示一个材质"},
+    "core.pre_export_check_ops.item_multi_color_fallback": {
+        "EN": "{obj} — {n} different base colours; the material name comes from its first Blender material",
+        "ZH": "{obj} — 用了 {n} 种底色，材质名取自第一个 Blender 材质"},
+    "core.pre_export_check_ops.item_snapshot_stale": {
+        "EN": "The bundled vanilla material snapshot ({snap}) is for a different game build than "
+              "yours, so outdated materials were not checked; RE Asset Library's MDF Updater "
+              "reads your game directly",
+        "ZH": "内置的原版材质快照（{snap}）和你安装的游戏版本不一致，已跳过过时材质检查；"
+              "RE Asset Library 的 MDF Updater 会直接读取你的游戏"},
+    "core.pre_export_check_ops.btn_upstream_updater": {
+        "EN": "Open RE Asset Library MDF Updater", "ZH": "打开 RE Asset Library 的 MDF Updater"},
+    "core.pre_export_check_ops.outdated_padding": {"EN": "padding", "ZH": "padding 不对"},
+    "core.pre_export_check_ops.outdated_props": {"EN": "properties changed", "ZH": "属性有增删"},
+    "core.pre_export_check_ops.outdated_order": {"EN": "property order", "ZH": "属性顺序不对"},
+    "core.pre_export_check_ops.outdated_textures": {"EN": "texture slots changed", "ZH": "贴图槽有增删"},
+    "core.pre_export_check_ops.outdated_snapshot": {
+        "EN": "Compared with the vanilla layout snapshot {snap}; after a game update it may be the snapshot that is old",
+        "ZH": "对照的是 {snap} 的原版快照；游戏更新后也可能是快照过时了"},
+    "core.pre_export_check_ops.btn_fix_textures": {"EN": "Fix Textures", "ZH": "修复贴图"},
+    "core.pre_export_check_ops.btn_phys_reparent": {
+        "EN": "Move Under the First Valid Parent", "ZH": "挂到首个合法父级"},
+    "core.pre_export_check_ops.btn_phys_retarget": {
+        "EN": "Retarget to Matching Bone", "ZH": "改指向同名骨骼"},
+    "core.pre_export_check_ops.btn_phys_dedupe": {
+        "EN": "Remove Duplicate Chains", "ZH": "清除重复链"},
+    "core.pre_export_check_ops.btn_phys_select_crossing": {
+        "EN": "Select These Chains", "ZH": "选中这些链"},
+    "core.pre_export_check_ops.btn_phys_bind_clsp": {"EN": "Bind clsp", "ZH": "绑定 clsp"},
+    "core.pre_export_check_ops.btn_phys_remove_single": {
+        "EN": "Remove Useless Chains", "ZH": "清除无用链"},
+    "core.pre_export_check_ops.btn_ascii_bones": {
+        "EN": "Rename to English and Sync References", "ZH": "转成英文名并同步引用"},
+    "core.pre_export_check_ops.btn_select_unweighted": {
+        "EN": "Select These Vertices", "ZH": "选中这些顶点"},
+    "core.pre_export_check_ops.btn_align": {"EN": "Align to mdf Names", "ZH": "按 mdf 材质名对齐"},
+    "core.pre_export_check_ops.btn_unused_blender": {
+        "EN": "Fix by Blender Material", "ZH": "按 Blender 材质修复"},
+    "core.pre_export_check_ops.btn_delete_unused": {
+        "EN": "Delete Unused Materials", "ZH": "删除多余材质"},
+    "core.pre_export_check_ops.btn_quick_generate": {
+        "EN": "Quick Generate With the Generator", "ZH": "使用生成器快捷生成"},
+    "core.pre_export_check_ops.btn_separate": {
+        "EN": "Separate and Re-check", "ZH": "分离并重新检查"},
+    "core.pre_export_check_ops.btn_outdated": {
+        "EN": "Update Outdated Materials", "ZH": "更新过时材质"},
+    "core.pre_export_check_ops.item_mat_duplicate": {
+        "EN": "\"{mat}\" appears {n} times in the mdf", "ZH": "mdf 里「{mat}」出现 {n} 次"},
+    "core.pre_export_check_ops.item_unweighted": {
+        "EN": "{obj} — {n} vertex(es)", "ZH": "{obj} — {n} 个顶点"},
+    "core.pre_export_check_ops.item_unweighted_all": {
+        "EN": "{obj} — no bone weight at all; the whole mesh follows bone 0",
+        "ZH": "{obj} — 完全没有骨骼权重，整块会跟着第 0 根骨骼走"},
+    "core.pre_export_check_ops.item_vgroup_no_bone": {
+        "EN": "{obj} · vertex group \"{vg}\" — no bone of that name; its weights go to bone 0",
+        "ZH": "{obj} · 顶点组「{vg}」— 骨架里没有这根骨骼，它的权重会算到第 0 根骨骼上"},
+    "core.pre_export_check_ops.item_many_armatures": {
+        "EN": "{col} — {n} armatures; RE Mesh exports only with one",
+        "ZH": "{col} — 有 {n} 个骨架，RE Mesh 只接受一个"},
+    "core.pre_export_check_ops.item_no_armature": {
+        "EN": "{col} — meshes have vertex groups but the collection has no armature",
+        "ZH": "{col} — 网格有顶点组，但集合里没有骨架"},
+    "core.pre_export_check_ops.item_armature_outside": {
+        "EN": "{col} — armature \"{arm}\" is not a direct member of the collection",
+        "ZH": "{col} — 骨架「{arm}」不是这个集合的直接成员"},
+    "core.pre_export_check_ops.item_empty_mesh": {
+        "EN": "{obj} — no vertices or no faces", "ZH": "{obj} — 空网格（没有顶点或没有面）"},
+    "core.pre_export_check_ops.item_too_many_bones": {
+        "EN": "{col} — {n} / {limit} weighted bones", "ZH": "{col} — 带权重的骨骼 {n} / {limit} 根"},
+    "core.pre_export_check_ops.item_bone_ascii_physics": {
+        "EN": "{old} → {new} — used by a chain", "ZH": "{old} → {new} — 被 chain 引用"},
+    "core.pre_export_check_ops.item_bone_ascii": {"EN": "{old} → {new}", "ZH": "{old} → {new}"},
+    "core.pre_export_check_ops.mirror_shared": {
+        "EN": "mesh data is shared by several objects", "ZH": "网格数据被共用"},
+    "core.pre_export_check_ops.mirror_parent": {
+        "EN": "the mirror comes from a parent (e.g. an armature scaled -1)", "ZH": "镜像来自父级（如骨架带负缩放）"},
+    "core.pre_export_check_ops.mirror_normals": {
+        "EN": "baking it could not keep the normals", "ZH": "应用后法向无法保持"},
+    "core.pre_export_check_ops.mirror_apply": {
+        "EN": "click Fix Now, or switch on the mirror fix in the gear next to Auto-fix Before Export",
+        "ZH": "点「立即修复」，或在「导出前自动修正」旁的齿轮里打开镜像修正"},
+    "core.pre_export_check_ops.item_degenerate": {
+        "EN": "{obj} — a scale axis is 0", "ZH": "{obj} — 有一个缩放轴是 0"},
     "core.pre_export_check_ops.note_no_custom_normals": {
         "EN": "(no authored normals -- only the winding is wrong)",
         "ZH": "（无自定义法向——只有绕序是错的）"},
-    "core.pre_export_check_ops.desc_tex_empty": {
-        "EN": "These texture slots have no path filled in at all.",
-        "ZH": "以下贴图槽位没有填写任何路径。"},
-    "core.pre_export_check_ops.desc_tex_not_pow2": {
-        "EN": "Both sides of a texture must be a power of two (256, 512, 1024, 2048 "
-              "...). These files are not, so the game may load them wrong or not at "
-              "all. Only the mod's own textures are checked -- vanilla ones live in "
-              "the game's paks.",
-        "ZH": "贴图的长和宽都必须是 2 的幂（256、512、1024、2048……）。"
-              "以下文件不满足，游戏可能加载异常或直接加载不出来。"
-              "只检查 mod 自己的贴图——原版贴图在游戏 pak 里。"},
-    "core.pre_export_check_ops.desc_tex_unreadable": {
-        "EN": "These files exist under the Mod Root but have no readable .tex header. "
-              "Most often this is a .png or .dds that was renamed to .tex instead of "
-              "being converted.",
-        "ZH": "以下文件在 Mod 根目录下存在，但读不出 .tex 文件头。"
-              "最常见的原因是把 .png 或 .dds 直接改了后缀，而不是真正做了转换。"},
-    "core.pre_export_check_ops.desc_mesh_unmatched": {
-        "EN": "These meshes derive a material name that no material in the mdf "
-              "collection provides, so they will not export correctly.",
-        "ZH": "以下网格推导出的材质名，在 mdf 集合中找不到对应材质，导出会出问题。"},
-    "core.pre_export_check_ops.desc_mat_unmatched": {
-        "EN": "No mesh asks for these materials. Usually this is a rename that only got "
-              "done on one side.",
-        "ZH": "没有任何网格使用这些材质，通常是改名只改了一侧。"},
-    "core.pre_export_check_ops.desc_mat_duplicate": {
-        "EN": "These material names appear more than once in this mdf collection:",
-        "ZH": "本 mdf 集合中以下材质名重复出现："},
-    "core.pre_export_check_ops.desc_name_illegal": {
-        "EN": "Spaces, dots and a leading underscore all break the export. The fix "
-              "button corrects the mdf material and its meshes together, so a name that "
-              "matched before still matches afterwards.",
-        "ZH": "空格、点号、开头的下划线都会导致导出出错。"
-              "修复按钮会同时修正 mdf 材质和对应网格，原本匹配的名字修完仍然匹配。"},
-    "core.pre_export_check_ops.desc_mesh_multi": {
-        "EN": "These meshes carry more than one material. Only the first is exported, so "
-              "the result may look wrong in game.",
-        "ZH": "以下网格存在多材质，导出只取第一个，实际表现可能会出现异常。"},
+    # One item shared by several parts: "<text> — used by Body, Waist"
+    "core.pre_export_check_ops.item_used_by": {
+        "EN": " — used by {parts}", "ZH": " — {parts}在用"},
+    "core.pre_export_check_ops.part_joiner": {"EN": ", ", "ZH": "、"},
+    # ── Report paging (one group's PAGE_SIZE slice) ────────────────────────
+    "core.pre_export_check_ops.page_range": {
+        "EN": "{a}–{b} of {n}", "ZH": "第 {a}–{b} 条，共 {n} 条"},
+    "core.pre_export_check_ops.page_prev_desc": {
+        "EN": "Show the previous page of this group", "ZH": "显示这一组的上一页"},
+    "core.pre_export_check_ops.page_next_desc": {
+        "EN": "Show the next page of this group", "ZH": "显示这一组的下一页"},
 
     # ── Reason codes from core/pre_export_check.py ────────────────────────
     "core.pre_export_check_ops.reason_space": {
         "EN": "contains a space", "ZH": "含空格"},
     "core.pre_export_check_ops.reason_dot": {
         "EN": "contains a dot", "ZH": "含点号"},
-    "core.pre_export_check_ops.reason_leading_underscore": {
-        "EN": "starts with an underscore", "ZH": "以下划线开头"},
+    "core.pre_export_check_ops.reason_non_ascii": {
+        "EN": "contains non-English characters", "ZH": "含中日文等非英文字符"},
+    "core.pre_export_check_ops.reason_symbol": {
+        "EN": "contains other symbols", "ZH": "含其他符号"},
     "core.pre_export_check_ops.reason_empty": {
         "EN": "the name is empty", "ZH": "名称为空"},
     "core.pre_export_check_ops.reason_single_underscore": {
@@ -1930,9 +2591,12 @@ STRINGS = {
     # ── Report dialog ─────────────────────────────────────────────────────
     "core.pre_export_check_ops.report_desc": {
         "EN": "Result of the pre-export check", "ZH": "导出前检查的结果"},
-    "core.pre_export_check_ops.n_issues": {
-        "EN": "Found {n} issue(s) to deal with before exporting",
-        "ZH": "发现 {n} 处需要在导出前处理的问题"},
+    # Counts categories and notes, never vertices (docs/pre_export_check_plan.md §1.3)
+    "core.pre_export_check_ops.sum_errors": {
+        "EN": "{n} categor(ies) to fix before exporting", "ZH": "{n} 类需要在导出前处理"},
+    "core.pre_export_check_ops.sum_infos": {"EN": "{n} note(s)", "ZH": "{n} 条提示"},
+    "core.pre_export_check_ops.sum_autofix": {
+        "EN": "{n} item(s) will be auto-fixed on export", "ZH": "导出时将自动处理 {n} 项"},
     "core.pre_export_check_ops.all_clear": {
         "EN": "No problems found", "ZH": "未发现问题"},
     "core.pre_export_check_ops.btn_fix": {
@@ -1986,6 +2650,12 @@ STRINGS = {
               "safe to compare against",
         "ZH": "没有 MANIFEST.txt —— 这是清单出现之前的安装，或者是源码检出。"
               "请先用发布版 zip 重装；没有清单就没有可靠的比对依据，不会删任何东西"},
+    "core.stale_cleanup_ops.stale_manifest": {
+        "EN": "MANIFEST.txt is for {listed}, but {installed} is installed -- the built-in "
+              "updater does not refresh it. Reinstall from the release zip first; with an "
+              "old list, files this version needs would be deleted",
+        "ZH": "MANIFEST.txt 属于 {listed}，但当前安装的是 {installed} —— 内置更新器不会更新清单。"
+              "请先用发布版 zip 重装；按旧清单比对会把本版本需要的文件当成残留删掉"},
     "core.stale_cleanup_ops.none_found": {
         "EN": "No leftover files -- the install matches this version exactly",
         "ZH": "没有残留文件 —— 安装目录与本版本完全一致"},
@@ -1994,11 +2664,19 @@ STRINGS = {
         "ZH": "残留 {n} 个文件，共 {mb} MB，另有 {pyc} 个 __pycache__ 目录："},
     "core.stale_cleanup_ops.and_more": {
         "EN": "... and {n} more", "ZH": "……另有 {n} 项"},
+    "core.stale_cleanup_ops.kept_presets_title": {
+        "EN": "The last update kept {n} preset(s) you had edited:",
+        "ZH": "上次更新保留了 {n} 个你改过的预设："},
+    "core.stale_cleanup_ops.kept_presets_hint": {
+        "EN": "The new official version of each sits beside it as <name>.json.new",
+        "ZH": "每个预设的官方新版放在它旁边，文件名为 <原名>.json.new"},
+    "core.stale_cleanup_ops.kept_presets_dismiss": {"EN": "Got It", "ZH": "知道了"},
     "core.stale_cleanup_ops.kept_note": {
-        "EN": "{n} file(s) under assets/presets/ are left alone -- the preset editor "
-              "writes there, so your own presets look like leftovers too",
-        "ZH": "assets/presets/ 下的 {n} 个文件不会动 —— 预设编辑器往那里写，"
-              "你自建的预设也会被判成残留"},
+        "EN": "{n} file(s) in folders you can add to (presets, facial maps, export schemes, "
+              "armour / weapon tables) are left alone -- your own files there look like "
+              "leftovers too",
+        "ZH": "可自行添加文件的目录（预设、面部对应表、导出方案、装备 / 武器表）下的 {n} 个文件"
+              "不会动 —— 你自己放进去的文件看起来也像遗留文件"},
     "core.stale_cleanup_ops.confirm": {
         "EN": "This cannot be undone. The full list is in the system console",
         "ZH": "此操作不可撤销。完整清单已打印到系统控制台"},
@@ -2051,7 +2729,159 @@ STRINGS = {
         "EN": "The porting tools unlock once you have read this",
         "ZH": "阅读并确认后即可使用移植功能"},
     "core.port_consent.poll_blocked": {
-        "EN": "Read the cross-game porting notice first -- see the 移植 group in "
-              "the Modding Toolkit panel",
+        "EN": "Read the cross-game porting notice first -- see the Cross-Game Port "
+              "group in the Modding Toolkit panel",
         "ZH": "请先阅读并确认跨游戏移植使用须知（面板中的“移植”一组）"},
+
+    # ── core/poll_msg.py: why a button is greyed out (shown in its tooltip) ──
+    "core.poll.need_active_mesh": {
+        "EN": "Make a mesh the active object", "ZH": "需要以一个网格为活动物体"},
+    "core.poll.need_active_armature": {
+        "EN": "Make an armature the active object", "ZH": "需要以一个骨架为活动物体"},
+    "core.poll.need_selected_mesh": {
+        "EN": "Select at least one mesh", "ZH": "请至少选中一个网格"},
+    "core.poll.need_shape_keys": {
+        "EN": "The active mesh has no shape keys besides Basis",
+        "ZH": "活动网格除基型外没有形态键"},
+    "core.poll.need_visible_modifier": {
+        "EN": "The active mesh has no modifier enabled in the viewport to apply",
+        "ZH": "活动网格没有在视图中启用、可供应用的修改器"},
+    "core.poll.need_armature_in_file": {
+        "EN": "There is no armature in this file", "ZH": "当前文件里没有骨架"},
+    "core.poll.need_pose_mode": {
+        "EN": "Switch the armature to Pose Mode first", "ZH": "请先把骨架切换到姿态模式"},
+    "core.poll.need_edit_mode": {
+        "EN": "Switch the armature to Edit Mode first", "ZH": "请先把骨架切换到编辑模式"},
+    "core.poll.need_addon": {
+        "EN": "Needs {addon}, which is not installed or not enabled",
+        "ZH": "需要 {addon}，但它未安装或未启用"},
+    "core.poll.need_mdf_collection": {
+        "EN": "There is no .mdf2 collection in this file -- import or create one first",
+        "ZH": "当前文件里没有 .mdf2 集合，请先导入或新建"},
+    "core.poll.need_chain_collection": {
+        "EN": "There is no .chain / .chain2 collection in this file",
+        "ZH": "当前文件里没有 .chain / .chain2 集合"},
+    "core.poll.need_material_slot": {
+        "EN": "The active mesh has no material", "ZH": "活动网格没有材质"},
+    "core.poll.need_mesh_collection": {
+        "EN": "Pick the Mesh Collection in the generator first",
+        "ZH": "请先在生成器里选择网格集合"},
+    "core.poll.need_copied_bindings": {
+        "EN": "Copy a group's bindings first", "ZH": "请先复制一组的绑定"},
+    # core/shapekey_export.py -- shape keys in the batch export dialogs
+    "core.shapekey_export.export_toggle": {"EN": "Export Shape Keys", "ZH": "导出形态键"},
+    "core.shapekey_export.mode_label": {"EN": "Normal Format", "ZH": "法线格式"},
+    "core.shapekey_export.mode_mode1": {
+        "EN": "Export, Recalculate Normals in Game", "ZH": "导出并实时重算法线"},
+    "core.shapekey_export.mode_mode1_desc": {
+        "EN": "Write the normal-recalculation tables; the game recomputes normals as keys move",
+        "ZH": "写入法线重算表，由游戏随形态键实时重算法线"},
+    "core.shapekey_export.mode_keepnormals_surface": {
+        "EN": "Export, Keep Normals (Recommended)", "ZH": "导出并保留法线（推荐）"},
+    "core.shapekey_export.mode_keepnormals_surface_desc": {
+        "EN": "Store each key's normals, turned only with the surface (RE Mesh Editor's default)",
+        "ZH": "保存每个形态键的法线，只随表面转动（RE Mesh Editor 默认）"},
+    "core.shapekey_export.need_fork": {
+        "EN": "Needs RE-Mesh-Editor-BlendShape", "ZH": "需要 RE-Mesh-Editor-BlendShape"},
+    "core.shapekey_export.mode_unsupported": {
+        "EN": "The installed RE Mesh Editor lacks this mode; its own default is used",
+        "ZH": "当前 RE Mesh Editor 不支持这个模式，导出时用它自己的默认值"},
+    "core.shapekey_export.use_sks": {
+        "EN": "Use ShapeKeySystem", "ZH": "使用形态键系统 ShapeKeySystem"},
+    "core.shapekey_export.filter_label": {"EN": "Keys to Export", "ZH": "导出范围"},
+    "core.shapekey_export.only_expression_meshes": {
+        "EN": "Only Meshes with Expression Keys", "ZH": "只处理含表情键的网格"},
+    "core.shapekey_export.filter_follow": {"EN": "As Ticked / Locked", "ZH": "按勾选和锁定"},
+    "core.shapekey_export.filter_follow_desc": {
+        "EN": "Export exactly what the shape key list says: ticked keys go out, unticked ones don't, "
+              "locked ones are baked into the mesh",
+        "ZH": "完全按形态键列表的设置：打勾的导出，不打勾的不导出，上锁的烘焙进网格"},
+    "core.shapekey_export.filter_expr_sculpt": {
+        "EN": "Expression + Sculpt Keys", "ZH": "导出表情、捏脸形态键"},
+    "core.shapekey_export.filter_expr_sculpt_desc": {
+        "EN": "Every expression key (even unticked or locked), plus the ticked, unlocked sculpt keys "
+              "whose value is not 0",
+        "ZH": "全部表情形态键（无视打勾和上锁），以及打勾、未上锁且数值不为 0 的捏脸形态键"},
+    "core.shapekey_export.filter_expression": {
+        "EN": "Expression Keys Only", "ZH": "仅导出表情形态键"},
+    "core.shapekey_export.filter_expression_desc": {
+        "EN": "Every expression key, even unticked or locked ones; no sculpt keys",
+        "ZH": "只导出表情形态键（无视打勾和上锁），不导出捏脸形态键"},
+    "core.shapekey_export.filter_sculpt": {"EN": "Sculpt Keys Only", "ZH": "仅导出捏脸形态键"},
+    "core.shapekey_export.filter_sculpt_desc": {
+        "EN": "Only the ticked, unlocked sculpt keys whose value is not 0; no expression keys",
+        "ZH": "只导出打勾、未上锁且数值不为 0 的捏脸形态键，不导出表情形态键"},
+    "core.shapekey_export.sculpt_only_hint": {
+        "EN": "No expression keys are exported with this option",
+        "ZH": "此选项不会导出任何表情形态键"},
+    "core.shapekey_export.inactive_expr": {
+        "EN": "{n} expression keys are unticked or locked and won't be exported",
+        "ZH": "有 {n} 个表情形态键未打勾或已上锁，不会导出"},
+    "core.shapekey_export.inactive_details": {"EN": "Details", "ZH": "查看详情"},
+    "core.shapekey_export.inactive_details_desc": {
+        "EN": "List the unticked / locked expression keys, and activate them all",
+        "ZH": "列出未打勾或已上锁的表情形态键，并可一键全部激活"},
+    "core.shapekey_export.inactive_title": {
+        "EN": "Unticked / Locked Expression Keys", "ZH": "未打勾或已上锁的表情形态键"},
+    "core.shapekey_export.inactive_row": {"EN": "{obj}: {key}", "ZH": "{obj}：{key}"},
+    "core.shapekey_export.state_muted": {"EN": "Unticked", "ZH": "未打勾"},
+    "core.shapekey_export.state_locked": {"EN": "Locked", "ZH": "已上锁"},
+    "core.shapekey_export.state_both": {"EN": "Unticked, Locked", "ZH": "未打勾、已上锁"},
+    "core.shapekey_export.inactive_more": {"EN": "... and {n} more", "ZH": "……另有 {n} 个"},
+    "core.shapekey_export.activate_all": {"EN": "Activate All", "ZH": "全部激活"},
+    "core.shapekey_export.activated": {
+        "EN": "Activated {n} expression keys", "ZH": "已激活 {n} 个表情形态键"},
+    "core.shapekey_export.profile_label": {"EN": "Expression Profile", "ZH": "表情方案"},
+    "core.shapekey_export.profile_entry": {
+        "EN": "{name}  {hits}/{total}", "ZH": "{name}  {hits}/{total}"},
+    "core.shapekey_export.profile_auto": {"EN": "Auto: {entry}", "ZH": "自动：{entry}"},
+    "core.shapekey_export.profile_auto_item": {"EN": "Auto (best match)", "ZH": "自动（最佳匹配）"},
+    "core.shapekey_export.profile_none": {
+        "EN": "No profile matches -- all keys count as sculpt",
+        "ZH": "没有匹配的方案，全部按捏脸处理"},
+    "core.shapekey_export.pick_profile_desc": {
+        "EN": "SKS expression profiles, best match first (matched channels / channels)",
+        "ZH": "SKS 表情方案，按匹配率从高到低（匹配通道数/通道总数）"},
+    "core.shapekey_export.count": {
+        "EN": "{out} keys exported  (expression {expr}, sculpt used {used}, unused {unused})",
+        "ZH": "导出 {out} 个形态键（表情 {expr}，已使用 {used}，未使用 {unused}）"},
+    "core.shapekey_export.filter_needs_profile": {
+        "EN": "No expression profile matches, so keys are exported as ticked / locked",
+        "ZH": "没有匹配的表情方案，将按勾选和锁定导出"},
+    "core.shapekey_export.write_preset": {"EN": "Write SKS Preset", "ZH": "写入 SKS 预设"},
+    "core.shapekey_export.preset_name": {"EN": "Preset Name", "ZH": "预设名称"},
+    "core.shapekey_export.preset_written": {
+        "EN": "SKS preset written ({n} files)", "ZH": "已写入 SKS 预设（{n} 个文件）"},
+    "core.shapekey_export.preset_nothing": {
+        "EN": "No shape keys were exported, so no SKS preset was written",
+        "ZH": "没有导出形态键，未写入 SKS 预设"},
+    "core.shapekey_export.names_written": {
+        "EN": "SKS names table written ({n} files)", "ZH": "已写入 SKS 名字表（{n} 个文件）"},
+    "core.shapekey_export.preset_no_model": {
+        "EN": "ShapeKeySystem has no model for {who}, so no SKS preset or names table was written",
+        "ZH": "ShapeKeySystem 不支持 {who}，未写入 SKS 预设和名字表"},
+    "core.shapekey_export.configure_desc": {
+        "EN": "Tick, untick and unlock the selected meshes' shape keys the way a batch export "
+              "key option would export them; tick more by hand afterwards and export as ticked / locked",
+        "ZH": "按批量导出里某个形态键导出选项，直接设置选中网格形态键的勾选和锁定；"
+              "之后可再手动勾选更多，导出时选“按勾选和锁定”"},
+    "core.shapekey_export.configure_title": {"EN": "Configure Selected Meshes' Shape Keys", "ZH": "配置选中网格形态键"},
+    "core.shapekey_export.configure_apply": {"EN": "Apply", "ZH": "应用"},
+    "core.shapekey_export.configure_none": {
+        "EN": "No selected mesh has shape keys", "ZH": "选中的网格都没有形态键"},
+    "core.shapekey_export.configure_no_profile": {
+        "EN": "No expression profile matches, so expression keys can't be told apart",
+        "ZH": "没有匹配的表情方案，无法区分表情形态键"},
+    "core.shapekey_export.configure_summary": {
+        "EN": "{meshes} meshes, {keys} keys (expression {expr})",
+        "ZH": "{meshes} 个网格，{keys} 个形态键（表情 {expr}）"},
+    "core.shapekey_export.configure_changes": {
+        "EN": "Will tick / unlock {on}, untick {off}",
+        "ZH": "将勾选/解锁 {on} 个，取消勾选 {off} 个"},
+    "core.shapekey_export.configure_hint": {
+        "EN": "Then export with \"As Ticked / Locked\"", "ZH": "之后导出时选“按勾选和锁定”"},
+    "core.shapekey_export.configure_done": {
+        "EN": "Ticked / unlocked {on} keys, unticked {off}",
+        "ZH": "已勾选/解锁 {on} 个形态键，取消勾选 {off} 个"},
 }
+

@@ -178,6 +178,14 @@ STRINGS = {
         "ZH": "Bonesystem 完成: {fbxskel}.fbxskel.7 / {json}.json"},
     "mhws.batch_export.bonesystem_failed": {"EN": "Bonesystem failed: {err}", "ZH": "Bonesystem 失败: {err}"},
 
+    # ── Lua Bone System export ───────────────────────────────────────────────
+    "mhws.batch_export.lua_bone_select_armature": {
+        "EN": "Lua Bone System: please select an armature object", "ZH": "Lua Bone System: 请选择一个骨架对象"},
+    "mhws.batch_export.lua_bone_export_done": {
+        "EN": "Lua Bone System complete: {name} ({missing} joint(s) not found, written as zero; "
+              "{head} head file(s) written)",
+        "ZH": "Lua Bone System 完成: {name} (缺失 {missing} 根骨骼, 已写为 0; 头部文件写入 {head} 个)"},
+
     # ── MHWS_OT_BatchExport ──────────────────────────────────────────────────
     "mhws.batch_export.batch_export_desc": {"EN": "MHWs armor batch export", "ZH": "MHWs 装备批量导出"},
     "mhws.batch_export.re_mesh_not_installed_cleanup_skip": {
@@ -220,9 +228,15 @@ STRINGS = {
         "EN": "MHWs armor batch export dialog", "ZH": "MHWs 装备批量导出对话框"},
     "mhws.batch_export_ui.select_armor_to_configure": {
         "EN": "Select an armor to configure bindings", "ZH": "请选择装备以配置绑定"},
-    "mhws.batch_export_ui.use_bonesystem_label": {"EN": "Use Bonesystem", "ZH": "使用 Bonesystem"},
+    "mhws.batch_export.lua_bone_skipped_both": {
+        "EN": "Bonesystem and Lua Bone System cannot both be used; only Bonesystem was exported",
+        "ZH": "Bonesystem 与 Lua Bone System 不能同时使用，本次只导出了 Bonesystem"},
+    "mhws.batch_export_ui.use_bonesystem_label": {
+        "EN": "Use Standalone-Skeleton Bonesystem", "ZH": "使用独立骨骼Bonesystem（踩蘑菇）"},
     "mhws.batch_export_ui.armature_label": {"EN": "Armature", "ZH": "骨架"},
     "mhws.batch_export_ui.fbxskel_name_label": {"EN": "FBXSkel Name", "ZH": "FBXSkel 名"},
+    "mhws.batch_export_ui.use_lua_bone_system_label": {"EN": "Use Lua Bone System", "ZH": "使用 Lua Bone System"},
+    "mhws.batch_export_ui.lua_bone_head_label": {"EN": "Head", "ZH": "头部"},
 
     # ══════════════════════════════════════════════════════════════════════
     # games/mhws/batch_import.py
@@ -502,11 +516,29 @@ STRINGS = {
               "(this is not the same as Subsurface Scattering, which needs "
               "radius data this module does not have) -- exports correctly, "
               "the preview does not attempt to show it",
-        "ZH": "Translucency。像金属度一样是加法组合。"
+        "ZH": "透光 (Translucency)。像金属度一样是加法组合。"
               "AlphaTranslucentOcclusionSSSMap.G 真的携带这个数据，但 Principled "
               "没有对应输入（这跟次表面散射不是一回事，那个需要半径数据，这里没有）——"
               "能正确导出，只是预览不会体现"},
     "mhws.shader_defs.fxmap": {
         "EN": "FxMap — secondary effect mask; carried for export, not used by the preview",
         "ZH": "FxMap — 附加特效遮罩；仅为导出保留，预览不使用"},
+
+    # Feature-mask channels (games/mhws/mdf_tex_processor.py, MHWS_FEATURE_CHANNELS)
+    "mhws.feature.color_area1": {"EN": "Colour area 1", "ZH": "着色区域 1"},
+    "mhws.feature.color_area2": {"EN": "Colour area 2", "ZH": "着色区域 2"},
+    "mhws.feature.color_area3": {"EN": "Colour area 3 (rarely used)", "ZH": "着色区域 3（少用）"},
+    "mhws.feature.detail_r": {"EN": "Detail set R area", "ZH": "细节 R 组区域"},
+    "mhws.feature.detail_g": {"EN": "Detail set G area", "ZH": "细节 G 组区域"},
+    "mhws.feature.detail_b": {"EN": "Detail set B area", "ZH": "细节 B 组区域"},
+    "mhws.feature.detail_a": {"EN": "Detail set A area", "ZH": "细节 A 组区域"},
+    "mhws.feature.fur_dir1": {"EN": "Fur direction, layer 1", "ZH": "毛发方向（第 1 层）"},
+    "mhws.feature.fur_dir2": {"EN": "Fur direction, layer 2", "ZH": "毛发方向（第 2 层）"},
+    "mhws.feature.fur_presence": {"EN": "Fur presence", "ZH": "毛发分布"},
+    "mhws.feature.hair_height": {"EN": "Hair height", "ZH": "毛发高度"},
+    "mhws.feature.hair_spec_mask": {"EN": "Highlight mask", "ZH": "高光遮罩"},
+    "mhws.feature.hair_shift": {"EN": "Highlight shift", "ZH": "高光偏移"},
+    "mhws.feature.hair_flow": {"EN": "Hair direction (one RG image)", "ZH": "毛发走向（一张 RG 图）"},
+    "mhws.feature.fade_alpha": {"EN": "Fade", "ZH": "渐隐"},
+    "mhws.feature.top_mask": {"EN": "Top-cover mask", "ZH": "顶部覆盖遮罩"},
 }

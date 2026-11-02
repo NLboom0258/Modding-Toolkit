@@ -1,11 +1,13 @@
 import bpy
-import json
 import os
 import shutil
 
 from ...core.i18n import T
+from ...core.compat import op_available
 from ...core.re_mesh_compat import call_re_mesh_op, re_mesh_op_available
 from ...core import console_export
+from ...core import export_autofix
+from ...core.export_verify import checked
 from .weapon_data import (
     WEAPON_FILE_TYPES,
     get_weapon_parts,
@@ -14,6 +16,7 @@ from .weapon_data import (
     make_weapon_filepath, get_weapon_binding,
     get_selected_weapon,
 )
+from ...core import json_cache
 
 
 # 部位定义：(代码, 显示名 i18n key, mask索引)  mask顺序：手腿铠头腰
@@ -123,11 +126,7 @@ def get_mhwi_armor_sets_callback(self, context):
 def _load_armor_sets(filename):
     if not filename or filename == 'NONE':
         return None
-    filepath = os.path.join(_get_armor_sets_dir(), filename)
-    if not os.path.exists(filepath):
-        return None
-    with open(filepath, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    return json_cache.load(os.path.join(_get_armor_sets_dir(), filename))
 
 
 _hr_armor_cache = []
@@ -298,27 +297,27 @@ def _do_export_mod3(filepath, collection_name):
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     col = bpy.data.collections.get(collection_name)
     bpy.context.scene.mhw_mod3_toolpanel.exportMod3Collection = col
-    bpy.ops.mhw_mod3.export_mhw_mod3(
+    checked(filepath, lambda: bpy.ops.mhw_mod3.export_mhw_mod3(
         filepath=filepath,
         **MOD3_EXPORT_SETTINGS,
-    )
+    ))
 
 def _do_export_mrl3(filepath, collection_name):
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     col = bpy.data.collections.get(collection_name)
     bpy.context.scene.mhw_mrl3_toolpanel.exportMrl3Collection = col
-    bpy.ops.mhw_mrl3.export_mhw_mrl3(
+    checked(filepath, lambda: bpy.ops.mhw_mrl3.export_mhw_mrl3(
         filepath=filepath,
-    )
+    ))
 
 def _do_export_ctc(filepath, collection_name, export_ccl):
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     col = bpy.data.collections.get(collection_name)
     bpy.context.scene.mhw_ctc_toolpanel.exportCTCCollection = col
-    bpy.ops.mhw_ctc.export_mhw_ctc(
+    checked(filepath, lambda: bpy.ops.mhw_ctc.export_mhw_ctc(
         filepath=filepath,
         exportCCL=export_ccl,
-    )
+    ))
 
 
 _EXPORT_FUNCS = {
@@ -617,28 +616,50 @@ class MHWI_OT_BatchExport(bpy.types.Operator):
         if not mesh_collections:
             return
 
+        # MHW Model Editor refuses a mod3 with more than 8 influences per vertex
+        # (blender_mod3.MAX_WEIGHTS_PER_VERT).  This used to trim to 12 -- the
+        # MHWS number -- so vertices with 9-12 survived the cleanup and the whole
+        # file was refused at export.  One source for the limit: export_autofix.
+        limit = export_autofix.max_influences('MHWI')
+
         if context.view_layer.objects.active is not None and context.mode != 'OBJECT':
             bpy.ops.object.mode_set(mode='OBJECT')
+        prev_active = context.view_layer.objects.active
+        prev_selected = list(context.selected_objects)
+        in_layer = context.view_layer.objects
         bpy.ops.object.select_all(action='DESELECT')
-        for col in mesh_collections:
-            for obj in [o for o in col.objects if o.type == 'MESH']:
-                context.view_layer.objects.active = obj
-                obj.select_set(True)
-                try: call_re_mesh_op('delete_loose')
-                except Exception: pass
-                try: call_re_mesh_op('solve_repeated_uvs')
-                except Exception: pass
-                try: call_re_mesh_op('remove_zero_weight_vertex_groups')
-                except Exception: pass
-                try:
-                    call_re_mesh_op('limit_total_normalize', maxWeights='12')
-                except Exception:
+        try:
+            for col in mesh_collections:
+                # An object in a collection excluded from the view layer cannot
+                # be made active; assigning it raised and aborted the export.
+                for obj in [o for o in col.objects if o.type == 'MESH' and o.name in in_layer]:
+                    in_layer.active = obj
+                    obj.select_set(True)
+                    try: call_re_mesh_op('delete_loose')
+                    except Exception: pass
+                    try: call_re_mesh_op('solve_repeated_uvs')
+                    except Exception: pass
+                    try: call_re_mesh_op('remove_zero_weight_vertex_groups')
+                    except Exception: pass
                     try:
-                        bpy.ops.object.vertex_group_limit_total(limit=12)
-                        bpy.ops.object.vertex_group_normalize_all(lock_active=False)
+                        call_re_mesh_op('limit_total_normalize', maxWeights=str(limit))
                     except Exception:
-                        pass
-                obj.select_set(False)
+                        try:
+                            bpy.ops.object.vertex_group_limit_total(limit=limit)
+                            bpy.ops.object.vertex_group_normalize_all(lock_active=False)
+                        except Exception:
+                            pass
+                    obj.select_set(False)
+        finally:
+            for o in prev_selected:
+                try:
+                    o.select_set(True)
+                except (ReferenceError, RuntimeError):
+                    pass
+            try:
+                in_layer.active = prev_active
+            except (ReferenceError, RuntimeError):
+                pass
 
     def _collect_target_cols(self, scene, model_id, rank, settings):
         """收集所有已绑定的唯一 mod3 和 mrl3 集合，供防石化注入使用。"""
@@ -719,9 +740,22 @@ class MHWI_OT_BatchExport(bpy.types.Operator):
                     "loadPhysics": False, "addNestedCollections": False,
                 }
                 try:
-                    importMHWMod3File(confuse_mod3, options)
+                    before = set(bpy.data.collections.keys())
+                    ok = importMHWMod3File(confuse_mod3, options)
+                    created = set(bpy.data.collections.keys()) - before
+                    # Only a collection this import created.  importMHWMod3File
+                    # returns False without raising when readMod3File fails, and
+                    # then never updates lastImportCollection -- whose stale value
+                    # is usually the armour the user imported to edit, i.e. a bound
+                    # target.  Its meshes were copied into every target (doubled
+                    # geometry in the export) and _cleanup_confuse then deleted the
+                    # user's own collection and everything in it.
                     src_col_name = context.scene.mhw_mod3_toolpanel.lastImportCollection
-                    src_col = bpy.data.collections.get(src_col_name)
+                    src_col = (bpy.data.collections.get(src_col_name)
+                               if ok is not False and src_col_name in created else None)
+                    if src_col is None and created:
+                        # Still clean up whatever a partial import left behind.
+                        temp_collections.extend(bpy.data.collections[n] for n in created)
                     if src_col:
                         temp_collections.append(src_col)
                         confuse_meshes = [o for o in src_col.all_objects if o.type == 'MESH']
@@ -799,7 +833,7 @@ class MHWI_OT_BatchExport(bpy.types.Operator):
         scene    = context.scene
         settings = scene.mhw_suite_settings
 
-        if not hasattr(bpy.ops, 'mhw_mod3') or not hasattr(bpy.ops.mhw_mod3, 'export_mhw_mod3'):
+        if not op_available('mhw_mod3', 'export_mhw_mod3'):
             self.report({'ERROR'}, T("mhwi.batch_import.model_editor_missing"))
             return {'CANCELLED'}
 
@@ -870,6 +904,27 @@ def _resolve_genders(gender_setting):
     return ['f', 'm']  # 'BOTH'
 
 
+def _mhwi_mod_root(picked):
+    """The folder that *contains* ``nativePC``, from whatever folder was picked.
+
+    Every MHWI path is built as ``<root>/nativePC/pl/...``.  Only a pick of
+    ``nativePC`` itself used to be stepped up from; picking ``nativePC/pl`` (or
+    deeper) stored that, and every export then wrote a doubled
+    ``.../nativePC/pl/nativePC/pl/...`` tree the game never reads.  The RE games'
+    core/mod_root.py applies the same walk-up for ``natives``.
+    """
+    path = os.path.abspath(picked).rstrip("/\\")
+    cur = path
+    for _ in range(5):
+        if os.path.basename(cur).lower() == "nativepc":
+            return os.path.dirname(cur)
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            break
+        cur = parent
+    return path
+
+
 class MHWI_OT_SetNativesRoot(bpy.types.Operator):
     bl_idname = "mhwi.set_natives_root"
     bl_label  = "Set Mod Root"
@@ -886,10 +941,8 @@ class MHWI_OT_SetNativesRoot(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
     def execute(self, context):
-        path = self.directory.rstrip("/\\")
-        if os.path.basename(path).lower() == "nativepc":
-            path = os.path.dirname(path)
-        context.scene["mhwi_natives_root"] = path
+        context.scene["mhwi_natives_root"] = _mhwi_mod_root(self.directory)
+        path = context.scene["mhwi_natives_root"]
         self.report({'INFO'}, f"MHWI Mod root: {path}")
         return {'FINISHED'}
 

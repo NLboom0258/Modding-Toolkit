@@ -18,8 +18,9 @@ free to go stale, and stale in the one direction that deletes a live file.
 Two things are exempt from deletion, for the same reason: the addon does not own them.
 
 * ``assets/presets/`` -- the bone-preset editor writes here, so a user's own preset is
-  a leftover by the rule above and must not be treated as one.  These are *reported*
-  separately instead.
+  a leftover by the rule above and must not be treated as one -- and likewise the other
+  folders in ``KEEP_PREFIXES``, which users extend by dropping in a JSON.  These are
+  *reported* separately instead.
 * anything under a top-level ``*updater*`` directory -- the updater's own state and its
   backup of the previous version.  Deleting the backup would remove the only way back.
 
@@ -31,32 +32,98 @@ Free of ``bpy`` so the planning is unit-testable offline; the operator and its
 confirmation dialog live in ``core/stale_cleanup_ops.py``.
 """
 
+import ast
 import os
+import re
 import shutil
 
 MANIFEST_NAME = "MANIFEST.txt"
 
-#: Reported, never deleted -- see the module docstring.
-KEEP_PREFIXES = ("assets/presets/",)
+#: Reported, never deleted -- see the module docstring.  Besides the presets, the
+#: folders the addon lists by scanning for "*.json", where a user extends it by
+#: dropping a file in (core/facial_maps.py says so in as many words): a scheme,
+#: armour or weapon table, or facial map added by hand is not in the manifest
+#: either, and was deleted as a leftover.
+KEEP_PREFIXES = (
+    "assets/presets/",
+    "assets/facial_maps/",
+    "assets/export_schemes/",
+    "assets/mhws/armor_sets/",
+    "assets/mhrs/armor_sets/",
+    "assets/mhwi/armor_sets/",
+    "assets/mhwi/weapon_sets/",
+)
 
 
 def addon_root():
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def read_manifest(root=None):
-    """``set`` of addon-relative paths this version ships, or None when there is no
-    manifest.
+_MANIFEST_HEADER = re.compile(r"^#\s*Modding-Toolkit\s+(\d+(?:\.\d+)*)\s+release manifest")
 
-    None is a real answer, not a failure: an install from a pre-manifest release, or a
-    git checkout used in place, has nothing to compare against -- and in that case the
-    cleanup must do **nothing**, because every file would look like a leftover.
+
+def installed_version(root=None):
+    """``"X.Y.Z"`` from ``bl_info`` in the installed ``__init__.py``, or None.
+
+    Read with ``ast``, not imported: importing the addon's ``__init__`` needs bpy and
+    would register everything.
     """
-    path = os.path.join(root or addon_root(), MANIFEST_NAME)
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(os.path.join(root or addon_root(), "__init__.py"), encoding="utf-8") as f:
+            tree = ast.parse(f.read())
+    except (OSError, SyntaxError, ValueError):
+        return None
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+                getattr(t, "id", None) == "bl_info" for t in node.targets):
+            try:
+                return ".".join(str(p) for p in ast.literal_eval(node.value)["version"])
+            except (ValueError, KeyError, TypeError):
+                return None
+    return None
+
+
+def manifest_status(root=None):
+    """``(lines, problem)`` -- the manifest's path lines, and why it cannot be used.
+
+    *problem* is None, ``("missing",)``, or ``("stale", manifest_version,
+    installed_version)``.
+
+    **Stale is the dangerous case.**  The built-in updater installs GitHub's source
+    zipball, which has no MANIFEST.txt, and never deletes -- so after an updater update
+    the manifest on disk still belongs to the last *zip* install.  Every file added
+    since then is absent from it, and treating the manifest as truth would delete those
+    files: measured, an install zip-installed at 2.7.3 and updated to 2.7.6 would lose
+    12 files the running version ships, ``core/twist_chain.py`` among them.  A manifest
+    only describes the install when it names the version that is installed.  An
+    unreadable version on either side counts as stale, not as a match.
+    """
+    root = root or addon_root()
+    try:
+        with open(os.path.join(root, MANIFEST_NAME), "r", encoding="utf-8") as f:
             lines = f.read().splitlines()
     except OSError:
+        return None, ("missing",)
+    m = _MANIFEST_HEADER.match(lines[0]) if lines else None
+    listed = m.group(1) if m else None
+    installed = installed_version(root)
+    if listed is None or installed is None or listed != installed:
+        return lines, ("stale", listed, installed)
+    return lines, None
+
+
+def read_manifest(root=None):
+    """``set`` of addon-relative paths this version ships, or None when there is no
+    usable manifest -- missing, or written for a different version than is installed
+    (see ``manifest_status``).
+
+    None is a real answer, not a failure: an install from a pre-manifest release, a
+    git checkout used in place, or an install updated through the built-in updater has
+    nothing trustworthy to compare against -- and in that case the cleanup must do
+    **nothing**, because files the running version needs would look like leftovers.
+    """
+    lines, problem = manifest_status(root)
+    if problem:
         return None
     return {l.strip() for l in lines if l.strip() and not l.startswith("#")}
 

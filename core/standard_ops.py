@@ -1,9 +1,17 @@
 import bpy, mathutils, json
+import math
+from dataclasses import dataclass
 from .i18n import T
+from . import poll_msg
 from .bone_mapper import (BoneMapManager, STANDARD_BONE_NAMES, _normalize_bone_name,
                           auto_detect_preset, resolve_preset, standard_keys, is_aux_key,
                           AUX_PARENT)
-from . import weight_utils, bone_utils, chain_classifier, twist_chain
+from . import (weight_utils, bone_utils, chain_classifier, twist_chain, fork_resolver,
+               physics_simplify, mhwi_physics_budget)
+
+#: 用户手动指定、刷新角色时不能被拓扑检测覆盖的角色。no_chain 是分叉判定把超过层数
+#: 的子树标成"不生成链"用的。
+_STICKY_ROLES = ("main_continue", "no_chain")
 
 
 def _build_fuzzy_preset_bones(mapper, arm_obj):
@@ -21,8 +29,8 @@ def _build_fuzzy_preset_bones(mapper, arm_obj):
             # 回退：预设游戏名未命中，但骨架中有与标准键同名的骨骼（已标准化的情形）
             preset_bones.add(std_key)
         preset_bones.update(aux_actuals)
-    # exclude 骨骼：直接按名称并入（无需模糊匹配，使用者自行确保名称准确）
-    preset_bones.update(mapper.exclude_bones & existing)
+    # exclude 骨骼：按名称（或 * 通配）并入，不做模糊匹配
+    preset_bones.update(mapper.exclude_matches(existing))
     # 姿态驱动修正骨：预设里列了的已经在上面的 aux 里，这里补的是**没列到**的。
     # 它们不是物理骨，落到物理那条路上会被当成链骨（终末地三具各有 28 / 16 / 0 根，
     # 而 arknights.json 列了 58 条 —— 资产之间数量本来就不一样，靠列表兜不住）。
@@ -55,6 +63,10 @@ def _apply_bone_color(pb, role):
         pb.color.custom.normal = (1.0, 0.70, 0.10)
         pb.color.custom.select = (1.0, 0.85, 0.40)
         pb.color.custom.active = (1.0, 0.95, 0.70)
+    elif role == "no_chain":
+        pb.color.custom.normal = (0.45, 0.45, 0.45)
+        pb.color.custom.select = (0.65, 0.65, 0.65)
+        pb.color.custom.active = (0.85, 0.85, 0.85)
     else:  # body / _End / untagged
         pb.color.custom.normal = (0.18, 0.42, 0.90)
         pb.color.custom.select = (0.45, 0.65, 1.00)
@@ -167,8 +179,7 @@ class MODDER_OT_NormalizeDeformWeights(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        obj = context.active_object
-        return obj is not None and obj.type == 'ARMATURE'
+        return poll_msg.active_armature(cls, context)
 
     def execute(self, context):
         arm_obj = context.active_object
@@ -224,14 +235,22 @@ class MODDER_OT_ApplyStandardX(bpy.types.Operator):
             if main or auxs: analysis[std_key] = (main, auxs)
 
         # 3. 权重合并
-        meshes = [o for o in bpy.data.objects if o.type == 'MESH' and o.find_armature() == arm_obj]
+        # attached_meshes, not a modifier filter: a mesh whose Armature modifier has an
+        # empty target (or none, parented by hand) still carries this rig's weights.
+        from . import pose_bake
+        meshes = pose_bake.attached_meshes(arm_obj)
         bpy.ops.object.mode_set(mode='OBJECT')
+        # 没找到主骨名时，使用标准名作为目标顶点组，方便后续手动处理。
+        # One map and one pass per mesh (an aux claimed twice keeps its first
+        # target, as the sequential merges did: the second found it gone).
+        aux_map = {}
+        for std_key, (main_name, aux_list) in analysis.items():
+            for aux in aux_list or ():
+                aux_map.setdefault(aux, main_name if main_name else std_key)
         for mesh_obj in meshes:
-            for std_key, (main_name, aux_list) in analysis.items():
-                if aux_list:
-                    # 没找到主骨名时，使用标准名作为目标顶点组，方便后续手动处理
-                    target_vg = main_name if main_name else std_key
-                    weight_utils.merge_vgroups_multi(mesh_obj, aux_list, target_vg)
+            mesh_map = {a: t for a, t in aux_map.items() if a in mesh_obj.vertex_groups}
+            if mesh_map:
+                weight_utils.merge_vertex_groups([mesh_obj], mesh_map)
 
         # 4. 骨骼重命名 (Edit Mode)
         bpy.ops.object.mode_set(mode='EDIT')
@@ -561,8 +580,13 @@ class MODDER_OT_DirectConvert(bpy.types.Operator):
                 # 步骤 C: 重命名主顶点组 -> 目标名
                 # 只有当名字不同时才改名，防止报错
                 if real_src_main and real_src_main != tgt_name:
-                    if tgt_name in vgs: vgs.remove(vgs[tgt_name])
-                    vgs[real_src_main].name = tgt_name
+                    if tgt_name in vgs:
+                        # 目标名已被占用时要合并，不能删：最常见的就是上面的 spine_03
+                        # 降级规则——spine_02 那条规则刚把 Chest 改成了这个名字，删掉
+                        # 它等于删掉整段胸部权重。
+                        weight_utils.merge_vgroups_multi(mesh_obj, [real_src_main], tgt_name)
+                    else:
+                        vgs[real_src_main].name = tgt_name
                     mesh_updated = True
             
             if mesh_updated:
@@ -595,12 +619,20 @@ class MODDER_OT_UniversalSnap(bpy.types.Operator):
     def description(cls, context, properties):
         return T("core.standard_ops.universal_snap_desc")
 
+    @classmethod
+    def poll(cls, context):
+        return poll_msg.active_armature(cls, context)
+
     def execute(self, context):
         settings = context.scene.mhw_suite_settings
         selected_objs = [o for o in context.selected_objects if o.type == 'ARMATURE']
 
-        # 1. 检查选中项
-        if len(selected_objs) != 2 or not context.active_object:
+        # 1. 检查选中项。活动物体必须就是两个骨架之一：两个骨架选中、活动物体却是
+        # 网格时，后面的 mode_set(EDIT) 会把网格切进编辑模式，再在
+        # target_arm.data.edit_bones 上抛 AttributeError，把人卡在网格编辑模式里。
+        active = context.active_object
+        if (len(selected_objs) != 2 or active is None or active.type != 'ARMATURE'
+                or active not in selected_objs):
             self.report({'ERROR'}, T("core.standard_ops.snap_selection_error"))
             return {'CANCELLED'}
 
@@ -730,6 +762,309 @@ class MODDER_OT_UniversalSnap(bpy.types.Operator):
         self.report({'INFO'}, T("core.standard_ops.snap_done").format(n=aligned_count))
         return {'FINISHED'}
 
+def _resolve_graft_forks(source_arm, physics_set, mesh_objects, masses=None, params=None):
+    """对来源骨架的物理骨跑分叉判定，返回 (节点树, 判定结果)。
+
+    权重量取来源网格的顶点组（调用方已经算过可以直接传 *masses*）；没有绑定网格时
+    masses 为 None，stub 规则因此不会触发（没数据就不删骨）。手动标了 main_continue 的
+    子骨按标记走。*params* 见 :func:`_fork_params`。"""
+    if masses is None and mesh_objects:
+        masses = weight_utils.bone_weight_mass(mesh_objects, physics_set)
+    mw = source_arm.matrix_world
+    pose = source_arm.pose.bones
+    nodes = fork_resolver.nodes_from_bones(
+        source_arm.data.bones, physics_set,
+        head_of=lambda n: tuple(mw @ pose[n].head),
+        masses=masses,
+        is_marker=lambda n: pose[n].get("chain_role") == "main_continue")
+    return nodes, fork_resolver.resolve(nodes, params)
+
+
+#: 不处理支链：每个分叉都收尾、子骨各自成链，不删骨，只认手动标记（判定器出现之前的行为）。
+#: 比例取 -inf 而不是 -1：0 权重的骨乘出来是 0 <= 0，会被当成 stub 删掉。
+_PLAIN_FORKS = fork_resolver.Params(
+    light_mass_ratio=-math.inf, static_mass_ratio=-math.inf,
+    dominant_depth_ratio=math.inf, collinear_max_deg=-1.0, max_branch_level=10 ** 6)
+
+
+def _fork_params(resolve, is_mhwi):
+    """处理支链的判定参数。第二层分支不生成链是 MHWI 的规则（CTC 名额紧、链不能分叉），
+    其他游戏处理支链时不限层数。"""
+    if not resolve:
+        return _PLAIN_FORKS
+    return fork_resolver.Params() if is_mhwi else fork_resolver.Params(max_branch_level=10 ** 6)
+
+
+@dataclass(frozen=True)
+class GraftOptions:
+    """移植物理骨骼弹窗里的勾选。dissolve_centre 只对 MHWI 起作用。"""
+    drop_helpers: bool = True
+    dissolve_centre: bool = True
+    decimate: bool = False
+    resolve_forks: bool = True
+    add_end: bool = True
+
+
+def _source_forward(arm, mapper):
+    """来源模型的正前方（世界坐标、水平）：脚跟到脚尖的方向，两只脚取平均。
+    认不出脚时按 Blender 的惯例 -Y。"""
+    mw = arm.matrix_world
+    acc = mathutils.Vector((0.0, 0.0, 0.0))
+    for side in ("L", "R"):
+        foot, _ = mapper.get_matches_for_standard(arm, f"foot_{side}")
+        toe, _ = mapper.get_matches_for_standard(arm, f"toe_{side}")
+        if foot and toe:
+            v = mw @ arm.data.bones[toe].head_local - mw @ arm.data.bones[foot].head_local
+            v.z = 0.0
+            if v.length > 1e-4:
+                acc += v.normalized()
+    if acc.length < 1e-4:
+        return (0.0, -1.0, 0.0)
+    return tuple(acc.normalized())
+
+
+class _GraftSimplifyPlan:
+    """移植前的精简规划：哪些骨不移植、权重怎么拆，以及会移植多少骨 / MHWI 名额。只读。"""
+
+    def __init__(self):
+        self.helpers = set()        # 整棵子树都没权重的辅助骨：不移植
+        self.centres = []           # physics_simplify.CentreChain
+        self.centre_nodes = set()   # 中央链子树：权重拆给左右链后不移植
+        self.decimated = {}         # 抽稀删掉的骨 -> (前一根保留骨, 后一根保留骨)
+        self.physics = set()        # 规划完剩下要进分叉判定的物理骨
+        self.masses = {}
+        self.fork_nodes = None
+        self.fork_res = None
+        self.items = []             # mhwi_physics_budget.Item（仅 MHWI）
+        self.bone_count = 0         # 会移植的骨数，含尾骨骼
+        self.end_count = 0          # 其中尾骨骼
+
+
+_NO_MASSES = object()
+
+
+def _graft_masses(physics, mesh_objects):
+    """物理骨的权重量；没有网格时 None（谁有权重无从判断）。"""
+    return weight_utils.bone_weight_mass(mesh_objects, physics) if mesh_objects else None
+
+
+def _plan_graft_simplify(source_arm, physics, mesh_objects, src_mapper, opts, is_mhwi,
+                         masses=_NO_MASSES):
+    """*opts* 是 :class:`GraftOptions`。*masses* 可以传 :func:`_graft_masses` 算好的
+    （弹窗里每换一种勾选组合都要重新规划，权重量不必每次重算）。"""
+    plan = _GraftSimplifyPlan()
+    bones = source_arm.data.bones
+    mw = source_arm.matrix_world
+
+    def children_of(n):
+        return [c.name for c in bones[n].children]
+
+    def rest_head(n):
+        return tuple(mw @ bones[n].head_local)
+
+    if masses is _NO_MASSES:
+        masses = _graft_masses(physics, mesh_objects)
+    weighted = {n for n, m in (masses or {}).items() if m > 1e-6}
+    # 没有网格就不知道谁有权重：辅助骨、中央链都无从判断，一律不动
+    if opts.drop_helpers and masses is not None:
+        plan.helpers = physics_simplify.helper_bones(physics, children_of, weighted)
+    phys = set(physics) - plan.helpers
+    params = _fork_params(opts.resolve_forks, is_mhwi)
+    nodes, res = _resolve_graft_forks(source_arm, phys, mesh_objects, masses, params)
+
+    if opts.dissolve_centre and is_mhwi and masses is not None:
+        dropped = set(res.dropped)
+        heads = [n for n, nd in nodes.items()
+                 if n not in dropped and (nd.parent is None or nd.parent in dropped)]
+
+        def anchor_of(h):
+            p = bones[h].parent
+            while p is not None and p.name in phys:
+                p = p.parent
+            return p.name if p is not None else None
+
+        # 中央链的问题是它会垂到两腿之间。所以只认：圈心在身体中线上、且这条链最低点
+        # 低于大腿根的。头上一圈刘海、领口的领结垂不到裆部，手腕一圈手镯不在中线上。
+        # 不看锚点挂在哪：祀的裙子挂在 上半身 下面。
+        def head_of(std):
+            name, _ = src_mapper.get_matches_for_standard(source_arm, std)
+            if name is None and std in bones:
+                name = std
+            return mathutils.Vector(rest_head(name)) if name else None
+
+        thighs = [v for v in (head_of("thigh_L"), head_of("thigh_R")) if v is not None]
+        pelvis = head_of("pelvis")
+        midline = (sum(thighs, mathutils.Vector()) / len(thighs)) if thighs else pelvis
+        crotch_z = midline.z if midline is not None else None
+
+        def lowest(head):
+            return min(min((mw @ bones[n].head_local).z, (mw @ bones[n].tail_local).z)
+                       for n in physics_simplify.depth_index(head, children_of, phys))
+
+        forward = _source_forward(source_arm, src_mapper)
+        rings = physics_simplify.find_rings(heads, anchor_of, rest_head, forward)
+        plan.centres = [
+            c for c in physics_simplify.find_centre_chains(
+                rings, midline=tuple(midline) if midline is not None else None,
+                forward=forward)
+            if crotch_z is None or lowest(c.head) < crotch_z]
+        for c in plan.centres:
+            plan.centre_nodes.update(physics_simplify.depth_index(c.head, children_of, phys))
+        if plan.centre_nodes:
+            phys -= plan.centre_nodes
+            nodes, res = _resolve_graft_forks(source_arm, phys, mesh_objects, masses, params)
+
+    if opts.decimate:
+        protected = {f.bone for f in res.forks} | set(res.continues)
+        protected.update(c.nodes[0] for c in res.chains)
+        for root in res.skipped:
+            protected.update(fork_resolver.subtree(nodes, root))
+        plan.decimated = physics_simplify.decimate(
+            [c.nodes for c in res.chains], children_of, phys - set(res.dropped), protected)
+
+    plan.physics, plan.masses = phys, masses or {}
+    plan.fork_nodes, plan.fork_res = nodes, res
+
+    # 名额估算：按移植后的样子数（被删的主干 / 抽掉的骨不在了，权重落到保留骨上）
+    removed = set(res.dropped) | set(plan.decimated)
+    final = phys - removed
+    got_weight = set(weighted)
+    for r, (prev, nxt) in plan.decimated.items():
+        if r in weighted:
+            got_weight.update((prev, nxt))
+    for c in plan.centres:
+        got_weight.update(t for pair in physics_simplify.centre_targets(
+            c, children_of, phys | plan.centre_nodes).values() for t in pair)
+
+    def eff_children(n):
+        return physics_simplify.effective_children(n, children_of, final, plan.decimated)
+
+    def is_root(n):
+        p = bones[n].parent
+        while p is not None and p.name in removed:
+            p = p.parent
+        return p is None or p.name not in final
+
+    roots = [n for n in final if is_root(n)]
+    # 尾骨骼：有权重的叶骨，和因分叉收尾的链末，与执行时补 _End 的判定一致；
+    # 跳过不生成链的子树不补
+    skipped = set()
+    for root in res.skipped:
+        skipped.update(fork_resolver.subtree(nodes, root))
+    fork_ends = {c.nodes[-1] for c in res.chains if c.ends_at_fork} - skipped
+    leaf_ends = {n for n in final - skipped if not eff_children(n) and n in got_weight}
+    if not opts.add_end:
+        fork_ends, leaf_ends = set(), set()
+    plan.end_count = len(fork_ends) + len(leaf_ends)
+    plan.bone_count = len(final) + plan.end_count
+    if not is_mhwi:
+        return plan
+
+    items = mhwi_physics_budget.tree_items(
+        roots, eff_children, leaf_ends, fork_ends=fork_ends)
+    # 和拆分一样按权重交叉并组再装：共用顶点的链拆不开，按单条链估会过于乐观
+    # （莉奈娅：单链估全放得下，拆分时三块裙摆各超 51 根非末端，实际差 66 根）。
+    owner = {}
+    for r in roots:
+        for n in physics_simplify.depth_index(r, children_of, phys | plan.centre_nodes):
+            owner[n] = r
+    for c in plan.centres:
+        for n in physics_simplify.depth_index(c.head, children_of, phys | plan.centre_nodes):
+            owner[n] = owner.get(c.left, c.left)
+    if mesh_objects:
+        mass, pair = weight_utils.co_weight(mesh_objects, owner)
+        groups = mhwi_physics_budget.group_roots(roots, pair, mass)
+        items = mhwi_physics_budget.merge_items(groups, {i.root: i for i in items})
+    plan.items = items
+    return plan
+
+
+def mhwi_unlock_prefs(context=None):
+    """装着 ``mhwi_physics_unlocked`` 的偏好对象，给 ``layout.prop`` 用。"""
+    from .console_export import get_preferences
+    return get_preferences(context)
+
+
+def mhwi_physics_unlocked(context=None):
+    """这个 mod 是否要求玩家装解锁插件（插件偏好，永久保存）。"""
+    return bool(getattr(mhwi_unlock_prefs(context), "mhwi_physics_unlocked", False))
+
+
+def _slot_text(packing, slot):
+    """``body 120/169``；不装插件的小部位另注物理骨和末端骨的用量：
+    ``arm 90/169 (物理 50/50，末端 40/86)``。"""
+    nt, t = packing.used[slot]
+    cap_nt, cap_t, cap_total = packing.capacity[slot]
+    text = f"{slot} {nt + t}/{cap_total}"
+    if cap_nt is not None:
+        text += " " + T("core.standard_ops.graft_slot_physics").format(
+            n=nt, cap=cap_nt, t=t, cap_t=cap_t)
+    return text
+
+
+def _slot_full(packing, slot):
+    nt, t = packing.used[slot]
+    cap_nt, cap_t, cap_total = packing.capacity[slot]
+    return (nt + t >= cap_total or (cap_nt is not None and nt >= cap_nt)
+            or (cap_t is not None and t >= cap_t))
+
+
+def _budget_text(packing):
+    """一行文字的名额估算，执行完报告用。"""
+    text = T("core.standard_ops.graft_budget_line").format(
+        slots="  ".join(_slot_text(packing, s) for s in mhwi_physics_budget.SLOTS))
+    if packing.overflow:
+        text += "  " + T("core.standard_ops.graft_budget_over").format(n=packing.overflow_bones)
+    return text
+
+
+def _draw_budget(layout, plan, base, unlocked):
+    packing = mhwi_physics_budget.pack(plan.items, base, unlocked)
+    layout.label(text=T("core.standard_ops.graft_budget_header").format(base=base))
+    for slot in mhwi_physics_budget.SLOTS:
+        full = _slot_full(packing, slot)
+        layout.label(text=_slot_text(packing, slot), icon='ERROR' if full and packing.overflow
+                     else 'CHECKMARK')
+    if packing.overflow:
+        layout.label(text=T("core.standard_ops.graft_budget_over").format(
+            n=packing.overflow_bones), icon='ERROR')
+    else:
+        layout.label(text=T("core.standard_ops.graft_budget_fits"), icon='CHECKMARK')
+    if plan.helpers:
+        layout.label(text=T("core.standard_ops.graft_helpers_note").format(n=len(plan.helpers)))
+
+
+class _GraftPreview:
+    """弹窗用的规划缓存：权重量在 invoke 里算一次，每种勾选组合第一次画到时规划一次。
+    draw 每帧都会调，不能每帧重算。只存名字，不存 bpy 对象引用。"""
+
+    def __init__(self, g, physics, masses, base):
+        self.source = g["source_arm"].name
+        self.meshes = [o.name for o in g["mesh_objects"]]
+        self.src_mapper = g["src_mapper"]
+        self.is_mhwi = g["is_mhwi"]
+        self.physics = physics
+        self.masses = masses
+        self.base = base
+        self._plans = {}
+
+    def plan(self, opts):
+        if opts not in self._plans:
+            src = bpy.data.objects[self.source]
+            meshes = [bpy.data.objects[n] for n in self.meshes if n in bpy.data.objects]
+            self._plans[opts] = _plan_graft_simplify(
+                src, self.physics, meshes, self.src_mapper, opts, self.is_mhwi, self.masses)
+        return self._plans[opts]
+
+    def centres(self):
+        """MHWI 能找到的裙子正前物理链，按默认勾选找（勾选标签用，不随其他勾选变）。"""
+        return self.plan(GraftOptions(dissolve_centre=True, decimate=False)).centres
+
+
+#: 键是 (来源骨架名, 目标骨架名)，值是 _GraftPreview。
+_GRAFT_PREVIEW = {}
+
+
 class MODDER_OT_SmartGraftBones(bpy.types.Operator):
     bl_idname = "modder.smart_graft"
     bl_label = "3. Graft Physics Bones (+End Bone)"
@@ -739,14 +1074,38 @@ class MODDER_OT_SmartGraftBones(bpy.types.Operator):
     def description(cls, context, properties):
         return T("core.standard_ops.smart_graft_desc")
 
-    def execute(self, context):
+    #: 弹窗里的优化勾选（见 GraftOptions）。invoke 按目标游戏重设默认值；
+    #: dissolve_centre 只在目标是 MHWI 时起作用
+    drop_helpers: bpy.props.BoolProperty(
+        name="Drop Helper Bones", default=True,
+        description="Don't graft physics bones with no weight anywhere in their subtree")
+    dissolve_centre: bpy.props.BoolProperty(
+        name="Remove Skirt Front Chain", default=True,
+        description="Split the skirt's front chain's weights onto its two neighbours, then drop it")
+    decimate: bpy.props.BoolProperty(
+        name="Simplify Chains", default=False,
+        description="Keep the first and last bone of each chain and every other bone between")
+    resolve_forks: bpy.props.BoolProperty(
+        name="Resolve Branches", default=True,
+        description="Drop empty chain roots and one-bone trunks, and continue the main branch "
+                    "through a fork instead of ending the chain there")
+    add_end: bpy.props.BoolProperty(
+        name="Add Tail Bones", default=True,
+        description="Add an _End bone at the tip of each chain")
+
+    def _options(self, is_mhwi):
+        return GraftOptions(self.drop_helpers, self.dissolve_centre and is_mhwi,
+                            self.decimate, self.resolve_forks, self.add_end)
+
+    def _gather(self, context):
+        """场景校验、加载预设、筛出物理骨。出错时已 report，返回 None。"""
         # --- 1. 场景校验 ---
         sel_objs = context.selected_objects
         target_arm = context.active_object # Out (目标)
 
         if not target_arm or target_arm.type != 'ARMATURE':
             self.report({'ERROR'}, T("core.standard_ops.graft_no_target_arm"))
-            return {'CANCELLED'}
+            return None
 
         source_arm = None # In (来源)
         for obj in sel_objs:
@@ -756,7 +1115,7 @@ class MODDER_OT_SmartGraftBones(bpy.types.Operator):
 
         if not source_arm:
             self.report({'ERROR'}, T("core.standard_ops.graft_no_source_arm"))
-            return {'CANCELLED'}
+            return None
 
         # --- 2. 加载预设 (仅用于排除非物理骨) ---
         from .bone_mapper import BoneMapManager
@@ -765,37 +1124,37 @@ class MODDER_OT_SmartGraftBones(bpy.types.Operator):
         x_preset, err = resolve_preset(settings.import_preset_enum, source_arm, True)
         if x_preset is None:
             self.report({'WARNING'}, T("core.standard_ops.source_preset_x_prefix") + err)
-            return {'CANCELLED'}
+            return None
 
         y_preset, err = resolve_preset(settings.target_preset_enum, target_arm, False)
         if y_preset is None:
             self.report({'WARNING'}, T("core.standard_ops.target_preset_y_prefix") + err)
-            return {'CANCELLED'}
+            return None
 
         src_mapper = BoneMapManager()
         if not src_mapper.load_preset(x_preset, is_import_x=True):
             self.report({'ERROR'}, T("core.standard_ops.cannot_load_source_in"))
-            return {'CANCELLED'}
+            return None
 
         tgt_mapper = BoneMapManager()
         if not tgt_mapper.load_preset(y_preset, is_import_x=False):
             self.report({'ERROR'}, T("core.standard_ops.cannot_load_target_out"))
-            return {'CANCELLED'}
+            return None
 
         # --- 3. 构建查找表 ---
         # 用 get_matches_for_standard 做模糊匹配，与对齐功能保持一致，
         # 避免命名习惯不同的基础骨（如 UpperLeg.L vs UpperLeg_L）被误判为物理骨
         src_to_std = {}
-        all_preset_bones_src = set()
 
         for std_key in src_mapper.mapping_data.keys():
             main_actual, aux_actuals = src_mapper.get_matches_for_standard(source_arm, std_key)
             if main_actual:
                 src_to_std[main_actual] = std_key
-                all_preset_bones_src.add(main_actual)
+            elif std_key in source_arm.data.bones:
+                # 与 _build_fuzzy_preset_bones 的回退一致：骨架已标准化，骨名就是标准键
+                src_to_std[std_key] = std_key
             for aux_actual in aux_actuals:
                 src_to_std[aux_actual] = std_key
-                all_preset_bones_src.add(aux_actual)
 
         std_to_tgt_bone = {}
         for std_key, entry in tgt_mapper.mapping_data.items():
@@ -804,13 +1163,111 @@ class MODDER_OT_SmartGraftBones(bpy.types.Operator):
                 std_to_tgt_bone[std_key] = mains[0]
 
         # --- 4. 筛选物理骨 ---
-        # 只要不在预设里的，都算物理骨
+        # 只要不在预设里的，都算物理骨。"预设里"必须和拆分 / 重命名用同一个判定
+        # （_build_fuzzy_preset_bones：含 exclude 与姿态修正骨），否则 MMD 的
+        # 全ての親 / センター / 足IK 在这里被当成物理骨移植过去，到拆分时又不算物理骨。
+        # src_to_std 仍只收 main / aux：被排除的骨在目标上没有对应，父级重建时越过它们。
+        all_preset_bones_src = _build_fuzzy_preset_bones(src_mapper, source_arm)
         physics_bones_names = [b.name for b in source_arm.data.bones if b.name not in all_preset_bones_src]
         physics_bones_set = set(physics_bones_names) # 用于快速查找
 
         if not physics_bones_names:
             self.report({'WARNING'}, T("core.standard_ops.no_physics_bones_detected"))
-            return {'FINISHED'}
+            return None
+
+        # attached_meshes, not a modifier filter: a mesh whose Armature modifier has an
+        # empty target (or none, parented by hand) still carries this rig's weights.
+        from . import pose_bake
+        mesh_objects = pose_bake.attached_meshes(source_arm)
+        return dict(source_arm=source_arm, target_arm=target_arm,
+                    src_mapper=src_mapper, tgt_mapper=tgt_mapper,
+                    src_to_std=src_to_std, std_to_tgt_bone=std_to_tgt_bone,
+                    all_preset_bones_src=all_preset_bones_src,
+                    physics_bones_names=physics_bones_names,
+                    mesh_objects=mesh_objects,
+                    is_mhwi=tgt_mapper.preset_info.get("game_code") == "MHWI")
+
+    @staticmethod
+    def _preview_key(g):
+        return (g["source_arm"].name, g["target_arm"].name)
+
+    def invoke(self, context, _event):
+        g = self._gather(context)
+        if g is None:
+            return {'CANCELLED'}
+        is_mhwi = g["is_mhwi"]
+        physics = set(g["physics_bones_names"])
+        masses = _graft_masses(physics, g["mesh_objects"])
+        preview = _GraftPreview(g, physics, masses, len(g["target_arm"].data.bones))
+        _GRAFT_PREVIEW.clear()
+        _GRAFT_PREVIEW[self._preview_key(g)] = preview
+
+        # 默认值：剔除辅助骨、添加尾骨骼都开；处理支链、简化只有 MHWI 默认开（简化只在
+        # 超名额时开）。拆除裙子正前物理链只有 MHWI 有。
+        self.drop_helpers = True
+        self.add_end = True
+        self.resolve_forks = is_mhwi
+        self.dissolve_centre = True
+        self.decimate = False
+        if is_mhwi:
+            plan = preview.plan(self._options(True))
+            unlocked = mhwi_physics_unlocked(context)
+            self.decimate = mhwi_physics_budget.pack(plan.items, preview.base,
+                                                     unlocked).overflow_bones > 0
+        return context.window_manager.invoke_props_dialog(
+            self, width=440, title=T("ui.main_panel.btn_smart_graft"))
+
+    def draw(self, context):
+        layout = self.layout
+        g_key = None
+        sel = [o for o in context.selected_objects if o.type == 'ARMATURE']
+        tgt = context.active_object
+        src = next((o for o in sel if o != tgt), None)
+        if src is not None and tgt is not None:
+            g_key = (src.name, tgt.name)
+        preview = _GRAFT_PREVIEW.get(g_key)
+        is_mhwi = preview.is_mhwi if preview is not None else True
+
+        col = layout.column(align=True)
+        col.prop(self, "drop_helpers", text=T("core.standard_ops.graft_drop_helpers"))
+        if is_mhwi:
+            centres = preview.centres() if preview is not None else None
+            if centres is None:
+                col.prop(self, "dissolve_centre", text=T("core.standard_ops.graft_dissolve_centre"))
+            elif centres:
+                col.prop(self, "dissolve_centre",
+                         text=T("core.standard_ops.graft_dissolve_centre_named").format(
+                             names=", ".join(c.head for c in centres)))
+        col.prop(self, "decimate", text=T("core.standard_ops.graft_decimate"))
+        col.prop(self, "resolve_forks", text=T("core.standard_ops.graft_resolve_forks"))
+        col.prop(self, "add_end", text=T("core.standard_ops.graft_add_end"))
+        if preview is None:
+            return
+
+        plan = preview.plan(self._options(is_mhwi))
+        box = layout.box()
+        if is_mhwi:
+            box.prop(mhwi_unlock_prefs(context), "mhwi_physics_unlocked",
+                     text=T("core.standard_ops.graft_unlocked_plugin"))
+            _draw_budget(box, plan, preview.base, mhwi_physics_unlocked(context))
+        else:
+            box.label(text=T("core.standard_ops.graft_count").format(
+                n=plan.bone_count, e=plan.end_count), icon='BONE_DATA')
+            if plan.helpers:
+                box.label(text=T("core.standard_ops.graft_helpers_note").format(
+                    n=len(plan.helpers)))
+
+    def execute(self, context):
+        g = self._gather(context)
+        if g is None:
+            return {'CANCELLED'}
+        source_arm, target_arm = g["source_arm"], g["target_arm"]
+        tgt_mapper = g["tgt_mapper"]
+        src_to_std, std_to_tgt_bone = g["src_to_std"], g["std_to_tgt_bone"]
+        all_preset_bones_src = g["all_preset_bones_src"]
+        physics_bones_names = g["physics_bones_names"]
+        physics_bones_set = set(physics_bones_names)
+        mesh_objects = g["mesh_objects"]
 
         # --- 4.5 来源预标记：若来源骨架物理骨尚未标记，自动补一次拓扑检测 ---
         already_marked = any(
@@ -827,6 +1284,31 @@ class MODDER_OT_SmartGraftBones(bpy.types.Operator):
             _detect_chain_roles(source_arm, all_preset_bones_src)
             bpy.ops.object.mode_set(mode='OBJECT')
 
+        # --- 4.55 被 exclude 排除的骨不移植，它们的权重并进最近的映射祖先 ---
+        # 控制骨大多零权重，但不全是：首リボン操作 这种把手同时蒙着缎带结。不并的话
+        # 目标上没有这根骨，那片顶点就失去了驱动。并进的祖先和下面父级重建时越过它
+        # 去找的是同一根，所以并完以后结点跟着它原来跟随的身体部位走，行为不变。
+        excluded_merge = {}
+        for name in g["src_mapper"].exclude_matches(b.name for b in source_arm.data.bones):
+            if name in src_to_std:
+                continue
+            anc = source_arm.data.bones[name].parent
+            while anc is not None and anc.name not in src_to_std:
+                anc = anc.parent
+            if anc is not None:
+                excluded_merge[name] = anc.name
+        weighted = set()
+        for obj in mesh_objects:
+            idx = {obj.vertex_groups[n].index: n for n in excluded_merge
+                   if n in obj.vertex_groups}
+            if idx:
+                weighted.update(idx[gr.group] for v in obj.data.vertices
+                                for gr in v.groups if gr.weight > 0 and gr.group in idx)
+        merged_weighted = [n for n in excluded_merge if n in weighted]
+        if merged_weighted:
+            weight_utils.merge_vertex_groups(
+                mesh_objects, {n: excluded_merge[n] for n in merged_weighted})
+
         # --- 4.6 快照目标骨架现有骨骼，写入移植保护集合 ---
         existing_protected = _load_protected_bones(target_arm)
         current_tgt_bones = {b.name for b in target_arm.data.bones}
@@ -834,13 +1316,74 @@ class MODDER_OT_SmartGraftBones(bpy.types.Operator):
             list(existing_protected | current_tgt_bones)
         )
 
+        # --- 4.7 精简 + 分叉判定（按弹窗勾选，所有游戏）---
+        # 处理支链：几乎没人手动标主链延续，所以按拓扑自动判定：主干很轻就删、一支明显
+        # 是延续就当延续、其余各自成链（MHWI 第二层分支不生成链）。不勾选时每个分叉都
+        # 收尾、子骨各自成链。在那之前先精简（见 physics_simplify）：辅助骨不移植，MHWI
+        # 裙子正前物理链的权重拆给左右链，按勾选折半。名额 / 骨数和弹窗用的是同一份规划。
+        is_mhwi = g["is_mhwi"]
+        opts = self._options(is_mhwi)
+        dropped, auto_continue, skipped_set, promoted_heads = {}, set(), set(), set()
+        collapsed = {}      # 抽稀删掉的骨 -> 它的父骨（父级重建时越过它）
+        plan = _plan_graft_simplify(source_arm, physics_bones_set, mesh_objects,
+                                    g["src_mapper"], opts, is_mhwi)
+        bones = source_arm.data.bones
+        mw = source_arm.matrix_world
+        if plan.centres:
+            full = plan.physics | plan.centre_nodes
+            splits = {}
+            for c in plan.centres:
+                centroid = mathutils.Vector(c.ring.centroid)
+                forward = _source_forward(source_arm, g["src_mapper"])
+                for node, (left, right) in physics_simplify.centre_targets(
+                        c, lambda n: [ch.name for ch in bones[n].children], full).items():
+                    def share(co, c=c, left=left, right=right, centroid=centroid,
+                              forward=forward):
+                        f = physics_simplify.side_fraction(
+                            tuple(co - centroid), c.ring, c, forward, (0.0, 0.0, 1.0))
+                        return [(left, f), (right, 1.0 - f)]
+                    splits[node] = share
+            weight_utils.split_vertex_groups(mesh_objects, splits)
+        if plan.decimated:
+            splits = {}
+            for r, (prev, nxt) in plan.decimated.items():
+                a, b = tuple(mw @ bones[prev].head_local), tuple(mw @ bones[nxt].head_local)
+                def share(co, a=a, b=b, prev=prev, nxt=nxt):
+                    t = physics_simplify.segment_fraction(tuple(co), a, b)
+                    return [(prev, 1.0 - t), (nxt, t)]
+                splits[r] = share
+            weight_utils.split_vertex_groups(mesh_objects, splits)
+            collapsed = {r: bones[r].parent.name for r in plan.decimated}
+        gone = plan.helpers | plan.centre_nodes | set(collapsed)
+        physics_bones_names = [n for n in physics_bones_names if n not in gone]
+        physics_bones_set -= gone
+
+        fork_nodes, fork_res = plan.fork_nodes, plan.fork_res
+        auto_continue = set(fork_res.continues)
+        for root in fork_res.skipped:
+            skipped_set.update(fork_resolver.subtree(fork_nodes, root))
+        for name in fork_res.dropped:
+            # 权重并进最近的、不会被删的祖先；链首的 can_drop 保证它有非物理父骨
+            anc = source_arm.data.bones[name].parent
+            while anc is not None and anc.name in fork_res.dropped:
+                anc = anc.parent
+            if anc is not None:
+                dropped[name] = anc.name
+        if dropped:
+            promoted_heads = {c for n in dropped for c in fork_nodes[n].children
+                              if c not in dropped}
+            weight_utils.merge_vertex_groups(mesh_objects, dropped)
+            physics_bones_names = [n for n in physics_bones_names if n not in dropped]
+            physics_bones_set -= set(dropped)
+
         # --- 5. 核心移植逻辑 ---
         bpy.context.view_layer.objects.active = target_arm
         bpy.ops.object.mode_set(mode='EDIT')
         edit_bones = target_arm.data.edit_bones
-        
+
         tgt_mat_inv = target_arm.matrix_world.inverted()
-        import mathutils
+        tgt_root_name = next((eb.name for eb in edit_bones
+                              if eb.parent is None and eb.name in current_tgt_bones), None)
 
         created_count = 0
         new_bones_map = {} # {src_name: new_bone_name}
@@ -873,12 +1416,11 @@ class MODDER_OT_SmartGraftBones(bpy.types.Operator):
         # 5.2 第二轮：检测末端并创建 _End 骨骼
         # (此时所有基础物理骨已创建，位置对应 Source Head)
         end_bone_names = []  # 记录本次生成的 End 骨骼名，供 Phase 7 着色使用
-
-        # 收集源骨架的绑定网格对象，用于尾骨权重检测
-        mesh_objects = [o for o in bpy.data.objects
-                        if o.type == 'MESH'
-                        and any(m.type == 'ARMATURE' and m.object == source_arm
-                                for m in o.modifiers)]
+        # One pass over the meshes for every physics bone, rather than a full scan
+        # per leaf in the loop below -- unweighted tips (MMD 先 bones, hair ends)
+        # never exited early, ~100 leaves x 0.15 s on a 50k mesh.  mass > 0 is
+        # bone_has_weights' "any weight > 0", weights being non-negative.
+        leaf_mass = weight_utils.bone_weight_mass(mesh_objects, physics_bones_names)
 
         for p_name in physics_bones_names:
             src_bone = source_arm.data.bones.get(p_name)
@@ -887,16 +1429,24 @@ class MODDER_OT_SmartGraftBones(bpy.types.Operator):
             # A. 分叉骨：有 ≥2 个物理子骨，但没有子骨标记为 main_continue
             # B. 叶骨：在物理骨集合中没有子级 且 有顶点权重（无权重视为已到尾骨）
             #    线性链（恰好一个物理子骨）不需要 _End
-            physics_children = [c for c in src_bone.children if c.name in physics_bones_set]
+            # 抽稀删掉的骨不在了：它的子骨算作上一级的子骨
+            physics_children = physics_simplify.effective_children(
+                p_name, lambda n: [c.name for c in source_arm.data.bones[n].children],
+                physics_bones_set, collapsed)
             is_leaf = len(physics_children) == 0
             is_fork = len(physics_children) >= 2
             has_main_continue_child = any(
-                source_arm.pose.bones.get(c.name) and
-                source_arm.pose.bones[c.name].get("chain_role") == "main_continue"
+                c in auto_continue or (
+                    source_arm.pose.bones.get(c) and
+                    source_arm.pose.bones[c].get("chain_role") == "main_continue")
                 for c in physics_children
             )
-            if is_leaf:
-                needs_end = weight_utils.bone_has_weights(p_name, mesh_objects)
+            if not opts.add_end:
+                needs_end = False
+            elif p_name in skipped_set:
+                needs_end = False   # 不生成链的子树，补 _End 没有意义
+            elif is_leaf:
+                needs_end = leaf_mass.get(p_name, 0.0) > 0.0
             elif is_fork and not has_main_continue_child:
                 needs_end = True
             else:
@@ -951,27 +1501,29 @@ class MODDER_OT_SmartGraftBones(bpy.types.Operator):
             if not src_bone or not src_bone.parent: continue
             
             src_p_name = src_bone.parent.name
+            # 被判定删掉的主干、抽稀删掉的骨都不在目标里：子骨改挂到最近的、仍然存在的祖先上
+            while src_p_name in dropped or src_p_name in collapsed:
+                src_p_name = source_arm.data.bones[src_p_name].parent.name
             target_parent_name = None
 
             # A. 父级是物理骨
             if src_p_name in new_bones_map:
                 target_parent_name = new_bones_map[src_p_name]
-            # B. 父级是映射骨 (Main/Aux)
-            elif src_p_name in src_to_std:
-                std_key = src_to_std[src_p_name]
-                if std_key in std_to_tgt_bone:
-                    target_parent_name = std_to_tgt_bone[std_key]
+            # B. 父级是映射骨 (Main/Aux)，或是被预设排除的非物理骨（exclude / 姿态修正骨）：
+            #    沿父链向上找第一根在目标骨架上有对应的映射骨。目标骨架没有该标准骨
+            #    （如 spine_03 在 MHWI/MHWS 中不存在）时也是同样往上走。
+            else:
+                walk = source_arm.data.bones.get(src_p_name)
+                while walk:
+                    std_key = src_to_std.get(walk.name)
+                    if std_key in std_to_tgt_bone:
+                        target_parent_name = std_to_tgt_bone[std_key]
+                        break
+                    walk = walk.parent
                 else:
-                    # 目标骨架没有该标准骨（如 spine_03 在 MHWI/MHWS 中不存在）
-                    # 沿源预设骨父链向上查找第一个有目标映射的祖先
-                    walk = source_arm.data.bones.get(src_p_name)
-                    while walk and walk.parent:
-                        walk = walk.parent
-                        if walk.name in src_to_std:
-                            fallback_key = src_to_std[walk.name]
-                            if fallback_key in std_to_tgt_bone:
-                                target_parent_name = std_to_tgt_bone[fallback_key]
-                                break
+                    # 一路到顶都没有映射骨：挂在模型根上（MMD 的 全ての親 下直接挂翅膀），
+                    # 目标上对应的就是骨架根
+                    target_parent_name = tgt_root_name
 
             if target_parent_name and target_parent_name in edit_bones:
                 eb.parent = edit_bones[target_parent_name]
@@ -984,6 +1536,12 @@ class MODDER_OT_SmartGraftBones(bpy.types.Operator):
             tgt_pb = target_arm.pose.bones.get(tgt_name)
             if src_pb and tgt_pb:
                 role = src_pb.get("chain_role")
+                if src_name in skipped_set:
+                    role = "no_chain"
+                elif src_name in auto_continue:
+                    role = "main_continue"
+                elif src_name in promoted_heads:
+                    role = "head"   # 父骨（被删的主干）没了，它现在是主链首
                 if role:
                     tgt_pb["chain_role"] = role
                 _apply_bone_color(tgt_pb, tgt_pb.get("chain_role", "body"))
@@ -994,6 +1552,27 @@ class MODDER_OT_SmartGraftBones(bpy.types.Operator):
 
         bpy.ops.object.mode_set(mode='OBJECT')
         self.report({'INFO'}, T("core.standard_ops.graft_done").format(n=created_count))
+        if merged_weighted:
+            names = ", ".join(merged_weighted[:5]) + ("…" if len(merged_weighted) > 5 else "")
+            self.report({'INFO'}, T("core.standard_ops.graft_excluded_merged").format(
+                n=len(merged_weighted), names=names))
+        if opts.resolve_forks:
+            stats = fork_resolver.summary(fork_res)
+            if any(stats.values()):
+                self.report({'INFO'}, T("core.standard_ops.graft_fork_summary").format(**stats))
+        if fork_res.skipped:
+            names = ", ".join(fork_res.skipped[:5]) + ("…" if len(fork_res.skipped) > 5 else "")
+            self.report({'WARNING'}, T("core.standard_ops.graft_fork_skipped").format(
+                n=len(fork_res.skipped), names=names))
+        if plan.helpers or plan.centres or plan.decimated:
+            self.report({'INFO'}, T("core.standard_ops.graft_simplify_summary").format(
+                helpers=len(plan.helpers), centre=len(plan.centres),
+                decimated=len(plan.decimated)))
+        if is_mhwi:
+            unlocked = mhwi_physics_unlocked(context)
+            packing = mhwi_physics_budget.pack(plan.items, len(current_tgt_bones), unlocked)
+            level = {'WARNING'} if packing.overflow else {'INFO'}
+            self.report(level, _budget_text(packing))
         return {'FINISHED'}
 
 
@@ -1069,25 +1648,41 @@ class MODDER_OT_MergePhysicsWeights(bpy.types.Operator):
         
         for mesh_obj in selected_meshes:
             vgs = mesh_obj.vertex_groups
-            merged_in_mesh = 0
-            
-            for phys_name, base_name in physics_to_base.items():
-                if phys_name not in vgs:
-                    continue  # 这个网格没有这根物理骨的权重
-                
-                # 确保基础骨骼的顶点组存在
-                if base_name not in vgs:
-                    vgs.new(name=base_name)
-                
-                # 合并权重
-                weight_utils.merge_vgroups_multi(mesh_obj, [phys_name], base_name)
-                merged_in_mesh += 1
-            
-            total_merged += merged_in_mesh
+            # One pass over the vertices for every physics group at once, instead
+            # of a full pass per physics bone: ~300 MMD physics bones on a 50k
+            # mesh took 30-45 s that way.  Equivalent here -- every target is a
+            # base bone and never itself merged, and both clamp the sum at 1.
+            mesh_map = {p: b for p, b in physics_to_base.items() if p in vgs}
+            if mesh_map:
+                weight_utils.merge_vertex_groups([mesh_obj], mesh_map)
+            total_merged += len(mesh_map)
         
         self.report({'INFO'}, T("core.standard_ops.merge_physics_done").format(
             meshes=len(selected_meshes), groups=total_merged))
         return {'FINISHED'}
+
+
+def apply_bone_renames(edit_bones, rename_map):
+    """Rename edit bones per *rename_map* ``{current: target}``; returns the count.
+
+    Two passes through temporary names.  Renaming in one pass broke chains: with
+    ``{A: B, B: C}``, A became B, and the B->C step then found that *new* B
+    (formerly A) and renamed it to C -- which happens whenever a source preset's
+    name for one standard key is the target's name for another.  A bone that is
+    not itself being renamed but holds a target name still steps aside to
+    ``<name>_old``, as before.
+    """
+    moving = [(edit_bones[old], new) for old, new in rename_map.items()
+              if old in edit_bones and old != new]
+    moving_names = {eb.name for eb, _new in moving}
+    for _eb, new in moving:
+        if new in edit_bones and new not in moving_names:
+            edit_bones[new].name = new + "_old"
+    for i, (eb, _new) in enumerate(moving):
+        eb.name = f"__mtk_rename_{i}"
+    for eb, new in moving:
+        eb.name = new
+    return len(moving)
 
 
 class MODDER_OT_RenameBonesToTarget(bpy.types.Operator):
@@ -1158,16 +1753,8 @@ class MODDER_OT_RenameBonesToTarget(bpy.types.Operator):
         # 进入编辑模式执行改名
         bpy.ops.object.mode_set(mode='EDIT')
         edit_bones = arm_obj.data.edit_bones
-        renamed_count = 0
-        
-        for old_name, new_name in rename_map.items():
-            if old_name in edit_bones:
-                # 如果目标名已被占用 (可能有同名骨骼), 先给它加后缀避让
-                if new_name in edit_bones and new_name != old_name:
-                    edit_bones[new_name].name = new_name + "_old"
-                edit_bones[old_name].name = new_name
-                renamed_count += 1
-        
+        renamed_count = apply_bone_renames(edit_bones, rename_map)
+
         bpy.ops.object.mode_set(mode='OBJECT')
         self.report({'INFO'}, T("core.standard_ops.renamed_to_target_done").format(n=renamed_count))
         return {'FINISHED'}
@@ -1276,11 +1863,16 @@ class MODDER_OT_SetBoneVisibility(bpy.types.Operator):
         bpy.ops.object.mode_set(mode='POSE')
         for bone in arm_obj.data.bones:
             if self.mode == 'ALL':
-                bone.hide = False
+                hide = False
             elif self.mode == 'BASE':
-                bone.hide = bone.name not in preset_bones
+                hide = bone.name not in preset_bones
             else:  # PHYSICS
-                bone.hide = bone.name in preset_bones or bone.name in protected_bones
+                hide = bone.name in preset_bones or bone.name in protected_bones
+            bone.hide = hide
+            # Blender 5.x 的视口只认 PoseBone.hide（Bone.hide 不再决定姿态模式下的显隐）；4.x 没有这个属性
+            pose_bone = arm_obj.pose.bones.get(bone.name)
+            if pose_bone is not None and hasattr(pose_bone, "hide"):
+                pose_bone.hide = hide
 
         settings.bone_view_mode = self.mode
         labels = {
@@ -1322,7 +1914,7 @@ def _detect_chain_roles(arm_obj, preset_bones, protected_bones=None):
         if is_main_head:
             pb["chain_role"] = "head"
         elif is_branch_head:
-            if current_role != "main_continue":
+            if current_role not in _STICKY_ROLES:
                 pb["chain_role"] = "branch_head"
         elif current_role in ("head", "branch_head"):
             del pb["chain_role"]
@@ -1356,7 +1948,7 @@ def _refresh_chain_roles_local(arm_obj, preset_bones, merged_pairs):
             if is_main_head:
                 pb["chain_role"] = "head"
             elif is_branch_head:
-                if current_role != "main_continue":
+                if current_role not in _STICKY_ROLES:
                     pb["chain_role"] = "branch_head"
             elif current_role in ("head", "branch_head"):
                 del pb["chain_role"]
@@ -1553,9 +2145,21 @@ class MODDER_OT_MergeIntoParent(bpy.types.Operator):
     def description(cls, context, properties):
         return T("core.standard_ops.merge_into_parent_desc")
 
+    @staticmethod
+    def _armature_of_mesh(obj):
+        """网格挂着的骨架：先看父级，再看姿态修改器绑的骨架；都没有返回 None。"""
+        if obj.parent is not None and obj.parent.type == 'ARMATURE':
+            return obj.parent
+        for m in obj.modifiers:
+            if m.type == 'ARMATURE' and m.object is not None and m.object.type == 'ARMATURE':
+                return m.object
+        return None
+
     def execute(self, context):
-        arm_obj = context.active_object
-        if not arm_obj or arm_obj.type != 'ARMATURE':
+        obj = context.active_object
+        if obj is not None and obj.type == 'MESH':
+            return self._from_vertex_group(context, obj)
+        if not obj or obj.type != 'ARMATURE':
             self.report({'ERROR'}, T("core.standard_ops.select_armature_first"))
             return {'CANCELLED'}
 
@@ -1568,7 +2172,7 @@ class MODDER_OT_MergeIntoParent(bpy.types.Operator):
             return {'CANCELLED'}
 
         bpy.ops.object.mode_set(mode='OBJECT')
-        bones_data = arm_obj.data.bones
+        bones_data = obj.data.bones
         pairs = []
         for name in selected_names:
             bone = bones_data.get(name)
@@ -1578,7 +2182,48 @@ class MODDER_OT_MergeIntoParent(bpy.types.Operator):
         if not pairs:
             self.report({'WARNING'}, T("core.standard_ops.no_valid_parent_bone"))
             return {'CANCELLED'}
+        self._merge(context, obj, pairs)
+        return {'FINISHED'}
 
+    def _from_vertex_group(self, context, mesh_obj):
+        """选中的是网格：取它的活动顶点组，找到同名骨骼，连骨带权重一起并进父骨。
+        Blender 里一个网格同时只有一个活动顶点组，所以一次合并一根。"""
+        vg = mesh_obj.vertex_groups.active
+        if vg is None:
+            self.report({'ERROR'}, T("core.standard_ops.merge_no_active_vgroup"))
+            return {'CANCELLED'}
+        arm_obj = self._armature_of_mesh(mesh_obj)
+        if arm_obj is None:
+            self.report({'ERROR'}, T("core.standard_ops.merge_mesh_needs_armature"))
+            return {'CANCELLED'}
+        if not arm_obj.visible_get():
+            # 隐藏的骨架进不了编辑模式（mode_set 的 poll 会失败）
+            self.report({'ERROR'}, T("core.standard_ops.merge_armature_hidden").format(
+                armature=arm_obj.name))
+            return {'CANCELLED'}
+        bone = arm_obj.data.bones.get(vg.name)
+        if bone is None:
+            self.report({'ERROR'}, T("core.standard_ops.merge_vgroup_no_bone").format(
+                group=vg.name, armature=arm_obj.name))
+            return {'CANCELLED'}
+        if bone.parent is None:
+            self.report({'WARNING'}, T("core.standard_ops.no_valid_parent_bone"))
+            return {'CANCELLED'}
+
+        mode = context.mode
+        restore = {'PAINT_WEIGHT': 'WEIGHT_PAINT', 'EDIT_MESH': 'EDIT'}.get(mode, 'OBJECT')
+        if mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+        self._merge(context, arm_obj, [(bone.parent.name, bone.name)])
+        # 合并过程中活动物体被切到了骨架上；回到用户原来的网格和模式，好接着点下一个组
+        context.view_layer.objects.active = mesh_obj
+        if restore != 'OBJECT':
+            bpy.ops.object.mode_set(mode=restore)
+        return {'FINISHED'}
+
+    def _merge(self, context, arm_obj, pairs):
+        # 下面要进骨架的编辑模式：从网格进来时活动物体还是网格
+        context.view_layer.objects.active = arm_obj
         # 断开子骨连接，防止删除父骨后子骨位置被吸附
         bpy.ops.object.mode_set(mode='EDIT')
         edit_bones = arm_obj.data.edit_bones
@@ -1600,7 +2245,6 @@ class MODDER_OT_MergeIntoParent(bpy.types.Operator):
         bpy.ops.object.mode_set(mode='OBJECT')
 
         self.report({'INFO'}, T("core.standard_ops.merged_into_parent").format(n=len(pairs)))
-        return {'FINISHED'}
 
 
 classes = [

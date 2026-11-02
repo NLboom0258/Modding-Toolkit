@@ -1,19 +1,21 @@
 import bpy
 import os
+import re
 from collections import defaultdict
 
 from ...core.i18n import T
+from ...core import mod_root
 from ...core.re_mesh_compat import call_re_mesh_op, re_mesh_op_available
+from ...core import optional_editors
 from .batch_export import (
     MHWS_PARTS,
-    _load_scheme, _resolve_part_file_types, _canonical_order_file_types,
-    _make_filepath, set_binding,
+    _load_scheme, _make_filepath, set_binding, part_slots, ignore_slot_limits,
 )
 
-# gpuc has no importer (RE Mesh/Chain Editor never reads it back) and is always
-# regenerated blank on export, so it never needs to round-trip through import.
-IMPORT_FILE_TYPES = ["mesh", "mdf2", "chain2", "clsp"]
-FT_ORDER = ["mesh", "mdf2", "chain2", "clsp"]
+# jcns / gpuc come back only through their own editors (core/optional_editors);
+# without the editor a vanilla gpuc is not offered -- the exporter writes it blank.
+IMPORT_FILE_TYPES = ["mesh", "mdf2", "chain2", "clsp", "jcns", "gpuc"]
+FT_ORDER = ["mesh", "mdf2", "chain2", "clsp", "jcns", "gpuc"]
 
 
 # ── CollectionProperty 数据结构 ────────────────────────────────────
@@ -25,7 +27,7 @@ class MHWS_ImportItem(bpy.types.PropertyGroup):
     variant:           bpy.props.StringProperty()   # "mm"/"mf"/"fm"/"ff"
     variant_armor_id:  bpy.props.StringProperty()   # 该变体实际的模型前缀，如 "ch02_001_000"
     part:              bpy.props.StringProperty()   # "1".."5"
-    filetype:          bpy.props.StringProperty()   # "mesh"/"mdf2"/"chain2"/"clsp"
+    filetype:          bpy.props.StringProperty()   # slot: "mesh"/"mdf2"/"chain2"/"clsp"/"gpuc"/"jcns[:suffix]"
     enabled:           bpy.props.BoolProperty(default=True)
 
 
@@ -54,6 +56,10 @@ def scan_mhws_catalog(natives_root, scheme_filename, scene):
         return 0
 
     seen_groups = set()
+    # The same slots the exporter shows (the "Ignore Slot Limits" toggle included),
+    # so whatever is imported has somewhere to be bound.
+    unlocked = ignore_slot_limits(scene)
+    optional = optional_editors.import_slots()
 
     for armor_set in scheme.get("armor_sets", []):
         armor_id   = armor_set["id"]
@@ -68,11 +74,12 @@ def scan_mhws_catalog(natives_root, scheme_filename, scene):
                 if not (parts_mask & (1 << (int(part_id) - 1))):
                     continue
 
-                part_fts = [ft for ft in _resolve_part_file_types(armor_set, part_id)
-                            if ft in IMPORT_FILE_TYPES]
-
-                for filetype in _canonical_order_file_types(part_fts):
-                    filepath = _make_filepath(natives_root, base_path, part_id, variant_armor_id, filetype)
+                for slot in part_slots(armor_set, variant, part_id, unlocked, optional):
+                    filetype = optional_editors.slot_type(slot)
+                    if filetype in optional_editors.EDITORS and filetype not in optional:
+                        continue
+                    filepath = _make_filepath(natives_root, base_path, part_id, variant_armor_id, filetype,
+                                              optional_editors.slot_suffix(slot))
                     if not os.path.isfile(filepath):
                         continue
 
@@ -87,7 +94,7 @@ def scan_mhws_catalog(natives_root, scheme_filename, scene):
                     item.variant          = variant
                     item.variant_armor_id = variant_armor_id
                     item.part             = part_id
-                    item.filetype         = filetype
+                    item.filetype         = slot
                     # chain2/clsp 导入瓶颈已修复，默认全部勾选
                     item.enabled          = True
 
@@ -100,6 +107,14 @@ def scan_mhws_catalog(natives_root, scheme_filename, scene):
 # ── 辅助：Chain 导入 operator 可用性 ────────────────────────────────
 # RE Chain Editor 把 chain2/clsp 各自注册为独立分类（re_chain2 / re_clsp），
 # 不像 RE Mesh Editor 有社区分支改名的问题，因此直接查 bpy.ops 即可。
+
+#: Blender 给重名数据块追加的 ".001" 式后缀（与 games/mhrs/batch_import.py 相同）。
+_DUP_SUFFIX = re.compile(r"\.\d{3}$")
+
+
+def _strip_dup_suffix(name):
+    return _DUP_SUFFIX.sub("", name)
+
 
 def _chain2_import_available():
     return hasattr(bpy.ops, 're_chain2') and 'importfile' in dir(bpy.ops.re_chain2)
@@ -123,7 +138,7 @@ class MHWS_OT_ScanImportFiles(bpy.types.Operator):
     def execute(self, context):
         scene        = context.scene
         settings     = scene.mhw_suite_settings
-        natives_root = scene.get("mhws_natives_root", "")
+        natives_root = mod_root.read(scene, "mhws_natives_root")
         if not natives_root or not os.path.isdir(natives_root):
             self.report({'ERROR'}, T("mhws.batch_import.set_mod_root_first"))
             return {'CANCELLED'}
@@ -194,7 +209,8 @@ class MHWS_OT_SelectAllImport(bpy.types.Operator):
 class MHWS_OT_BatchImport(bpy.types.Operator):
     bl_idname  = "mhws.batch_import"
     bl_label   = "MHWs Batch Import"
-    bl_options = {'REGISTER'}
+    # 经对话框调用时推送由对话框负责（这里被抑制）；单独调用（F3）时由这里负责。
+    bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
     def description(cls, context, properties):
@@ -235,10 +251,30 @@ class MHWS_OT_BatchImport(bpy.types.Operator):
         op_ns = getattr(bpy.ops, f"re_{filetype}")
         op_ns.importfile('EXEC_DEFAULT', filepath=item.filepath, targetArmature=armature_name)
 
-    def _bind(self, scene, armor_id, variant, part_id, filetype, expected_col_name):
-        """导入成功后自动把生成的集合登记为导出绑定，省去手动 Pick Collection"""
-        if expected_col_name in bpy.data.collections:
-            set_binding(scene, armor_id, variant, part_id, filetype, expected_col_name)
+    def _bind(self, scene, armor_id, variant, part_id, filetype, expected_col_name, created):
+        """导入成功后自动把生成的集合登记为导出绑定，省去手动 Pick Collection。
+
+        认的是 *created* —— 这次导入新增出来的集合，与 MHRS 的 _bind 同一做法。
+        以前按名字查：场景里已有 ``X.mesh`` 时 RE Mesh Editor 会把新的建成
+        ``X.mesh.001``，按名字就绑上了旧的那个，于是导出的是上一次的模型，
+        而且看起来一切正常。名字仍用来在多个新集合里挑对的那个。
+        """
+        candidates = [c for c in created if _strip_dup_suffix(c) == expected_col_name]
+        if len(candidates) != 1:
+            # 一次导入里每种类型只新增一个集合，按类型后缀认唯一那个也可靠。
+            candidates = [c for c in created
+                          if _strip_dup_suffix(c).rsplit(".", 1)[-1] == filetype]
+        if len(candidates) != 1:
+            return False
+        set_binding(scene, armor_id, variant, part_id, filetype, candidates[0])
+        return candidates[0]
+
+    def _import_optional(self, item, slot, armature_name, mesh_col):
+        """jcns / gpuc through their editors' importers; returns the collection made."""
+        arm = next((o.name for o in bpy.context.scene.objects
+                    if o.type == 'ARMATURE' and o.data.name == armature_name), None)
+        return optional_editors.import_file(optional_editors.slot_type(slot), item.filepath,
+                                            armature=arm, mesh_collection=mesh_col)
 
     def execute(self, context):
         if not re_mesh_op_available('importfile'):
@@ -269,16 +305,21 @@ class MHWS_OT_BatchImport(bpy.types.Operator):
             mesh_item  = ft_map.get("mesh")
             mdf2_item  = ft_map.get("mdf2")
             armature_name = None
+            mesh_col = None
 
             if mesh_item:
                 try:
+                    before = set(bpy.data.collections.keys())
                     armature_name = self._import_mesh(mesh_item, mdf2_item, variant_armor_id, part_id)
+                    created = set(bpy.data.collections.keys()) - before
                     ok += 1
                     succeeded_variants[(armor_id, variant)] = None
-                    self._bind(scene, armor_id, variant, part_id, "mesh", f"{variant_armor_id}{part_id}.mesh")
+                    mesh_col = self._bind(scene, armor_id, variant, part_id, "mesh",
+                                          f"{variant_armor_id}{part_id}.mesh", created) or None
                     if mdf2_item:
                         ok += 1
-                        self._bind(scene, armor_id, variant, part_id, "mdf2", f"{variant_armor_id}{part_id}.mdf2")
+                        self._bind(scene, armor_id, variant, part_id, "mdf2",
+                                   f"{variant_armor_id}{part_id}.mdf2", created)
                     print(f"[MHWs] Imported: {os.path.basename(mesh_item.filepath)}")
                 except Exception as e:
                     print(f"[MHWs] Mesh import FAILED {mesh_item.filepath}: {e}")
@@ -306,13 +347,39 @@ class MHWS_OT_BatchImport(bpy.types.Operator):
                     skip += 1
                     continue
                 try:
+                    before = set(bpy.data.collections.keys())
                     self._import_chain(chain_item, filetype, armature_name)
-                    self._bind(scene, armor_id, variant, part_id, filetype, f"{variant_armor_id}{part_id}.{filetype}")
+                    created = set(bpy.data.collections.keys()) - before
+                    self._bind(scene, armor_id, variant, part_id, filetype,
+                               f"{variant_armor_id}{part_id}.{filetype}", created)
                     ok += 1
                     succeeded_variants[(armor_id, variant)] = None
                     print(f"[MHWs] Imported: {os.path.basename(chain_item.filepath)} -> {armature_name}")
                 except Exception as e:
                     print(f"[MHWs] {filetype} import FAILED {chain_item.filepath}: {e}")
+                    fail += 1
+
+            # jcns / gpuc 也绑到导入出来的骨架 / 网格集合上，所以排在 mesh 之后
+            for slot in sorted((sl for sl in ft_map
+                                if optional_editors.slot_type(sl) in optional_editors.EDITORS),
+                               key=lambda sl: FT_ORDER.index(optional_editors.slot_type(sl))):
+                opt_item = ft_map[slot]
+                if not armature_name:
+                    print(f"[MHWs] SKIP {opt_item.filepath}: no armature imported for this part")
+                    skip += 1
+                    continue
+                if not optional_editors.import_available(optional_editors.slot_type(slot)):
+                    print(f"[MHWs] SKIP {opt_item.filepath}: its editor's importer not found")
+                    skip += 1
+                    continue
+                try:
+                    name = self._import_optional(opt_item, slot, armature_name, mesh_col)
+                    set_binding(scene, armor_id, variant, part_id, slot, name)
+                    ok += 1
+                    succeeded_variants[(armor_id, variant)] = None
+                    print(f"[MHWs] Imported: {os.path.basename(opt_item.filepath)} -> {name}")
+                except Exception as e:
+                    print(f"[MHWs] {slot} import FAILED {opt_item.filepath}: {e}")
                     fail += 1
 
         # 最后一个成功导入的套装/变体，设为批量导出面板当前选中项

@@ -13,22 +13,25 @@ _GROUP_PROP_MAP = {
     "腿部":       "show_leg_l",
     "手指 (左)":  "show_fingers",
     "手指 (右)":  "show_fingers",
+    # Missing until now, so both fell back to show_torso: toggling either aux
+    # group folded the torso group with it, and their 50 rows started open.
+    "辅助骨 (左)": "show_aux_l",
+    "辅助骨 (右)": "show_aux_r",
 }
 
 class MHW_PT_PresetEditor(bpy.types.Panel):
     bl_label = ""
-    # NOTE: idname deliberately differs from the original "MHW_PT_preset_editor".
-    # Blender caches per-region panel order by idname, so bl_order below is
-    # ignored for a panel the file has already seen. A fresh idname has no
-    # cached order, which is what actually moves it to the top.
-    bl_idname = "MHW_PT_preset_editor_top"
+    # NOTE: a fresh idname again (it was "MHW_PT_preset_editor_top" while it
+    # sat above the main panel). Blender caches per-region panel order by
+    # idname, so a panel the file has already seen ignores bl_order.
+    bl_idname = "MTK_PT_preset_editor"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = 'MOD Toolkit'
+    # Under Skeleton & Mesh Convert: what it edits are that panel's X/Y presets.
+    bl_parent_id = "MTK_PT_skeleton_convert"
     bl_options = {'DEFAULT_CLOSED'}
-    # Sits above the main panel: it was invisible at the bottom of a very
-    # long sidebar. Stays collapsed so it costs one line when unused.
-    bl_order = 0
+    bl_order = 3
 
     def draw_header(self, context):
         self.layout.label(text=T("ui.editor_panel.panel_title"))
@@ -105,7 +108,7 @@ class MHW_PT_PresetEditor(bpy.types.Panel):
             row.prop(editor_settings, prop_name,
                      icon="TRIA_DOWN" if is_open else "TRIA_RIGHT",
                      icon_only=True, emboss=False)
-            row.label(text=group_name, icon=group_data['icon'])
+            row.label(text=ui_config.label(group_name), icon=group_data['icon'])
 
             if not is_open:
                 continue

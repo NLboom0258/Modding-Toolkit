@@ -3,16 +3,20 @@ import bpy
 from ...core.mdf_tex_processor_base import (
     BASE_SLOT_CHANNEL_MAPS, BASE_NULL_TEX_BY_TYPE, BASE_TEXTURE_TYPE_ABBREV,
     _CH_ENUM_ITEMS,
-    octahedral_normals_prop,
+    octahedral_normals_prop, mip_strategy_prop,
 )
+from .mdf_tex_processor import NULL_TEX_BY_TYPE, SLOT_NULLS, PLACEHOLDER_SLOT_TYPES
 from ...core.mdf_generator_base import (
     get_shader_source_items, shader_source_update,
     load_preset_enum_items,
     _find_meshes_by_material, mesh_collection_poll,
     MdfGenRefreshBase, MdfGenProcessBase,
+    register_generator, unregister_generator,
 )
 from ...core.i18n import T
 from ...core.color_grade import color_grade_items, DEFAULT_MODE_INDEX
+from ...core.stable_enum import stable_enum
+from ...core import poll_msg
 
 # ── MHWS constants ─────────────────────────────────────────────────────────────
 
@@ -32,7 +36,8 @@ def _mhws_get_presets(self, context):
 
 class MhwsGenMaterialEntry(bpy.types.PropertyGroup):
     blender_material: bpy.props.StringProperty(name="Blender Material")
-    material_preset:  bpy.props.EnumProperty(
+    material_preset:  stable_enum(
+        "material_preset",
         name="Preset",
         description="MDF2 material preset from RE Mesh Editor",
         items=_mhws_get_presets,
@@ -87,6 +92,16 @@ class MhwsGenMaterialEntry(bpy.types.PropertyGroup):
     )
     ao_ch:            bpy.props.EnumProperty(name="", items=_CH_ENUM_ITEMS, default='R')
     ao_inv:           bpy.props.BoolProperty(name="Invert", default=False)
+    # Set by Refresh for the dialog: where each PBR channel comes from, as text
+    # (file name, constant, "ALB.A"...), and how many meshes use the material.
+    src_color:     bpy.props.StringProperty()
+    src_normal:    bpy.props.StringProperty()
+    src_roughness: bpy.props.StringProperty()
+    src_metallic:  bpy.props.StringProperty()
+    src_alpha:     bpy.props.StringProperty()
+    src_emissive:  bpy.props.StringProperty()
+    mesh_count:    bpy.props.IntProperty(default=0)
+    slots_expanded: bpy.props.BoolProperty(default=False)
     # Native pixel sizes detected at refresh (read-only, set by MdfGenRefreshBase)
     native_size_color:     bpy.props.IntProperty(default=0)
     native_size_normal:    bpy.props.IntProperty(default=0)
@@ -129,6 +144,8 @@ class MhwsGenSettings(bpy.types.PropertyGroup):
     )
     material_list:     bpy.props.CollectionProperty(type=MhwsGenMaterialEntry)
     material_list_idx: bpy.props.IntProperty()
+    options_expanded:  bpy.props.BoolProperty(default=False)
+    clipboard_json:    bpy.props.StringProperty()   # mhw.gen_copy_material
     flip_normal_g:     bpy.props.BoolProperty(
         name="Normal OpenGL -> DirectX",
         description="When enabled, connected OpenGL normal maps are converted directly to DX format, without "
@@ -150,6 +167,7 @@ class MhwsGenSettings(bpy.types.PropertyGroup):
         description="Override every material's own Generate MipMaps checkbox and skip mipmap generation entirely",
         default=False,
     )
+    global_mip_quality: mip_strategy_prop()
     global_use_toon:   bpy.props.BoolProperty(
         name="Use Toon Shading (Global)",
         description="Override every material's own Use Toon Shading checkbox and force it on for all of them",
@@ -174,7 +192,11 @@ class MHWS_OT_MdfGenProcess(MdfGenProcessBase):
     _use_art_prefix   = True
     _abbrev_map       = BASE_TEXTURE_TYPE_ABBREV
     _channel_maps     = BASE_SLOT_CHANNEL_MAPS
-    _null_tex_by_type = BASE_NULL_TEX_BY_TYPE
+    # MHWS's own table, not the shared one: the shared table lacks its
+    # MasterMaterial/ entries (MP_noise, PanoramaMap ...).
+    _null_tex_by_type = NULL_TEX_BY_TYPE
+    _slot_nulls       = SLOT_NULLS
+    _placeholder_slots = PLACEHOLDER_SLOT_TYPES
     _log_tag          = "MHWS Gen"
 
 
@@ -194,16 +216,14 @@ class MHWS_OT_SelectSameMaterial(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         """必须有激活 MESH 物体，且其材质已设置，mesh_collection 已选择"""
+        if not poll_msg.active_mesh(cls, context):
+            return False
         obj = context.active_object
-        if not obj or obj.type != 'MESH':
-            return False
-        if not obj.material_slots:
-            return False
-        settings = context.scene.mhws_mdf_generator
-        if not settings.mesh_collection:
-            return False
-        mat = obj.material_slots[obj.active_material_index].material
-        return mat is not None
+        if not context.scene.mhws_mdf_generator.mesh_collection:
+            return poll_msg.deny(cls, "core.poll.need_mesh_collection")
+        mat = (obj.material_slots[obj.active_material_index].material
+               if obj.material_slots else None)
+        return poll_msg.require(cls, mat is not None, "core.poll.need_material_slot")
 
     def execute(self, context):
         settings = context.scene.mhws_mdf_generator
@@ -262,9 +282,12 @@ def register():
         bpy.utils.register_class(cls)
     bpy.types.Scene.mhws_mdf_generator = bpy.props.PointerProperty(
         type=MhwsGenSettings)
+    # For the pre-export check's 「使用生成器快捷生成」
+    register_generator('MHWS', MHWS_OT_MdfGenProcess)
 
 
 def unregister():
+    unregister_generator('MHWS')
     del bpy.types.Scene.mhws_mdf_generator
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)

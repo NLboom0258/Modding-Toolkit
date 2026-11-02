@@ -43,6 +43,8 @@ points gives, at bone-slot level, **no destination the author did not also use**
 in either target -- every difference is a collider they chose to add or drop.
 """
 
+import re
+
 import bpy
 
 from .bone_correction import mat3_mul, relocalise_frame
@@ -73,13 +75,17 @@ BONE_CONSTRAINT = "BoneName"
 #: RE4R is simply the wrong file.  Confirmed against docs/chain_chain2_plan.md and
 #: against all three reference characters in the project's own scene.
 CHAIN_EXT_BY_GAME = {"MHWS": ".chain2", "RE4": ".chain", "RE9": ".chain2",
-                     "MHRS": ".chain"}
+                     "MHRS": ".chain", "ONI": ".chain2"}
 
 #: File version each game's exporter writes, from RE-Chain-Editor's own export
 #: dropdowns (``__init__.py`` ``ExportREChain.filename_ext`` /
 #: ``ExportREChain2.filename_ext``).  These are the numbers the *game* validates
 #: against ``supportedVersionSet``, so they are not cosmetic.
-CHAIN_VERSION_BY_GAME = {"MHWS": 14, "RE4": 53, "RE9": 15, "MHRS": 48}
+#:
+#: ONI's 17 is only in the RidogFork of RE-Chain-Editor (its header is 112 bytes:
+#: the collisionAttr/extraData offsets are gone).  Upstream and the MHWilds fork
+#: cannot write it.
+CHAIN_VERSION_BY_GAME = {"MHWS": 14, "RE4": 53, "RE9": 15, "MHRS": 48, "ONI": 17}
 
 #: ``colliderFilterInfoPath`` is a **path into the game's own files**, so it can
 #: only ever be correct for the game it names.  MHWilds is the only supported
@@ -95,7 +101,32 @@ COLLIDER_FILTER_BY_GAME = {
     # MHRS predates the feature: chain v1 only gained clspFlags at version 52 and
     # MHRS writes 48, so it has no collider filter to name.
     "MHRS": "",
+    # Every settings entry of both vanilla ch001_00 chain2 files is empty.
+    "ONI": "",
 }
+
+#: chain2 header fields a game needs set to its own values, by field name on
+#: RE-Chain-Editor's ``re_chain_header`` property group.  Read off both vanilla
+#: Onimusha files (ch001_00_00 / ch001_00_20 .chain2.17) and identical in them; the
+#: user arrived at the same table by hand and confirmed it in game (2026-10-14).
+#: ``rotationOrder`` is left alone -- the two vanilla files disagree on it (0 / 1),
+#: so it belongs to the asset, not the game.
+CHAIN2_HEADER_BY_GAME = {
+    "ONI": {
+        "calculateMode": 3,
+        "chainAttrFlags": 2,
+        "highFPSCalculateMode": 2,
+        "modelCollisionSearch": 1,
+        "calculateStepTime": 1.0,
+        "wilds_unkn1": 1,
+        "wilds_unkn2": 1,
+    },
+}
+
+#: chain2 games whose vanilla settings carry *no* subdata, so the MHWilds-style
+#: backfill below must not run for them.  Both vanilla ONI files have
+#: ``subDataCount`` 0 on every settings entry.
+CHAIN2_NO_SUBDATA_GAMES = frozenset({"ONI"})
 
 #: What RE-Chain-Editor writes into an empty chain2 ``subDataList`` (see
 #: ``blender_re_chain.py::exportChainFile``).  Its own fix-up only fires when the
@@ -220,6 +251,8 @@ def export_operator_for(game_code):
 #: Extensions a chain-side collection name can carry, longest first so ``.chain2``
 #: is never mistaken for ``.chain`` + a stray ``2``.
 _CHAIN_EXTS = (".chain2", ".chain", ".clsp")
+#: Blender's duplicate-name suffix (".001").
+_DUP_SUFFIX = re.compile(r"\.\d{3,}$")
 
 #: What RE-Chain-Editor's own createChainCollection stamps on a chain collection
 #: (blender_re_chain.py:88-89); blender_re_clsp.py:361-362 uses the same colour with
@@ -267,19 +300,33 @@ def chain_file_type_for(collection_name):
     treated as ``.chain``: matching its behaviour matters more than being
     stricter, since the whole point is to agree with what an import would set.
     """
-    if not collection_name or collection_name.endswith(".clsp"):
+    # Judged on the name without Blender's ".001": a second import of the same
+    # file is "X.chain2.001", and reading that as not-.chain2 switched RE Chain
+    # Editor to the v1 flag vocabulary on the first click inside it -- the very
+    # mismatch this function exists to prevent.  Upstream decides from the
+    # *requested* name, which never carries the suffix.
+    base = _split_dup_suffix(collection_name or "")[0]
+    if not base or base.endswith(".clsp"):
         return None
-    if ".chain" not in collection_name:
+    if ".chain" not in base:
         return None
-    return "chain2" if collection_name.endswith(".chain2") else "chain"
+    return "chain2" if base.endswith(".chain2") else "chain"
+
+
+def _split_dup_suffix(name):
+    """``('char.chain2', '.001')`` from ``'char.chain2.001'``; ``(name, '')`` otherwise."""
+    m = _DUP_SUFFIX.search(name)
+    return (name[:m.start()], m.group()) if m else (name, "")
 
 
 def chain_stem(name):
-    """``'char'`` from ``'char.chain'`` / ``'char.chain2'`` / ``'char.clsp'``."""
+    """``'char'`` from ``'char.chain'`` / ``'char.chain2'`` / ``'char.clsp'``,
+    and from the same with Blender's ``.001`` duplicate suffix after it."""
+    base = _split_dup_suffix(name)[0]
     for ext in _CHAIN_EXTS:
-        if name.endswith(ext):
-            return name[:-len(ext)]
-    return name
+        if base.endswith(ext):
+            return base[:-len(ext)]
+    return base
 
 
 def ported_chain_collection_name(source_name, target_game):
@@ -298,6 +345,7 @@ def ported_chain_collection_name(source_name, target_game):
 #: ``TYPE``, not ``~TYPE`` -- the tilde form tags *collections*; objects carry the
 #: bare name (``blender_re_chain.py::exportChainFile`` reads ``obj.get("TYPE")``).
 _SETTINGS_TYPE = "RE_CHAIN_CHAINSETTINGS"
+_HEADER_TYPE = "RE_CHAIN_HEADER"
 
 
 def apply_target_game_settings(collection, target_game, source_game=None):
@@ -331,8 +379,12 @@ def apply_target_game_settings(collection, target_game, source_game=None):
         Needs *source_game*; without it the translation is skipped, since
         guessing the source vocabulary would be the same bug in a new place.
 
+    chain2 header fields
+        Same container, different header values: Onimusha reads ``.chain2`` like
+        MHWilds but wants its own calculate modes.  See CHAIN2_HEADER_BY_GAME.
+
     Returns ``{'filter_set': n, 'subdata_added': n, 'filter_path': str,
-    'attr_translated': n, 'attr_dropped': [name, ...]}``.
+    'attr_translated': n, 'attr_dropped': [name, ...], 'header_set': n}``.
 
     Note there is deliberately no "convert the objects to chain2 types" step: there
     are no such types.  Every object carries a format-neutral ``RE_CHAIN_*`` marker
@@ -341,7 +393,7 @@ def apply_target_game_settings(collection, target_game, source_game=None):
     which export operator runs, not by anything stored here.
     """
     path = COLLIDER_FILTER_BY_GAME.get(target_game, "")
-    want_subdata = is_chain2(target_game)
+    want_subdata = is_chain2(target_game) and target_game not in CHAIN2_NO_SUBDATA_GAMES
 
     # None means "source unknown" -- distinct from "same container", so the two
     # cannot collapse into a silent no-op that looks like a handled port.
@@ -402,9 +454,34 @@ def apply_target_game_settings(collection, target_game, source_game=None):
         except (AttributeError, TypeError, ValueError):
             pass
 
+    header_set = 0
+    header_values = CHAIN2_HEADER_BY_GAME.get(target_game) or {}
+    if header_values:
+        for obj in collection.all_objects:
+            if obj.get("TYPE") != _HEADER_TYPE:
+                continue
+            pg = getattr(obj, "re_chain_header", None)
+            if pg is None:
+                continue
+            for field, value in header_values.items():
+                # The calculate modes are EnumProperties keyed "0".."n", not ints:
+                # setattr(pg, "calculateMode", 3) raises TypeError, which the guard
+                # below would swallow and leave the source game's value in place.
+                try:
+                    if pg.bl_rna.properties[field].type == 'ENUM':
+                        value = str(value)
+                except (AttributeError, KeyError, TypeError):
+                    pass
+                try:
+                    if getattr(pg, field) != value:
+                        setattr(pg, field, value)
+                        header_set += 1
+                except (AttributeError, TypeError, ValueError):
+                    pass
+
     return {'filter_set': filter_set, 'subdata_added': subdata_added,
             'filter_path': path, 'attr_translated': attr_translated,
-            'attr_dropped': attr_dropped}
+            'attr_dropped': attr_dropped, 'header_set': header_set}
 
 
 class RemapReport:
@@ -484,10 +561,14 @@ def _sibling_clsp_collection(collection):
     # links the copy in beside the original, so a parent can hold both
     # ``char.clsp`` and ``char_RE4.clsp`` -- taking whichever came first would
     # hand the port the *original's* colliders and silently remap those.
-    stem = chain_stem(name)
+    # The duplicate suffix has to agree too: a second import makes "char.chain2.001"
+    # and "char.clsp.001" side by side with the first pair, and the stem alone
+    # cannot tell which .clsp belongs to which chain.
+    stem, dup = chain_stem(name), _split_dup_suffix(name)[1]
     for parent in parents:
         for sib in parent.children:
-            if sib.get("~TYPE") == CLSP_COLLECTION_TYPE and chain_stem(sib.name) == stem:
+            if (sib.get("~TYPE") == CLSP_COLLECTION_TYPE and chain_stem(sib.name) == stem
+                    and _split_dup_suffix(sib.name)[1] == dup):
                 return sib
     return None
 
@@ -552,8 +633,17 @@ def remap_collider_attachments(collection, cross_map, target_armature=None,
         new = cross_map.get(old)
 
         if new is None:
-            report.unmapped.append((obj.name, old))
-            continue
+            # A bone no preset knows is the model's own (Butt_L, a skirt root) and
+            # travels with the ported rig under the same name, so if the target rig
+            # has it the binding is already right -- same as a node's pass-through.
+            # Blocking it stopped MHWS -> ONI on two butt colliders that had a bone
+            # to bind to.  Without a target rig there is no way to know, so it stays
+            # an error.
+            if target_bones is not None and old in target_bones:
+                new = old
+            else:
+                report.unmapped.append((obj.name, old))
+                continue
 
         if target_bones is not None and new not in target_bones:
             report.missing_in_target.append((obj.name, new))
@@ -590,6 +680,45 @@ def remap_collider_attachments(collection, cross_map, target_armature=None,
 #: a file path (``colliderFilterInfoPath``), a UI label or a type marker -- bone names
 #: must follow the new armature, so they are deliberately left alone.
 LINK_GROUP_REFS = ("chainGroupAObject", "chainGroupBObject")
+
+
+def _remap_internal_refs(obj, mapping):
+    """Point *obj*'s modifier and constraint object references at the copies.
+
+    ``Object.copy()`` keeps every such pointer on the original.  Parents are
+    rewired by hand above, but nothing touched the rest: a copied capsule root's
+    REChainGeometryNodes inputs (Socket_0 / Socket_1) still named the *source's*
+    start/end empties, and hooks and constraints pointing inside the collection
+    likewise -- so the ported capsules were drawn on the source rig, nudging an
+    endpoint did not move the visible capsule, and they vanished if the source
+    was deleted.  Export read the BoneName properties and was unaffected.
+
+    Only references to objects of the copied set move; one to anything outside it
+    (the armature) is left alone, which relocalise_node_frames deals with.
+    Duck-typed like the rest of this file.
+    """
+    def swap(value):
+        name = getattr(value, "name", None)
+        return mapping.get(name) if isinstance(name, str) else None
+
+    for mod in getattr(obj, "modifiers", ()):
+        rna = getattr(mod, "bl_rna", None)
+        for prop in (getattr(rna, "properties", ()) if rna is not None else ()):
+            if (getattr(prop, "type", "") == 'POINTER' and not getattr(prop, "is_readonly", True)
+                    and getattr(getattr(prop, "fixed_type", None), "identifier", "") == "Object"):
+                new = swap(getattr(mod, prop.identifier, None))
+                if new is not None:
+                    setattr(mod, prop.identifier, new)
+        # Geometry-nodes inputs are ID properties on the modifier itself.
+        if getattr(mod, "type", "") == 'NODES' and hasattr(mod, "keys"):
+            for key in list(mod.keys()):
+                new = swap(mod[key])
+                if new is not None:
+                    mod[key] = new
+    for con in getattr(obj, "constraints", ()):
+        new = swap(getattr(con, "target", None))
+        if new is not None:
+            con.target = new
 
 
 def duplicate_chain_collection(collection, name, link_into=None):
@@ -688,6 +817,7 @@ def duplicate_chain_collection(collection, name, link_into=None):
         if obj.parent is not None:
             copy.parent = mapping.get(obj.parent.name, obj.parent)
             copy.matrix_parent_inverse = obj.matrix_parent_inverse.copy()
+        _remap_internal_refs(copy, mapping)
 
     # Collision roots hang off the chain header, and that is not inherited: a
     # .chain/.chain2 creates them parented to it (blender_re_chain.py:830,866)
@@ -798,7 +928,7 @@ def relocalise_node_frames(collection, target_armature, dry_run=False):
     # stubs.  Only this one function needs a real rotation type.
     from mathutils import Matrix
 
-    relocalised = unchanged = 0
+    relocalised = unchanged = same_rig = 0
     missing, no_source = [], []
 
     for obj in list(collection.all_objects):
@@ -809,7 +939,13 @@ def relocalise_node_frames(collection, target_armature, dry_run=False):
         if not bone:
             continue
 
-        src_rot = _bone_rot(getattr(con, "target", None), bone)
+        src_arm = getattr(con, "target", None)
+        if src_arm is not None and src_arm == target_armature:
+            # Already on the target rig -- an in-place mesh port got there first.
+            # Then "before" and "after" are the same bone and nothing can be
+            # re-expressed; the caller warns when that matters.
+            same_rig += 1
+        src_rot = _bone_rot(src_arm, bone)
         dst_rot = _bone_rot(target_armature, bone)
         if dst_rot is None:
             missing.append((obj.name, bone))
@@ -839,7 +975,7 @@ def relocalise_node_frames(collection, target_armature, dry_run=False):
                     c.target = target_armature
 
     return {'relocalised': relocalised, 'unchanged': unchanged,
-            'missing': missing, 'no_source': no_source}
+            'missing': missing, 'no_source': no_source, 'same_rig': same_rig}
 
 
 def collider_attach_bones(collection):

@@ -21,6 +21,7 @@ from .chain_convert import (apply_target_game_settings, duplicate_chain_collecti
                             ported_chain_collection_name, relocalise_node_frames,
                             remap_collider_attachments)
 from .i18n import T
+from . import poll_msg
 from .mesh_port_ops import collection_armatures, is_mesh_collection, mesh_collections
 from .port_consent import gate
 
@@ -38,9 +39,32 @@ from .port_consent import gate
 #: ``.chain2``, so every MHRS pair crosses the container boundary in one direction
 #: or the other and leans on ``translate_group_attr``.
 #:
+#: ONI joined on 2026-10-14.  Same ``.chain2`` container as MHWilds, so nothing is
+#: translated -- it differs in header values and file version (17), and only the
+#: RidogFork of RE-Chain-Editor can write that version; see _exporter_writes.
+#:
 #: The mapping layer already handles all of them (`build_cross_game_map` composes any
 #: pair); this list is only about which ones have been *validated end to end*.
-PORTABLE_GAMES = ("MHWS", "RE4", "RE9", "MHRS")
+PORTABLE_GAMES = ("MHWS", "RE4", "RE9", "MHRS", "ONI")
+
+
+def _exporter_writes(idname, version):
+    """Whether the enabled chain editor's export dialog offers *version*.
+
+    The version is a ``filename_ext`` enum item (``".17"``), so it can be read off
+    the operator's RNA without running it.  None when the operator is missing or
+    does not expose the enum -- unknown, which is not reported as a problem.
+    """
+    category, _, name = idname.partition(".")
+    try:
+        if name not in dir(getattr(bpy.ops, category)):
+            return None
+        prop = getattr(getattr(bpy.ops, category), name).get_rna_type().properties.get("filename_ext")
+        if prop is None or prop.type != 'ENUM':
+            return None
+        return f".{version}" in {item.identifier for item in prop.enum_items}
+    except Exception:
+        return None
 
 #: EnumProperty item callbacks must keep a persistent reference to what they return.
 #: Blender's C side holds the strings, and a list built inside the callback is freed
@@ -161,6 +185,27 @@ def _collection_game_code(collection, prefer_game=None):
 
 
 @gate
+def _rename_for_container(col, target_game):
+    """Give an in-place port's collection the target container's extension.
+
+    A port across containers (MHWilds .chain2 -> RE4R / MHRS .chain) rewrites the
+    content to the other format, but in place the collection kept its ".chain2"
+    name -- and RE Chain Editor's file type follows the name: the first click
+    inside it switched the panels back to chain2's flag vocabulary over .chain
+    data.  The copy path already names its result for the target
+    (ported_chain_collection_name); this does the same for the original, keeping
+    its stem, and renames the header to match as the copy path does.
+    """
+    from .chain_convert import CHAIN_EXT_BY_GAME, chain_file_type_for, chain_stem
+    ext = CHAIN_EXT_BY_GAME.get(target_game)
+    if not ext or chain_file_type_for(col.name) == ext.lstrip("."):
+        return
+    col.name = chain_stem(col.name) + ext
+    for obj in col.all_objects:
+        if obj.get("TYPE") == "RE_CHAIN_HEADER":
+            obj.name = f"CHAIN_HEADER {col.name}"
+
+
 class MODDER_OT_ConvertChainCrossGame(bpy.types.Operator):
     bl_idname = "modder.convert_chain_cross_game"
     bl_label = "Port Chain to Another Game"
@@ -182,7 +227,7 @@ class MODDER_OT_ConvertChainCrossGame(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return bool(_chain_collections())
+        return poll_msg.require(cls, _chain_collections(), "core.poll.need_chain_collection")
 
     def _prefill(self, context):
         """Default source_collection off the active object, and
@@ -358,6 +403,8 @@ class MODDER_OT_ConvertChainCrossGame(bpy.types.Operator):
         if not self.replace_original:
             col, _mapping = duplicate_chain_collection(
                 col, ported_chain_collection_name(col.name, self.target_game))
+        else:
+            _rename_for_container(col, self.target_game)
 
         rep = remap_collider_attachments(col, cross_map, target_armature=arm)
 
@@ -417,6 +464,14 @@ class MODDER_OT_ConvertChainCrossGame(bpy.types.Operator):
         if frames['relocalised']:
             self.report({'INFO'}, T("core.chain_convert_ops.frames_relocalised").format(
                 n=frames['relocalised'], kept=frames['unchanged']))
+        from .mesh_port_ops import FAMILY_A
+        crossing = (self.source_game in FAMILY_A) != (self.target_game in FAMILY_A)
+        if crossing and frames.get('same_rig'):
+            # The angle limits of these nodes kept the source convention: their
+            # constraints already named the (converted) target rig, so there was
+            # no "before" orientation left to measure.
+            self.report({'WARNING'}, T("core.chain_convert_ops.frames_same_rig").format(
+                n=frames['same_rig']))
         if frames['missing'] or frames['no_source']:
             self.report({'WARNING'}, T("core.chain_convert_ops.frames_skipped").format(
                 n=len(frames['missing']) + len(frames['no_source'])))
@@ -436,10 +491,16 @@ class MODDER_OT_ConvertChainCrossGame(bpy.types.Operator):
         if applied['attr_dropped']:
             self.report({'WARNING'}, T("core.chain_convert_ops.attr_dropped").format(
                 names=", ".join(applied['attr_dropped'])))
+        if applied.get('header_set'):
+            self.report({'INFO'}, T("core.chain_convert_ops.header_set").format(
+                n=applied['header_set'], game=self.target_game))
         # The container is chosen by which operator the user runs, and nothing in
         # the scene decides it -- so saying which one is part of the result.
         self.report({'INFO'}, T("core.chain_convert_ops.export_with").format(
             op=idname, version=version))
+        if _exporter_writes(idname, version) is False:
+            self.report({'WARNING'}, T("core.chain_convert_ops.version_unsupported").format(
+                version=version, game=self.target_game))
         return {'FINISHED'}
 
 

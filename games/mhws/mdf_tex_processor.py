@@ -1,5 +1,8 @@
 import bpy
 
+from ...core.slot_defaults import SlotNulls
+from ...core.placeholder_tex import PLACEHOLDER_SLOT_TYPES
+from ...core.mdf_tex_processor_base import fx_feature_channels
 from ...core.mdf_tex_processor_base import (
     BASE_SLOT_CHANNEL_MAPS, BASE_NULL_TEX_BY_TYPE, BASE_TEXTURE_TYPE_ABBREV,
     BASE_COMMON_SLOT_TYPES,
@@ -19,12 +22,94 @@ from ...core.color_grade import color_grade_items, DEFAULT_MODE_INDEX
 
 MHWS_TEX_VERSION    = 241106027
 COMMON_SLOT_TYPES   = BASE_COMMON_SLOT_TYPES
-NULL_TEX_BY_TYPE    = BASE_NULL_TEX_BY_TYPE
+# MHWS-only paths: MasterMaterial/ here is MHWS's own (RE4 keeps its copy under
+# _Chainsaw/, RE9 renamed it MaterialShader/), so these cannot be shared.
+NULL_TEX_BY_TYPE    = {
+    **BASE_NULL_TEX_BY_TYPE,
+    'MP_noise':              'MasterMaterial/Textures/MP_noise_MSK4.tex',
+    'Wind_Effect_VolumeMap': 'RE_ENGINE_LIBRARY/VFX_Library/Texture/TEX_Vectorfield/tex_capcom_vectorfield_0003_MSK4.tex',
+    'FxMap':                 'MasterMaterial/Textures/NullBlack_Alpha_MSK4.tex',
+    'noisemap':              'MasterMaterial/Textures/bluenoise_msk1.tex',
+    'PanoramaMap':           'MasterMaterial/Textures/kirakira_PAN_ALB.tex',
+    'VectorEmitMap':         'MasterMaterial/Textures/eye_VectorEmit_MSK3.tex',
+    'VFX_Texture2D':         'MasterMaterial/Textures/VFX_Uber/VFX_Uber_MSK4.tex',
+    'VFX_Texture3D':         'MasterMaterial/Textures/VFX_Uber/VFX_Uber3D_MSK4.tex',
+    'Ripple_1Dtex':          'MasterMaterial/Textures/hagitori_ripple_ALB.tex',
+    'Ripple_Texture3D':      'MasterMaterial/Textures/Noise3D_MSK3.tex',
+    # A real noise texture, not a null: 98% of vanilla bindings (the survey).
+    'ColorLayer_DetailMaskMap': 'MasterMaterial/Textures/ColorLayer_DetailNoise_01_ALB.tex',
+}
 TEXTURE_TYPE_ABBREV = BASE_TEXTURE_TYPE_ABBREV
 
 # ── Null checker + collection update callback ──────────────────────────────────
 
-_is_null_mhws             = make_null_checker(NULL_TEX_BY_TYPE)
+# Mask slots with per-channel inputs (core.mdf_tex_processor_base.FEATURE_CHANNELS).
+# Channel meanings: the community MHWS texture guide (caimogu.cc/post/1921753);
+# XM_MSK4 binds to FxMap too (102/102 vanilla bindings), so FxMap.A is XM's fuzz
+# mask. Unset values are each slot's vanilla null, decoded 2026-10-12:
+# NullBlack_Alpha_MSK4 = (0,0,0,0), NullNormal = (0.5,0.5,1,0). Measured on 512
+# vanilla masks, nothing else is safe: FX.G is 0 in a third of them, 1 in
+# another third, and BC1-encoded masks report A = 1 only because BC1 has no alpha.
+_K = "mhws.feature."
+MHWS_FEATURE_CHANNELS = {
+    'FxMap': fx_feature_channels((0.0, 0.0, 0.0, 0.0)),   # NullBlack_Alpha_MSK4
+    'ColorLayer_MaskMap': {                      # needs the _UseSC material suffix
+        'R': ('input', _K + "color_area1", 0.0),
+        'G': ('input', _K + "color_area2", 0.0),
+        'B': ('input', _K + "color_area3", 0.0),
+        'A': ('fixed', 0.0, "core.feature.unused"),
+    },
+    'DetailMaskMap': {                           # where Detail_ALBD_x / Detail_NRRH_x apply
+        'R': ('input', _K + "detail_r", 0.0),
+        'G': ('input', _K + "detail_g", 0.0),
+        'B': ('input', _K + "detail_b", 0.0),
+        'A': ('input', _K + "detail_a", 0.0),
+    },
+    'FurFlowMap': {                              # FM_MSK4
+        'R': ('input', _K + "fur_dir1",     0.5),    # 0-180 deg -> 0-1, layer 1
+        'G': ('input', _K + "fur_dir2",     0.5),    # layer 2, usually the visible one
+        'B': ('input', _K + "fur_presence", 1.0),
+        'A': ('fixed', 0.0, "core.feature.unused"),
+    },
+    # Layer-3 sample review, 2026-10-13. HSS follows its name's order; null
+    # NullWhite.
+    'Hair_Height_SpecMask_Shift_Map': {          # HSS_MSK3
+        'R': ('input', _K + "hair_height",    1.0),
+        'G': ('input', _K + "hair_spec_mask", 1.0),
+        'B': ('input', _K + "hair_shift",     1.0),
+        'A': ('fixed', 1.0, "core.feature.unused"),
+    },
+    # A 2D unit vector in RG: B is 0.5 (z = 0) in all 5 samples, and RG alone
+    # already has length 0.98-1.00. Null null_fur_up_MSK3 = (0.5, 1, 0.5),
+    # i.e. "up" -- decoded from its BC1 block.
+    'HairFlowMap': {                             # HF_MSK3
+        'R': ('vec2', _K + "hair_flow", (0.5, 1.0)),
+        'G': ('vec2_y', 'R'),
+        'B': ('fixed', 0.5, "core.feature.unused"),
+        'A': ('fixed', 1.0, "core.feature.unused"),
+    },
+    # One channel (BC4 in vanilla). The null is a real gradient
+    # (Gradation_MSK1), not a constant, so R has no neutral: unset, the slot
+    # keeps that null. G/B/A are what BC4 samples as.
+    'Fade_AlphaMap': {                           # FA_MSK1
+        'R': ('input', _K + "fade_alpha", None),
+        'G': ('fixed', 0.0, "core.feature.unused"),
+        'B': ('fixed', 0.0, "core.feature.unused"),
+        'A': ('fixed', 1.0, "core.feature.unused"),
+    },
+    # Only R carries data in the samples; the rest at NullWhite's value.
+    'Top_MaskMap': {                             # TMM_MSK4
+        'R': ('input', _K + "top_mask", 1.0),
+        'G': ('fixed', 1.0, "core.feature.unused"),
+        'B': ('fixed', 1.0, "core.feature.unused"),
+        'A': ('fixed', 1.0, "core.feature.unused"),
+    },
+}
+
+# Vanilla-measured defaults where assets/mhws/vanilla_slot_defaults.json exists,
+# the hand table above otherwise -- see core/slot_defaults.py.
+SLOT_NULLS = SlotNulls.for_game("mhws", NULL_TEX_BY_TYPE)
+_is_null_mhws = SLOT_NULLS.is_null
 _on_mhws_collection_update = make_collection_update_cb(_is_null_mhws)
 
 
@@ -107,6 +192,9 @@ class MHWS_OT_MdfTexProcess(MdfTexProcessBase):
     _settings_attr    = "mdf_tex_processor"
     _natives_root_key = "mhws_natives_root"
     _null_tex_by_type = NULL_TEX_BY_TYPE
+    _slot_nulls       = SLOT_NULLS
+    _feature_channels = MHWS_FEATURE_CHANNELS
+    _placeholder_slots = PLACEHOLDER_SLOT_TYPES
     _channel_maps     = BASE_SLOT_CHANNEL_MAPS
     _tex_version      = MHWS_TEX_VERSION
     _abbrev_map       = TEXTURE_TYPE_ABBREV

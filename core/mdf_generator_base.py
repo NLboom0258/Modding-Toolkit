@@ -17,8 +17,13 @@ import re
 import tempfile
 import shutil
 import time
+import types
 
-from .i18n import T
+from .i18n import T, get_lang
+from .slot_defaults import SlotNulls
+from .gen_slot_plan import plan_slots
+from .gen_pipeline import SlotWriter, execute_plan
+from .null_pixels import null_pixel
 from .mdf_tex_processor_base import (
     BASE_SLOT_CHANNEL_MAPS, BASE_NULL_TEX_BY_TYPE, BASE_TEXTURE_TYPE_ABBREV,
     SRGB_SLOT_TYPES, PBR_DEFAULTS, PBR_TYPES, PBR_CHANNEL_SELECTABLE, _CH,
@@ -235,6 +240,30 @@ def _direct_image_behind(link):
     return None
 
 
+#: PBR channels whose data is colour.  Their DIRECT sources are image files,
+#: i.e. sRGB-encoded bytes, and every later step (composition, the measured-null
+#: comparison, the TGA write, the _SRGB-tagged DDS) treats channel data as such.
+_COLOR_PBR_TYPES = ('color', 'emissive')
+
+
+def _encode_linear_color(rgba):
+    """A Blender colour value (scene-linear) as the sRGB-encoded value an image
+    file would hold for it; alpha untouched.
+
+    Colour sockets and float-buffer bakes hold *linear* values.  Written raw into
+    a BC7_UNORM_SRGB slot, the game then decodes them a second time: a picker
+    grey of 0.5 is stored as 0.214 and comes out as 0.037 -- the solid and baked
+    parts of a model rendered much darker than its textured parts.
+    """
+    from .color_grade import linear_to_srgb
+    import numpy as np
+    vals = [float(c) for c in list(rgba)[:4]]
+    while len(vals) < 4:
+        vals.append(1.0)
+    rgb = linear_to_srgb(np.array(vals[:3], dtype=np.float32))
+    return (float(rgb[0]), float(rgb[1]), float(rgb[2]), vals[3])
+
+
 def _analyze_principled_input(principled_node, input_name, mat_name=None, pbr_type=None):
     """
     Returns ('DIRECT', filepath, source_channel) | ('SOLID', value) | ('BAKE', None).
@@ -268,6 +297,8 @@ def _analyze_principled_input(principled_node, input_name, mat_name=None, pbr_ty
             # Return that flat-normal constant so packed textures (NRR, RMT…) are
             # correct.  Matches the fallback already used for the Normal Map node path.
             return ('SOLID', (0.5, 0.5, 1.0, 1.0))
+        if pbr_type in _COLOR_PBR_TYPES and socket.type == 'RGBA':
+            return ('SOLID', _encode_linear_color(socket.default_value))
         return ('SOLID', socket.default_value)
 
     src = socket.links[0].from_node
@@ -458,6 +489,29 @@ def strategy_label(strategy):
     return {'DIRECT': 'Direct', 'SOLID': 'Solid', 'BAKE': 'Bake'}.get(strategy, '?')
 
 
+def strategy_source_text(strat_val):
+    """Where a channel comes from, for the dialog: the file name (plus the
+    channel read when it is not the colour, and "1-x" for an inverted read),
+    the constant, or "" for a bake -- the dialog says "bake" in the user's
+    language itself."""
+    if not strat_val:
+        return ""
+    kind = strat_val[0]
+    if kind == 'DIRECT':
+        text = os.path.basename(str(strat_val[1] or ""))
+        if len(strat_val) > 2 and strat_val[2] not in (None, 'R'):
+            text += f" · {strat_val[2]}"
+        if len(strat_val) > 3 and strat_val[3]:
+            text += " · 1-x"
+        return text
+    if kind == 'SOLID':
+        v = strat_val[1]
+        if isinstance(v, (int, float)):
+            return f"{float(v):.2f}"
+        return ", ".join(f"{float(c):.2f}" for c in list(v)[:3])
+    return ""
+
+
 def _slot_side_strategies(material):
     """Per-PBR-type strategy read from the packed shader's game-slot group,
     the SLOT counterpart to analyze_material_strategies()'s PBR-panel reading.
@@ -540,20 +594,38 @@ def shader_source_update(self, context):
 
 
 def _emissive_strength_is_zero(material):
-    """True if the active shader has no meaningful emission strength.
+    """True if the shader that actually renders has no emission strength.
 
-    For Principled BSDF: checks the Emission Strength socket.
+    For Principled BSDF and the packed shader: checks its Emission Strength socket.
     For Emission / MMDShaderDev shaders: always False (they are inherently emissive).
+
+    The shader is resolved the same way analyze_material_strategies resolves it --
+    the one wired to the Material Output, then the packed group, then any
+    Principled.  This used to read the *first* Principled in the tree, which for
+    a material converted to the packed shader is the old, disconnected one the
+    conversion keeps (Emission Strength 0 by default in 4.x), and for a packed
+    material made from the Add menu does not exist at all: either way the
+    emissive slots were planned NULL ahead of the texture plugged into the group.
     """
-    shader_type = detect_shader_type(material)
+    node, shader_type = _find_connected_shader(material)
     if shader_type in (SHADER_EMISSION, SHADER_MMD_DEV):
         return False
-    principled = _find_principled_bsdf(material)
-    if principled is None:
+    if shader_type == SHADER_UNKNOWN:
+        node = find_packed_shader_node(material)
+        if node is not None:
+            shader_type = SHADER_MTK_PACK
+        else:
+            node = _find_principled_bsdf(material)
+            shader_type = SHADER_PRINCIPLED if node is not None else SHADER_UNKNOWN
+    if shader_type == SHADER_MTK_PACK and node is None:
+        node = find_packed_shader_node(material)
+    if node is None or shader_type not in (SHADER_PRINCIPLED, SHADER_MTK_PACK):
         return True
-    sock = principled.inputs.get('Emission Strength')
+    sock = node.inputs.get('Emission Strength')
     if sock is None:
-        return True
+        # A packed spec without the socket gives no evidence either way; do not
+        # throw away an emissive texture on a guess.
+        return shader_type == SHADER_PRINCIPLED
     return not sock.is_linked and float(sock.default_value) == 0.0
 
 
@@ -653,6 +725,267 @@ def _read_albedo_blend_map(preset_path):
     except Exception:
         result = False
     return result
+
+
+_PRESET_SLOT_INFO_CACHE: dict = {}
+
+
+def _read_preset_slot_info(preset_path, is_mrl3):
+    """(slot types, master material, {slot: preset binding}) of a preset."""
+    try:
+        with open(preset_path, encoding='utf-8') as f:
+            data = json.load(f)
+    except Exception:
+        return ([], "", {})
+    if is_mrl3:
+        return ([e.get("name", "") for e in data.get("Map List", [])], "", {})
+    binds = data.get("Texture Bindings", [])
+    return ([b["Texture Type"] for b in binds],
+            data.get("Material Header", {}).get("Master Material Path", ""),
+            {b["Texture Type"]: b.get("Texture Path", "") for b in binds})
+
+
+def entry_preset_path(mat_entry):
+    """The preset an entry will generate from -- a locked prefab's override
+    first, as _process_one_material reads it -- or "" when none is set."""
+    if getattr(mat_entry, 'preset_locked', False) and getattr(mat_entry, 'preset_path_override', ''):
+        path = mat_entry.preset_path_override
+    else:
+        path = mat_entry.material_preset
+    return path if path and path != 'NONE' and os.path.isfile(path) else ""
+
+
+# ── One material, both generators: prepare -> bake -> plan -> write ────────────
+#
+# The RE generator (MdfGenProcessBase below) and MHWI's (games/mhwi/
+# mrl3_generator.py) differ only in how they find the preset, name the
+# textures and fill in the material; everything between is here, and the
+# dialog's "slot results" (preview_plan) runs the same analyse + plan.
+
+def analyse_entry(mat, mat_entry, settings, *, log_tag, adopt=True):
+    """What one entry will be generated from, before any bake.
+
+    adopt: take over the packed shader's AO into the entry (the export does;
+    the dialog only looks, and must not write to the entry while drawing).
+    """
+    strategies = packed_shader_strategies(mat, getattr(mat_entry, 'shader_source', 'PBR'))
+
+    # A shader with AO plugged in is the user already saying "use this AO",
+    # so honour it without making them tick the box again. Explicit settings
+    # win: only an unset ao_image is filled in.
+    use_ao   = getattr(mat_entry, 'use_ao', False)
+    ao_image = getattr(mat_entry, 'ao_image', '')
+    shader_ao = find_shader_socket_image(mat, 'AO')
+    if shader_ao and not ao_image:
+        if not adopt:
+            use_ao, ao_image = True, shader_ao
+        else:
+            try:
+                mat_entry.use_ao  = True
+                mat_entry.ao_image = shader_ao
+                strength = find_shader_socket_value(mat, 'AO Strength', 1.0)
+                if hasattr(mat_entry, 'ao_strength'):
+                    mat_entry.ao_strength = strength
+                print(f"[{log_tag}]   AO from packed shader: "
+                      f"{os.path.basename(shader_ao)} (strength {strength:.2f})")
+            except Exception as e:
+                print(f"[{log_tag}]   could not adopt the shader's AO: {e}")
+            use_ao   = getattr(mat_entry, 'use_ao', False)
+            ao_image = getattr(mat_entry, 'ao_image', '')
+
+    # User-provided AO override (Blender has no built-in AO node). Channel and
+    # invert are explicit UI choices here rather than node-analysed, since
+    # there is no node chain to analyse for a plain file path -- mirrors the
+    # channel/invert pair the processor's PBR panel offers for its AO input.
+    ao_path = None
+    if use_ao and ao_image:
+        p = bpy.path.abspath(ao_image)
+        if p and os.path.isfile(p):
+            ao_path = p
+
+    # A slot socket and the PBR inputs it covers can both be filled, and the
+    # material's own shader_source is a hard switch between them -- not a
+    # tie-break that lets whichever side has data win regardless of the pick,
+    # which used to silently ignore the choice whenever only one side was
+    # actually filled in. Per material, not global: one export can mix
+    # materials that want the PBR panel with materials that want the game slots.
+    prefer_slots = getattr(mat_entry, 'shader_source', 'PBR') == 'SLOT'
+    if adopt:
+        supplies = find_shader_slot_supplies(mat)
+        pbr_given = shader_pbr_contributions(mat)
+        contested = {slot for slot, q in supplies.items() if any(x in pbr_given for x in q)}
+        if contested:
+            print(f"[{log_tag}]   both panels filled for {', '.join(sorted(contested))} "
+                  f"-> using the {'game slots' if prefer_slots else 'PBR inputs'}")
+
+    return types.SimpleNamespace(
+        strategies=strategies, ao_path=ao_path,
+        ao_ch=getattr(mat_entry, 'ao_ch', 'R'), ao_inv=getattr(mat_entry, 'ao_inv', False),
+        pbr_channels={}, pbr_inv={}, prefer_slots=prefer_slots,
+        # Global toggles override every material's own checkbox -- "disable"
+        # forces mipmaps off, "use toon" forces it on.
+        use_toon=(getattr(mat_entry, 'use_toon', False)
+                  or getattr(settings, 'global_use_toon', False)),
+        mipmaps=(mat_entry.generate_mipmaps
+                 and not getattr(settings, 'global_disable_mipmaps', False)),
+        # 色调处理是全局档，没有逐材质开关 —— 它补的是整套素材的口径差，
+        # 一张一张设只会让同一个模型的各部件对不上。
+        grade_mode=getattr(settings, 'global_color_grade', 'NONE'),
+        skip_textures=getattr(mat_entry, 'skip_textures', False),
+        emi_zero=_emissive_strength_is_zero(mat),
+    )
+
+
+def finish_inputs(job, pbr_paths):
+    """After the bake: the user's AO over the analysed one, then the per-input
+    channel and invert overrides read off the DIRECT strategies."""
+    if job.ao_path:
+        job.strategies['ao'] = ('DIRECT', job.ao_path, job.ao_ch)
+        pbr_paths['ao'] = job.ao_path
+        job.pbr_inv['ao'] = job.ao_inv
+    # Where an Image Texture's Alpha output (not Color) was connected, the
+    # data is read from A instead of R; a 1-x connection (gloss used as
+    # roughness) becomes an invert flag the composition applies, no bake.
+    for pbr_type, sv in job.strategies.items():
+        if sv[0] != 'DIRECT':
+            continue
+        if len(sv) > 2 and sv[2] != 'R':
+            job.pbr_channels[pbr_type] = sv[2]
+        if len(sv) > 3 and sv[3]:
+            job.pbr_inv[pbr_type] = True
+    return pbr_paths
+
+
+def bake_entry(runner, context, mat, mat_entry, job, mesh_objects, temp_dir, bake_size,
+               log_tag):
+    """Resolve every PBR input to a file (baking where needed); the inputs no
+    bake could produce are reported on ``runner._unresolved_channels``."""
+    mat_name = mat_entry.blender_material
+    mesh_obj = mesh_objects[0] if mesh_objects else None
+    if mesh_objects:
+        print(f"[{log_tag}]   '{mat_name}' → {len(mesh_objects)} 个网格: "
+              f"{', '.join(o.name for o in mesh_objects)}")
+    # Per-channel user size overrides (0 = use the global bake size). MHWI's
+    # export ignored these until 2026-10-13 although its dialog offered them.
+    sizes = {}
+    for pt in _PBR_CHANNELS:
+        override = getattr(mat_entry, f"bake_size_{pt}", 0)
+        if override > 0:
+            sizes[pt] = override
+    pbr_paths = _get_pbr_paths(
+        mat, job.strategies, temp_dir, bake_size, context, mesh_obj,
+        channel_sizes=sizes or None, mesh_objects=mesh_objects)
+
+    # 解析不出源的通道要报出来。以前这里只有一句 print：策略是 BAKE 而烘培没跑成
+    # （没有网格、或者节点链看不懂），路径就是 None，合成拿不到东西，最后落成
+    # null_xxx —— 用户看到的是"接了贴图却生成了空图"，而界面上一个字都没有。
+    no_source = sorted(pt for pt, sv in job.strategies.items()
+                       if sv and sv[0] == 'BAKE' and not pbr_paths.get(pt))
+    if no_source:
+        runner._unresolved_channels.append((mat_name, no_source))
+        print(f"[{log_tag}]   !! no source for {mat_name}: "
+              f"{', '.join(no_source)} -> these fall back to a null texture")
+    return finish_inputs(job, pbr_paths)
+
+
+def _plan_for(job, mat, slot_types, channel_maps, null_for, *,
+              placeholder_slots, keep_unlisted):
+    slot_direct = find_slot_sources(mat, slot_types)
+    emissive_slots = {st for st in slot_types if _is_emissive_slot(st)}
+    plan = plan_slots(
+        slot_types, channel_maps,
+        emissive_slots=emissive_slots, use_toon=job.use_toon, emi_zero=job.emi_zero,
+        slot_direct=slot_direct, prefer_direct=job.prefer_slots,
+        skip_textures=job.skip_textures, null_for=null_for,
+        downgrade=lambda st: _try_downgrade_slot(
+            st, job.strategies, job.pbr_channels, channel_maps),
+        null_rgba=lambda st: null_pixel(null_for(st)),
+        placeholder_slots=placeholder_slots, keep_unlisted=keep_unlisted)
+    return plan, slot_direct, emissive_slots
+
+
+def run_generator_slots(job, mat, slot_types, pbr_paths, writer, temp_dir, tex_name, *,
+                        channel_maps, null_for, placeholder_slots=frozenset(),
+                        keep_unlisted=lambda st: False, placeholder=None,
+                        compose_extra=None, mat_entry=None, settings=None):
+    """Plan and write one material's slots: ({slot: binding}, {slot: source file})."""
+    plan, slot_direct, emissive_slots = _plan_for(
+        job, mat, slot_types, channel_maps, null_for,
+        placeholder_slots=placeholder_slots, keep_unlisted=keep_unlisted)
+    albedo_slots = {st for st in slot_types if _is_albedo_slot(st, channel_maps)}
+    # With no AO slot in this game's channel maps, an AO map can only survive
+    # by being multiplied into the albedo. Where a slot does store it, that
+    # path is used instead -- doing both would darken twice.
+    bake_ao = bool(pbr_paths.get('ao')) and not channel_maps_consume_ao(channel_maps)
+
+    flip_g = getattr(settings, 'flip_normal_g', False)
+    ao_strength = getattr(mat_entry, 'ao_strength', 1.0)
+
+    def compose(st):
+        return _compose_channels(
+            st, pbr_paths, job.pbr_channels, temp_dir, tex_name,
+            pbr_inv=job.pbr_inv, channel_maps=channel_maps,
+            normal_flip_g=flip_g,
+            bake_ao_into_color=bake_ao,
+            ao_strength=ao_strength,
+            **(compose_extra or {}))
+
+    # Everything compose() reads besides the strategies, for the shared cache key
+    # (see gen_pipeline.composition_cache_key).
+    ao_key = None
+    if bake_ao:
+        ao_src = pbr_paths.get('ao')
+        ao_key = (os.path.normcase(os.path.normpath(ao_src)) if ao_src else None,
+                  bool(job.pbr_inv.get('ao')), round(float(ao_strength), 6))
+    cache_inputs = {
+        'paths': pbr_paths, 'inv': job.pbr_inv, 'ao': ao_key,
+        'flags': (bool(flip_g), tuple(sorted((compose_extra or {}).items()))),
+    }
+
+    return execute_plan(
+        plan, slot_types, writer, channel_maps=channel_maps, strategies=job.strategies,
+        pbr_channels=job.pbr_channels, slot_direct=slot_direct, compose=compose,
+        solid=lambda rgba, suffix: _generate_solid_texture_path(
+            rgba, temp_dir, tex_name + suffix, size=256),
+        stage=lambda src, st: stage_source_file(src, temp_dir, tex_name, st),
+        null_for=null_for, source_id=_make_source_id,
+        placeholder=placeholder, placeholder_fallback=PLACEHOLDER_FALLBACK,
+        emissive_slots=emissive_slots, albedo_slots=albedo_slots, use_toon=job.use_toon,
+        cache_inputs=cache_inputs)
+
+
+def preview_plan(mat_entry, settings, channel_maps, null_for, *, is_mrl3=False,
+                 nulls=None, placeholder_slots=frozenset()):
+    """[(slot_type, SlotPlan)] for the generator dialog's "slot results": the
+    export's own analyse + plan, minus the bakes -- a bake that yields nothing
+    still turns COMPOSE into a null at write time, which is what the "no
+    source" warning is for.
+
+    ``null_for(slot, mmtr, preset_binding)``; ``nulls`` (a SlotNulls) enables
+    the RE loop's keep-vanilla rule for slots without a recipe.
+    """
+    mat = bpy.data.materials.get(mat_entry.blender_material)
+    preset_path = entry_preset_path(mat_entry)
+    if mat is None or not preset_path:
+        return []
+    slot_types, mmtr, preset_paths = _cached_by_stamp(
+        _PRESET_SLOT_INFO_CACHE, preset_path,
+        lambda p: _read_preset_slot_info(p, is_mrl3))
+    job = analyse_entry(mat, mat_entry, settings, log_tag="", adopt=False)
+    finish_inputs(job, {})
+
+    def _keep_unlisted(st):
+        if nulls is None:
+            return False
+        cur = preset_paths.get(st, "")
+        return st not in nulls.hand and (nulls.is_runtime(cur) or nulls.is_vanilla(cur))
+
+    plan, _, _ = _plan_for(
+        job, mat, slot_types, channel_maps,
+        lambda st: null_for(st, mmtr, preset_paths.get(st, "")),
+        placeholder_slots=placeholder_slots,
+        keep_unlisted=_keep_unlisted)
+    return [(st, plan[st]) for st in slot_types]
 
 
 # ── Preset loading ─────────────────────────────────────────────────────────────
@@ -813,25 +1146,15 @@ def invalidate_preset_cache():
     _PRESET_SNOW_MAP_CACHE.clear()
 
 
-#: Slot types with no PBR composition recipe *and* no vanilla null texture at
-#: all (see core.mdf_tex_processor_base.BASE_SLOT_CHANNEL_MAPS /
-#: BASE_NULL_TEX_BY_TYPE -- SkinMap/BlendNormalMap only, so far). Left
-#: unoverridden by the user, _resolve_placeholder_slot below writes the
-#: bundled placeholder DDS through the same per-material make_disk_path/
-#: make_mdf_path convention every other slot uses -- *not* the preset's own
-#: embedded literal Texture Path (MK_MODS/Eku/Public/...), which belongs to
-#: whichever mod that preset was originally authored for, not this export.
-PLACEHOLDER_SLOT_TYPES = {'SkinMap', 'BlendNormalMap'}
-
-
-def _prefab_placeholder_dds(slot_type):
-    """Bundled placeholder DDS for a slot type in PLACEHOLDER_SLOT_TYPES, or
-    None if there is none (any other slot type, or the asset is missing)."""
-    if slot_type not in PLACEHOLDER_SLOT_TYPES:
-        return None
-    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    path = os.path.join(root, "assets", "mdf_presets", "mhws", f"{slot_type}.dds")
-    return path if os.path.isfile(path) else None
+# Slots written from a bundled placeholder DDS rather than a null -- SkinMap
+# only; why, and why not BlendNormalMap, is in core/placeholder_tex.py. Left
+# unoverridden by the user, _resolve_placeholder_slot below writes it through
+# the same per-material make_disk_path/make_mdf_path convention every other
+# slot uses -- *not* the preset's own embedded literal Texture Path
+# (MK_MODS/Eku/Public/...), which belongs to whichever mod that preset was
+# originally authored for, not this export.
+from .placeholder_tex import (                       # noqa: E402 -- re-exported for the port
+    PLACEHOLDER_SLOT_TYPES, PLACEHOLDER_FALLBACK, placeholder_dds as _prefab_placeholder_dds)
 
 
 def _resolve_placeholder_slot(slot_type, tex_name, natives_root, base_path, temp_dir,
@@ -1070,11 +1393,6 @@ def _try_downgrade_slot(slot_type, strategies, pbr_channels, channel_maps):
     return tuple(rgba)
 
 
-# Pre-built "all PBR-default" strategy dict, used to test whether a downgraded
-# slot RGBA is indistinguishable from the game's null texture.
-_DEFAULT_STRATEGIES = {pt: ('SOLID', tuple(vals)) for pt, vals in PBR_DEFAULTS.items()}
-
-
 # ── Cycles baking ──────────────────────────────────────────────────────────────
 
 def _bake_pbr_channel(material, pbr_type, mesh_obj, size, tmp_dir, context,
@@ -1116,6 +1434,9 @@ def _bake_pbr_channel(material, pbr_type, mesh_obj, size, tmp_dir, context,
 
     tmp_remove  = []   # new links to remove afterward
     tmp_restore = []   # (kind, ...) tuples describing what to undo
+    guarded     = []   # (other material, its previous active node, guard node)
+    guard_name  = "__gen_bake_guard"
+    prev_active, prev_selected = None, None
 
     orig_engine = context.scene.render.engine
     # print(f"[MDF Gen]   烘培 {material.name}/{pbr_type}: 原始引擎={orig_engine}", flush=True)
@@ -1165,16 +1486,36 @@ def _bake_pbr_channel(material, pbr_type, mesh_obj, size, tmp_dir, context,
         bake_type   = 'EMIT' if principled is None else 'DIFFUSE'
         bake_kwargs = {}
 
+        def _neutralise(sock_name, value):
+            """Hold one Principled input at *value* for the bake, unlinking it if
+            needed; the finally block below puts link and value back."""
+            sock = principled.inputs.get(sock_name)
+            if sock is None:
+                return
+            if sock.is_linked:
+                tmp_restore.append(('link', sock.links[0].from_socket, sock))
+                tree.links.remove(sock.links[0])
+            orig = sock.default_value
+            tmp_restore.append(('default', sock,
+                                tuple(orig) if hasattr(orig, '__len__') else orig))
+            sock.default_value = value
+
         if principled is not None:
             if pbr_type == 'color':
                 bake_type   = 'DIFFUSE'
                 bake_kwargs = {'pass_filter': {'COLOR'}}
-                # Zero metallic temporarily so it doesn't darken the diffuse bake
-                m_sock = principled.inputs.get('Metallic')
-                if m_sock and not m_sock.is_linked:
-                    orig_val = m_sock.default_value
-                    m_sock.default_value = 0.0
-                    tmp_restore.append(('default', m_sock, orig_val))
+                # Everything that takes energy away from the diffuse colour pass
+                # is held neutral, linked or not.  Measured on 5.1 (base 0.8):
+                # Metallic 1 or Transmission 1 bake pure black, Alpha 0.5 bakes
+                # 167 instead of 231, Coat 1 bakes 223, and even the default
+                # Specular IOR Level 0.5 costs 4 levels (227); with all of them
+                # neutral the bake is exact.  Only the unlinked Metallic used to
+                # be handled, so a metallic texture baked its metal areas black.
+                _neutralise('Metallic', 0.0)
+                _neutralise('Transmission Weight', 0.0)
+                _neutralise('Coat Weight', 0.0)
+                _neutralise('Specular IOR Level', 0.0)
+                _neutralise('Alpha', 1.0)
 
             elif pbr_type == 'normal':
                 bake_type = 'NORMAL'
@@ -1209,9 +1550,19 @@ def _bake_pbr_channel(material, pbr_type, mesh_obj, size, tmp_dir, context,
                         tree.links.remove(e_sock.links[0])
                     lnk = tree.links.new(alpha_from, e_sock)
                     tmp_remove.append(lnk)
+                # EMIT is Emission Color x Emission Strength, and 4.x defaults the
+                # strength to 0: measured, an Alpha of 0.5 baked as 0, so the
+                # material shipped fully transparent.  The Alpha input itself
+                # also has to go to 1, or the emission is weighted by the alpha
+                # it is supposed to be measuring (alpha squared).
+                _neutralise('Emission Strength', 1.0)
+                _neutralise('Alpha', 1.0)
 
             elif pbr_type == 'emissive':
                 bake_type = 'EMIT'
+                # Emission is weighted by Alpha too (measured: 188 -> 137 at
+                # Alpha 0.5); the emissive map should not carry the cutout.
+                _neutralise('Alpha', 1.0)
 
         # Activate all meshes that share this material (or just the single one)
         prev_active   = context.view_layer.objects.active
@@ -1226,18 +1577,36 @@ def _bake_pbr_channel(material, pbr_type, mesh_obj, size, tmp_dir, context,
             mesh_obj.select_set(True)
             context.view_layer.objects.active = mesh_obj
 
+        # Cycles bakes into the active Image Texture node of *every* material on
+        # the selected objects, clearing it first -- so on a multi-material mesh
+        # (still unseparated at this point) the user's own texture in material B,
+        # typically the last node they clicked, was overwritten with material A's
+        # bake: visible in the viewport, and lost for good once the file is saved.
+        # Every other material gets a throwaway target for the duration.
+        guard_img = bpy.data.images.new(guard_name, 8, 8, alpha=False, float_buffer=True)
+        for o in (mesh_objects or [mesh_obj]):
+            for slot in o.material_slots:
+                om = slot.material
+                if (om is None or om == material or not om.use_nodes
+                        or any(g[0] == om for g in guarded)):
+                    continue
+                gnode = om.node_tree.nodes.new('ShaderNodeTexImage')
+                gnode.image = guard_img
+                guarded.append((om, om.node_tree.nodes.active, gnode))
+                om.node_tree.nodes.active = gnode
+
         # print(f"[MDF Gen]   烘培 {material.name}/{pbr_type}: 开始 (type={bake_type}, size={size}, samples={cycles_scene.samples})", flush=True)
         bpy.ops.object.bake(type=bake_type, **bake_kwargs)
 
         from .mdf_tex_processor_base import image_to_array
+        arr = image_to_array(bake_img)
+        if pbr_type in _COLOR_PBR_TYPES:
+            # The bake target is a float buffer, so these are linear values; a
+            # colour channel has to land sRGB-encoded like an image file would.
+            from .color_grade import linear_to_srgb
+            arr[..., :3] = linear_to_srgb(arr[..., :3])
         out_path = _write_exact_rgba(
-            image_to_array(bake_img),
-            os.path.join(tmp_dir, f"_baked_{_slugify(material.name)}_{pbr_type}"))
-
-        # Restore selection
-        for o in prev_selected:
-            o.select_set(True)
-        context.view_layer.objects.active = prev_active
+            arr, os.path.join(tmp_dir, f"_baked_{_slugify(material.name)}_{pbr_type}"))
 
         return out_path
 
@@ -1263,6 +1632,25 @@ def _bake_pbr_channel(material, pbr_type, mesh_obj, size, tmp_dir, context,
             tree.nodes.active = orig_active_node
         except Exception:
             pass
+        # Selection is restored here rather than after the bake: a failed bake
+        # (no UVs, hidden mesh) used to leave the user's selection changed.
+        if prev_selected is not None:
+            for o in context.selected_objects:
+                o.select_set(False)
+            for o in prev_selected:
+                try:
+                    o.select_set(True)
+                except (ReferenceError, RuntimeError):
+                    pass
+            context.view_layer.objects.active = prev_active
+        for om, prev_node, gnode in guarded:
+            try:
+                om.node_tree.nodes.remove(gnode)
+                om.node_tree.nodes.active = prev_node
+            except Exception:
+                pass
+        if guard_name in bpy.data.images:
+            bpy.data.images.remove(bpy.data.images[guard_name])
         if img_name in bpy.data.images:
             bpy.data.images.remove(bpy.data.images[img_name])
         context.scene.render.engine = orig_engine
@@ -1351,29 +1739,37 @@ def _maybe_resize_direct(src_path, target_size, tmp_dir):
     tmp_dir and return its path.  Otherwise return src_path unchanged.
     Uses bpy.data.images so no Pillow dependency is required.
     """
+    img = None
     try:
-        img = bpy.data.images.load(src_path, check_existing=True)
-        native = max(img.size[0], img.size[1])
+        # A private copy, read as data.  check_existing=True handed back the
+        # user's own image: for a 16-bit PNG / TIFF / EXR (a float buffer) its
+        # pixels are linearised by its sRGB colour space and premultiplied, and
+        # were written raw -- the resized texture came out darker than the
+        # source.  Colour space and alpha mode are set before the first .size,
+        # which is what loads the buffer.
+        img = bpy.data.images.load(src_path, check_existing=False)
+        img.colorspace_settings.name = 'Non-Color'
+        img.alpha_mode = 'CHANNEL_PACKED'
+        w, h = img.size
+        native = max(w, h)
         if native <= target_size:
             return src_path
 
         import hashlib
         tag = hashlib.md5(f"{src_path}_{target_size}".encode()).hexdigest()[:8]
-        ext = os.path.splitext(src_path)[1] or '.png'
-        out_path = os.path.join(tmp_dir, f"resized_{tag}{ext}")
+        out_base = os.path.join(tmp_dir, f"resized_{tag}")
 
         from .mdf_tex_processor_base import image_to_array
-        img_copy = img.copy()
-        try:
-            img_copy.scale(target_size, target_size)
-            out_path = _write_exact_rgba(image_to_array(img_copy),
-                                         os.path.splitext(out_path)[0])
-        finally:
-            bpy.data.images.remove(img_copy)
-        return out_path
+        # Keep the aspect ratio: a non-square source used to be squashed square.
+        k = target_size / native
+        img.scale(max(1, round(w * k)), max(1, round(h * k)))
+        return _write_exact_rgba(image_to_array(img), out_base)
     except Exception as e:
         print(f"[MDF Gen] resize failed for {src_path} → {target_size}px: {e}")
         return src_path
+    finally:
+        if img is not None:
+            bpy.data.images.remove(img)
 
 
 # ── Channel size override operator ─────────────────────────────────────────────
@@ -1471,6 +1867,83 @@ class MHW_OT_SetShaderSource(bpy.types.Operator):
         return {'CANCELLED'}
 
 
+
+#: What Copy / Paste carries between generator entries: the user's own choices,
+#: not what Refresh derives. Bake sizes stay behind -- they are per texture.
+_CLIPBOARD_FIELDS = (
+    'material_preset', 'shader_source', 'use_toon', 'generate_mipmaps',
+    'skip_textures', 'use_ao', 'ao_image', 'ao_ch', 'ao_inv', 'ao_strength',
+    'hide_snow_overlay',
+)
+
+
+def _entry_by_name(settings, mat_name):
+    return next((e for e in settings.material_list if e.blender_material == mat_name), None)
+
+
+class MHW_OT_GenCopyMaterial(bpy.types.Operator):
+    bl_idname  = "mhw.gen_copy_material"
+    bl_label   = "Copy Material Settings"
+    bl_options = {'INTERNAL'}
+
+    settings_attr: bpy.props.StringProperty()
+    mat_name:      bpy.props.StringProperty()
+
+    @classmethod
+    def description(cls, context, properties):
+        return T("core.mdf_generator_ui_base.copy_desc")
+
+    def execute(self, context):
+        settings = getattr(context.scene, self.settings_attr, None)
+        entry = _entry_by_name(settings, self.mat_name) if settings else None
+        if entry is None:
+            return {'CANCELLED'}
+        data = {f: getattr(entry, f) for f in _CLIPBOARD_FIELDS if hasattr(entry, f)}
+        # A locked prefab's preset is not one of the dropdown's items, so there
+        # is no preset of its to carry.
+        if getattr(entry, 'preset_locked', False):
+            data.pop('material_preset', None)
+        settings.clipboard_json = json.dumps(data)
+        self.report({'INFO'}, T("core.mdf_tex_processor_base.copied_material").format(name=self.mat_name))
+        return {'FINISHED'}
+
+
+class MHW_OT_GenPasteMaterial(bpy.types.Operator):
+    bl_idname  = "mhw.gen_paste_material"
+    bl_label   = "Paste Material Settings"
+    bl_options = {'INTERNAL', 'UNDO'}
+
+    settings_attr: bpy.props.StringProperty()
+    mat_name:      bpy.props.StringProperty()
+
+    @classmethod
+    def description(cls, context, properties):
+        return T("core.mdf_generator_ui_base.paste_desc")
+
+    def execute(self, context):
+        settings = getattr(context.scene, self.settings_attr, None)
+        entry = _entry_by_name(settings, self.mat_name) if settings else None
+        if entry is None:
+            return {'CANCELLED'}
+        if not settings.clipboard_json:
+            self.report({'WARNING'}, T("core.mdf_tex_processor_base.clipboard_empty"))
+            return {'CANCELLED'}
+        data = json.loads(settings.clipboard_json)
+        for field, value in data.items():
+            if field not in _CLIPBOARD_FIELDS or not hasattr(entry, field):
+                continue
+            # A locked prefab keeps its preset; the PBR/slot choice only exists
+            # on packed-shader materials.
+            if field == 'material_preset' and getattr(entry, 'preset_locked', False):
+                continue
+            if field == 'shader_source' and not getattr(entry, 'uses_packed_shader', False):
+                continue
+            try:
+                setattr(entry, field, value)
+            except Exception:
+                pass             # e.g. a preset the target's dropdown does not list
+        return {'FINISHED'}
+
 def _get_pbr_paths(material, strategies, tmp_dir, bake_size, context, mesh_obj,
                    channel_sizes=None, mesh_objects=None):
     """
@@ -1527,6 +2000,30 @@ def _strip_blender_suffix(name):
     Only strips when the suffix is purely numeric (Blender's pattern).
     """
     return re.sub(r'\.\d+$', '', name)
+
+
+def colliding_tex_names(entries):
+    """``[(name, [blender materials])]`` for the names two or more *entries* share.
+
+    _strip_blender_suffix is deliberate -- a ``Body.001`` is usually an import
+    duplicate of ``Body`` and should land on the same files -- but when the two
+    really are different materials, the later one silently overwrites the
+    earlier one's textures and gets the same MDF material name.  The generator
+    cannot tell the cases apart, so it says so instead of guessing.
+    """
+    groups = {}
+    for e in entries:
+        mat = getattr(e, 'blender_material', '') or ''
+        if mat:
+            groups.setdefault(_slugify(_strip_blender_suffix(mat)), []).append(mat)
+    return [(n, ms) for n, ms in groups.items() if len(ms) > 1]
+
+
+def report_tex_name_collisions(op, entries):
+    clashes = colliding_tex_names(entries)
+    if clashes:
+        op.report({'WARNING'}, T("core.mdf_generator_base.tex_name_collision").format(
+            n=len(clashes), names="; ".join(" / ".join(ms) for _n, ms in clashes[:3])))
 
 
 # ── RE Engine Group_G_Sub_S__Name mesh naming ───────────────────────────────
@@ -1676,24 +2173,41 @@ def bundled_mhwi_preset():
     return path if os.path.isfile(path) else None
 
 
+#: (key, items) -- see load_mhwi_preset_enum_items.
+_mhwi_preset_items_cache = (None, None)
+
+
 def load_mhwi_preset_enum_items():
     """EnumProperty items from MHW Model Editor's MaterialPresets, else the
-    bundled fallback.  'NONE' is only reached when even that is missing."""
-    items = []
+    bundled fallback.  'NONE' is only reached when even that is missing.
+
+    Rescanned on every call like load_preset_enum_items, and for the same reason
+    the unchanged result is handed back as the same list object: Blender keeps
+    the pointers an items= callback returns, and core/stable_enum.py calls this
+    from the enum's get()."""
+    global _mhwi_preset_items_cache
+    paths = []
     preset_dir = get_mhwi_preset_dir()
     if preset_dir:
         try:
             for entry in sorted(os.scandir(preset_dir), key=lambda e: e.name):
                 if entry.is_file() and entry.name.endswith('.json'):
-                    items.append((entry.path, entry.name[:-5], entry.path))
+                    paths.append((entry.path, entry.name[:-5]))
         except Exception:
             pass
-    if items:
-        return items
-    fallback = bundled_mhwi_preset()
-    if fallback:
-        return [(fallback, T("core.mdf_generator_base.mhwi_preset_bundled"), fallback)]
-    return [('NONE', T("core.mdf_generator_base.mhwi_preset_none"), '')]
+    key = (tuple(paths), get_lang())
+    if _mhwi_preset_items_cache[0] == key:
+        return _mhwi_preset_items_cache[1]
+    if paths:
+        items = [(path, name, path) for path, name in paths]
+    else:
+        fallback = bundled_mhwi_preset()
+        if fallback:
+            items = [(fallback, T("core.mdf_generator_base.mhwi_preset_bundled"), fallback)]
+        else:
+            items = [('NONE', T("core.mdf_generator_base.mhwi_preset_none"), '')]
+    _mhwi_preset_items_cache = (key, items)
+    return items
 
 
 def _import_mhwi_create_collection():
@@ -1886,7 +2400,7 @@ def _separate_mesh_by_material(context, mesh_col):
 # Not every game's entry PropertyGroup has every field (e.g. only MHWI has
 # hide_snow_overlay/ao_strength) -- getattr(..., None) below skips the rest.
 _PRESERVED_ENTRY_FIELDS = (
-    'expanded', 'material_preset', 'shader_source', 'use_toon',
+    'expanded', 'slots_expanded', 'material_preset', 'shader_source', 'use_toon',
     'generate_mipmaps', 'skip_textures',
     'use_ao', 'ao_image', 'ao_ch', 'ao_inv', 'ao_strength',
     'hide_snow_overlay',
@@ -1916,11 +2430,12 @@ class MdfGenRefreshBase(bpy.types.Operator):
             return {'CANCELLED'}
 
         mat_names = set()
+        mesh_counts = {}
         for obj in mesh_col.all_objects:
             if obj.type == 'MESH':
-                for mat in obj.data.materials:
-                    if mat:
-                        mat_names.add(mat.name)
+                for mat in {m for m in obj.data.materials if m}:
+                    mat_names.add(mat.name)
+                    mesh_counts[mat.name] = mesh_counts.get(mat.name, 0) + 1
 
         if not mat_names:
             self.report({'ERROR'}, T("core.mdf_generator_base.no_materials_in_collection"))
@@ -2010,10 +2525,18 @@ class MdfGenRefreshBase(bpy.types.Operator):
                 parts.append(f"{pt[0].upper()}:{strategy_label(sv[0])}")
             item.strategy_display = '  '.join(parts)
 
-            # Per-channel strategy labels (for expanded view)
+            # Per-channel strategy labels and sources (for the detail view)
             for pt in ('color', 'metallic', 'roughness', 'normal', 'alpha', 'emissive'):
                 sv = strategies.get(pt, ('?', None))
                 setattr(item, f"strat_{pt}", strategy_label(sv[0]))
+                try:
+                    setattr(item, f"src_{pt}", strategy_source_text(sv))
+                except AttributeError:
+                    pass
+            try:
+                item.mesh_count = mesh_counts.get(mat_name, 0)
+            except AttributeError:
+                pass
 
             # Per-channel native sizes (for the resize button in the UI)
             native_sizes = detect_native_sizes(mat, strategies)
@@ -2039,11 +2562,111 @@ class MdfGenRefreshBase(bpy.types.Operator):
         return {'FINISHED'}
 
 
+# ── Headless entry point ───────────────────────────────────────────────────────
+
+#: Game code -> that game's MdfGenProcessBase subclass, registered by each game's
+#: generator module.  The class is only used for its configuration attributes
+#: (_tex_version, _abbrev_map, _channel_maps, ...); core code stays free of any
+#: games/* import this way.
+_GENERATORS = {}
+
+
+def register_generator(game_code, process_cls):
+    _GENERATORS[game_code] = process_cls
+
+
+def unregister_generator(game_code):
+    _GENERATORS.pop(game_code, None)
+
+
+def generator_for(game_code):
+    return _GENERATORS.get(game_code)
+
+
+class _Runner:
+    """Stands in for the operator instance: _process_one_material only uses
+    ``self`` to collect the channels it could not resolve."""
+
+    def __init__(self):
+        self._unresolved_channels = []
+
+
+def generate_materials(context, cls, entries, settings, mesh_col, mdf_col,
+                       natives_root, base_path, tex_utils=None, read_preset=None):
+    """Run *cls*'s per-material pipeline over *entries* into *mdf_col*.
+
+    ``(generated, failed, unresolved channels)``.  *entries* only need the
+    attributes a material_list entry has (blender_material, material_preset,
+    generate_mipmaps, ...), so the pre-export check's 「使用生成器快捷生成」
+    passes plain objects for the few materials it fills in, and the generator's
+    own button passes its list -- one pipeline, so the two cannot drift apart.
+    *base_path* is final (any _path_fixed_prefix already applied).
+    """
+    if tex_utils is None:
+        tex_utils = _import_tex_utils()
+    if read_preset is None:
+        read_preset = import_read_preset_json()
+        if read_preset is None:
+            raise RuntimeError("RE Mesh Editor preset reader unavailable")
+    image_to_dds, dds_to_tex = tex_utils
+    runner = _Runner()
+    temp_dir = tempfile.mkdtemp(prefix="mdf_gen_")
+    comp_cache = {}  # (slot_type, source_ids, pbr_channels) → (composed, disk, mdf)
+    ok = failed = 0
+    try:
+        for entry in entries:
+            try:
+                _t_mat = time.time()
+                MdfGenProcessBase._process_one_material(
+                    runner, context, entry, settings, mdf_col,
+                    natives_root, base_path, temp_dir,
+                    image_to_dds, dds_to_tex, read_preset, cls, mesh_col,
+                    comp_cache,
+                )
+                ok += 1
+                print(f"[{cls._log_tag}] OK: {entry.blender_material} ({time.time() - _t_mat:.2f}s)")
+            except Exception as e:
+                import traceback
+                print(f"[{cls._log_tag}] FAIL {entry.blender_material}: {e}")
+                traceback.print_exc()
+                failed += 1
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+    return ok, failed, runner._unresolved_channels
+
+
+class QuickEntry:
+    """A material_list entry with the generator's defaults, for a material the
+    user never refreshed into the panel.  Only the preset is chosen; everything
+    else is what a fresh Refresh would put there."""
+
+    def __init__(self, material, preset_path):
+        self.blender_material = material.name
+        locked_path, locked = _locked_preset_for_material(material)
+        self.preset_locked = bool(locked and locked_path)
+        self.preset_path_override = locked_path if self.preset_locked else ""
+        self.material_preset = preset_path
+        self.shader_source = guess_shader_source_default(material)
+        self.use_toon = False
+        self.generate_mipmaps = True
+        self.skip_textures = False
+        self.use_ao = False
+        self.ao_image = ""
+        self.ao_ch = 'R'
+        self.ao_inv = False
+        for pt in ('color', 'normal', 'roughness', 'metallic', 'alpha', 'emissive'):
+            setattr(self, f"bake_size_{pt}", 0)
+
+
 # ── Base operator: Process ─────────────────────────────────────────────────────
 
 class MdfGenProcessBase(bpy.types.Operator):
     bl_label   = "Generate MDF2 + Textures"
-    bl_options = {'REGISTER'}
+    # 'UNDO': this creates the MDF/MRL3 objects and separates meshes, and an op
+    # that creates scene data without it pushes no undo step at all -- the next
+    # Ctrl+Z then crashes Blender in the outliner draw (measured on the reference-
+    # model import and the batch importers).  Written files are not taken back.
+    bl_options = {'REGISTER', 'UNDO'}
 
     _settings_attr     = ""
     _game_name         = ""
@@ -2054,6 +2677,11 @@ class MdfGenProcessBase(bpy.types.Operator):
     _abbrev_map        = {}
     _channel_maps      = {}
     _null_tex_by_type  = {}
+    _slot_nulls        = None   # SlotNulls; built from _null_tex_by_type when unset
+    # Slots written from a bundled DDS -- MHWS's SkinMap only. Per game: Rise has
+    # a SkinMap slot too, bound to its own engine texture, and MHWS's skin tone
+    # must not land in a Rise mod.
+    _placeholder_slots = frozenset()
     _log_tag           = "MDF Gen"
     _bake_size         = BAKE_SIZE_DEFAULT
 
@@ -2098,29 +2726,11 @@ class MdfGenProcessBase(bpy.types.Operator):
 
         mdf_col = self._get_or_create_mdf_collection(context, mesh_col, settings)
 
-        temp_dir = tempfile.mkdtemp(prefix="mdf_gen_")
-        comp_cache = {}  # (slot_type, source_ids, pbr_channels) → (composed, disk, mdf)
-        export_count = fail_count = 0
-
-        try:
-            for mat_entry in settings.material_list:
-                try:
-                    _t_mat = time.time()
-                    self._process_one_material(
-                        context, mat_entry, settings, mdf_col,
-                        natives_root, base_path, temp_dir,
-                        ImageListToDDS, DDSToTex, readPresetJSON, cls, mesh_col,
-                        comp_cache,
-                    )
-                    export_count += 1
-                    print(f"[{cls._log_tag}] OK: {mat_entry.blender_material} ({time.time() - _t_mat:.2f}s)")
-                except Exception as e:
-                    import traceback
-                    print(f"[{cls._log_tag}] FAIL {mat_entry.blender_material}: {e}")
-                    traceback.print_exc()
-                    fail_count += 1
-        finally:
-            shutil.rmtree(temp_dir, ignore_errors=True)
+        export_count, fail_count, unresolved = generate_materials(
+            context, cls, settings.material_list, settings, mesh_col, mdf_col,
+            natives_root, base_path,
+            tex_utils=(ImageListToDDS, DDSToTex), read_preset=readPresetJSON)
+        self._unresolved_channels = unresolved
 
         _t_sep = time.time()
         try:
@@ -2130,6 +2740,7 @@ class MdfGenProcessBase(bpy.types.Operator):
             print(f"[{cls._log_tag}] Mesh separate/rename warning: {e}")
 
         print(f"[{cls._log_tag}] ★ 总耗时: {time.time() - _t_total:.2f}s ★", flush=True)
+        report_tex_name_collisions(self, settings.material_list)
         if self._unresolved_channels:
             _n = sum(len(c) for _m, c in self._unresolved_channels)
             _detail = "; ".join("%s: %s" % (m, ", ".join(c))
@@ -2184,98 +2795,19 @@ class MdfGenProcessBase(bpy.types.Operator):
         if not mat:
             raise ValueError(f"Material '{mat_name}' not found")
 
-        # A locked prefab lives outside preset_items entirely (see
-        # _locked_preset_for_material) and cannot be represented by
-        # material_preset's own EnumProperty -- read the override first.
-        if getattr(mat_entry, 'preset_locked', False) and mat_entry.preset_path_override:
-            preset_path = mat_entry.preset_path_override
-        else:
-            preset_path = mat_entry.material_preset
-        if not preset_path or preset_path == 'NONE':
-            raise ValueError(f"No preset selected for '{mat_name}'")
-        if not os.path.isfile(preset_path):
-            raise FileNotFoundError(f"Preset not found: {preset_path}")
+        preset_path = entry_preset_path(mat_entry)
+        if not preset_path:
+            p = (mat_entry.preset_path_override if getattr(mat_entry, 'preset_locked', False)
+                 else mat_entry.material_preset)
+            if not p or p == 'NONE':
+                raise ValueError(f"No preset selected for '{mat_name}'")
+            raise FileNotFoundError(f"Preset not found: {p}")
 
         # Find all mesh objects sharing this material (for baking across all UV layouts)
         mesh_objects = _find_meshes_by_material(mesh_col, mat_name)
-        mesh_obj = mesh_objects[0] if mesh_objects else None
-        if mesh_objects:
-            print(f"[{cls._log_tag}]   '{mat_name}' → {len(mesh_objects)} 个网格: "
-                  f"{', '.join(o.name for o in mesh_objects)}")
-
-        _t = time.time()
-        strategies = packed_shader_strategies(mat, getattr(mat_entry, 'shader_source', 'PBR'))
-        # print(f"[{cls._log_tag}]   分析材质节点: {time.time() - _t:.2f}s", flush=True)
-        bake_size  = max(_detect_max_tex_size(mat), cls._bake_size)
-
-        # Collect per-channel user size overrides (0 = use global bake_size)
-        channel_sizes = {}
-        for pt in _PBR_CHANNELS:
-            override = getattr(mat_entry, f"bake_size_{pt}", 0)
-            if override > 0:
-                channel_sizes[pt] = override
-
-        _t = time.time()
-        pbr_paths  = _get_pbr_paths(
-            mat, strategies, temp_dir, bake_size, context, mesh_obj,
-            channel_sizes=channel_sizes or None,
-            mesh_objects=mesh_objects)
-
-        # 解析不出源的通道要报出来。以前这里只有一句 print：策略是 BAKE 而烘培没跑成
-        # （没有网格、或者节点链看不懂），路径就是 None，合成拿不到东西，最后落成
-        # null_xxx —— 用户看到的是"接了贴图却生成了空图"，而界面上一个字都没有。
-        _no_source = sorted(pt for pt, sv in strategies.items()
-                            if sv and sv[0] == 'BAKE' and not pbr_paths.get(pt))
-        if _no_source:
-            self._unresolved_channels.append((mat_name, _no_source))
-            print(f"[{cls._log_tag}]   !! no source for {mat_name}: "
-                  f"{', '.join(_no_source)} -> these fall back to a null texture")
-        # print(f"[{cls._log_tag}]   解析PBR路径 (含烘培): {time.time() - _t:.2f}s", flush=True)
-
-        # A shader with AO plugged in is the user already saying "use this AO",
-        # so honour it without making them tick the box again. Explicit settings
-        # win: only an unset ao_image is filled in.
-        shader_ao = find_shader_socket_image(mat, 'AO')
-        if shader_ao and not getattr(mat_entry, 'ao_image', ''):
-            try:
-                mat_entry.use_ao  = True
-                mat_entry.ao_image = shader_ao
-                strength = find_shader_socket_value(mat, 'AO Strength', 1.0)
-                if hasattr(mat_entry, 'ao_strength'):
-                    mat_entry.ao_strength = strength
-                print(f"[{cls._log_tag}]   AO from packed shader: "
-                      f"{os.path.basename(shader_ao)} (strength {strength:.2f})")
-            except Exception as e:
-                print(f"[{cls._log_tag}]   could not adopt the shader's AO: {e}")
-
-        # User-provided AO override (Blender has no built-in AO node). Channel
-        # and invert are explicit UI choices here rather than node-analysed,
-        # since there is no node chain to analyse for a plain file path --
-        # mirrors the channel/invert pair core.mdf_tex_processor_base's own
-        # PBR panel already offers for its (also manually-provided) AO input.
-        pbr_inv = {}
-        if getattr(mat_entry, 'use_ao', False):
-            ao_path_raw = getattr(mat_entry, 'ao_image', '')
-            if ao_path_raw:
-                ao_path = bpy.path.abspath(ao_path_raw)
-                if ao_path and os.path.isfile(ao_path):
-                    strategies['ao'] = ('DIRECT', ao_path, getattr(mat_entry, 'ao_ch', 'R'))
-                    pbr_paths['ao'] = ao_path
-                    pbr_inv['ao'] = getattr(mat_entry, 'ao_inv', False)
-
-        # Build source-channel overrides from DIRECT strategies where the
-        # Image Texture's Alpha output (not Color) was connected — this
-        # ensures alpha data is read from the A channel instead of R.
-        pbr_channels = {}
-        for pbr_type, strat_val in strategies.items():
-            if strat_val[0] != 'DIRECT':
-                continue
-            if len(strat_val) > 2 and strat_val[2] != 'R':
-                pbr_channels[pbr_type] = strat_val[2]
-            # 1-x 那种接法（光泽度当粗糙度用）在这里变成一个取反标志，
-            # 合成时由 pbr_inv 执行，不必烘培。
-            if len(strat_val) > 3 and strat_val[3]:
-                pbr_inv[pbr_type] = True
+        job = analyse_entry(mat, mat_entry, settings, log_tag=cls._log_tag)
+        pbr_paths = bake_entry(self, context, mat, mat_entry, job, mesh_objects, temp_dir,
+                               max(_detect_max_tex_size(mat), cls._bake_size), cls._log_tag)
 
         # materialName keeps _UseSC (it is a marker on the material itself);
         # tex_name feeds every texture filename/binding path below and must
@@ -2284,276 +2816,57 @@ class MdfGenProcessBase(bpy.types.Operator):
         material_name = _material_name_for(mat_name, mesh_objects)
         tex_name = material_name.removesuffix('_UseSC')
 
-        # Determine which slot types the preset expects
-        _t = time.time()
         with open(preset_path, encoding='utf-8') as f:
             preset_data = json.load(f)
-        # print(f"[{cls._log_tag}]   加载Preset JSON: {time.time() - _t:.2f}s", flush=True)
         slot_types = [b["Texture Type"] for b in preset_data.get("Texture Bindings", [])]
+        # Nulls follow the master material (core/slot_defaults.py), and a preset
+        # binding that is already one of vanilla's defaults for the slot is kept.
+        nulls = cls._slot_nulls or SlotNulls(cls._null_tex_by_type)
+        preset_mmtr = preset_data.get("Material Header", {}).get("Master Material Path", "")
+        preset_paths = {b["Texture Type"]: b.get("Texture Path", "")
+                        for b in preset_data.get("Texture Bindings", [])}
 
-        # A slot socket and the PBR inputs it covers can both be filled, and the
-        # material's own shader_source is a hard switch between them -- not a
-        # tie-break that lets whichever side has data win regardless of the
-        # pick, which used to silently ignore the choice whenever only one
-        # side was actually filled in. Per material, not global: one export
-        # can mix materials that want the PBR panel with materials that want
-        # the game slots.
-        prefer_slots = getattr(mat_entry, 'shader_source', 'PBR') == 'SLOT'
-        _supplies = find_shader_slot_supplies(mat)
-        _pbr_given = shader_pbr_contributions(mat)
-        contested_slots = {
-            slot for slot, quantities in _supplies.items()
-            if any(q in _pbr_given for q in quantities)
-        }
-        if contested_slots:
-            print(f"[{cls._log_tag}]   both panels filled for "
-                  f"{', '.join(sorted(contested_slots))} -> using the "
-                  f"{'game slots' if prefer_slots else 'PBR inputs'}")
+        def _null(st):
+            return nulls.null_for(st, preset_mmtr, preset_paths.get(st, ""))
 
-        # {slot: (path, authority)} — see slot_sources.  SHADER authority means
-        # the user plugged the texture into that slot's socket on the packed
-        # shader, which is an explicit instruction rather than a convention.
-        slot_direct = find_slot_sources(mat, slot_types)
-        prefer_direct = prefer_slots
+        def _keep_unlisted(st):
+            # A slot the hand table never listed was always left as the preset
+            # had it. Keep doing that while the preset's binding is the game's
+            # own texture (RE9 glass's FakeSpecular_PanoramaMap); the survey
+            # default only replaces a path the game does not ship -- the preset
+            # author's own asset, e.g. MK_MODS/....
+            cur = preset_paths.get(st, "")
+            return st not in nulls.hand and (nulls.is_runtime(cur) or nulls.is_vanilla(cur))
 
-        # Global toggles on the settings object override every material's own
-        # checkbox -- "disable" forces mipmaps off regardless of what a
-        # material asks for, "use toon" forces it on the same way.
-        use_toon         = (getattr(mat_entry, 'use_toon', False)
-                            or getattr(settings, 'global_use_toon', False))
-        effective_mipmaps = (mat_entry.generate_mipmaps
-                            and not getattr(settings, 'global_disable_mipmaps', False))
-        # 色调处理是全局档，没有逐材质开关 —— 它补的是整套素材的口径差，
-        # 一张一张设只会让同一个模型的各部件对不上。
-        grade_mode = getattr(settings, 'global_color_grade', 'NONE')
-        emi_zero         = _emissive_strength_is_zero(mat)
-        emissive_slots   = {st for st in slot_types if _is_emissive_slot(st)}
-        albedo_slots     = {st for st in slot_types if _is_albedo_slot(st, cls._channel_maps)}
+        def _mdf_path(st):
+            return make_mdf_path(base_path, tex_name, st, cls._abbrev_map, cls._use_art_prefix)
 
-        # With no AO slot in this game's channel maps, an AO map can only survive
-        # by being multiplied into the albedo. Where a slot does store it, that
-        # path is used instead -- doing both would darken twice.
-        bake_ao = (bool(pbr_paths.get('ao'))
-                   and not channel_maps_consume_ao(cls._channel_maps))
+        def _disk_path(st):
+            return make_disk_path(natives_root, base_path, tex_name, st,
+                                  cls._abbrev_map, cls._tex_version, cls._use_art_prefix)
 
-        slot_mdf_paths = {}
+        def _placeholder(st):
+            if not natives_root:
+                return None
+            return _resolve_placeholder_slot(
+                st, tex_name, natives_root, base_path, temp_dir,
+                cls._abbrev_map, cls._tex_version, cls._use_art_prefix,
+                ImageListToDDS, DDSToTex, comp_cache)
 
-        for slot_type in slot_types:
-            # Emissive: skip composition if toon mode or strength is zero
-            if slot_type in emissive_slots:
-                if use_toon:
-                    continue  # filled from albedo path after loop
-                if emi_zero:
-                    null = cls._null_tex_by_type.get(slot_type)
-                    if null:
-                        slot_mdf_paths[slot_type] = null
-                    continue
-
-            # --- direct slot source (BY_SLOT_NAME) ---------------------------
-            # Lossless: the packed file goes to the slot as-is, no unpack →
-            # recompose round-trip.  Applied unconditionally for slots absent
-            # from _channel_maps (AO-bearing maps, detail maps — these have no
-            # PBR composition recipe and currently fall through to a null
-            # texture, so sourcing them can only be an improvement).  For slots
-            # that *do* have a recipe it is opt-in, because a user who edited
-            # roughness via nodes would otherwise have that edit silently
-            # discarded in favour of the original packed file.
-            direct_src, direct_auth = slot_direct.get(slot_type, (None, None))
-            # shader_source is a hard switch, not a tie-break: a slot-named node
-            # (not a shader socket) only wins where there is no composition
-            # recipe to override (those slots used to write a null texture
-            # regardless); an actual shader-socket connection is honoured only
-            # when the user picked "game slots" for this material.
-            if direct_src is not None and (
-                    slot_type not in cls._channel_maps
-                    or prefer_direct):
-                if getattr(mat_entry, 'skip_textures', False):
-                    slot_mdf_paths[slot_type] = make_mdf_path(
-                        base_path, tex_name, slot_type,
-                        cls._abbrev_map, cls._use_art_prefix,
-                    )
-                    continue
-
-                direct_key = (slot_type, 'DIRECT_SLOT', direct_src)
-                cached = comp_cache.get(direct_key)
-                if cached is not None:
-                    slot_mdf_paths[slot_type] = cached[2]
-                    continue
-
-                disk_path = make_disk_path(
-                    natives_root, base_path, tex_name, slot_type,
-                    cls._abbrev_map, cls._tex_version, cls._use_art_prefix,
-                )
-                # Staged under a slot-unique stem: the source lives outside
-                # temp_dir, and texconv names its output after the input.
-                staged = stage_source_file(
-                    direct_src, temp_dir, tex_name, slot_type)
-                write_slot_tex(
-                    staged, disk_path, temp_dir,
-                    dds_fmt=resolve_dds_format(slot_type, SRGB_SLOT_TYPES),
-                    generate_mipmaps=effective_mipmaps,
-                    image_to_dds=ImageListToDDS,
-                    dds_to_tex=lambda p, o: DDSToTex(p, cls._tex_version, o),
-                    grade_mode=grade_mode,
-                )
-
-                mdf_path = make_mdf_path(
-                    base_path, tex_name, slot_type,
-                    cls._abbrev_map, cls._use_art_prefix,
-                )
-                slot_mdf_paths[slot_type] = mdf_path
-                comp_cache[direct_key] = (staged, disk_path, mdf_path)
-                print(f"[{cls._log_tag}]   {slot_type} -> "
-                      f"{os.path.basename(disk_path)} (槽位直连/{direct_auth})")
-                continue
-
-            if slot_type not in cls._channel_maps:
-                null = cls._null_tex_by_type.get(slot_type)
-                if null:
-                    slot_mdf_paths[slot_type] = null
-                elif slot_type in PLACEHOLDER_SLOT_TYPES:
-                    placeholder_path = _resolve_placeholder_slot(
-                        slot_type, tex_name, natives_root, base_path, temp_dir,
-                        cls._abbrev_map, cls._tex_version, cls._use_art_prefix,
-                        ImageListToDDS, DDSToTex, comp_cache)
-                    if placeholder_path:
-                        slot_mdf_paths[slot_type] = placeholder_path
-                        print(f"[{cls._log_tag}]   {slot_type} -> "
-                              f"{os.path.basename(placeholder_path)} (占位贴图)")
-                continue
-
-            # --- skip_textures: just compute the binding path ---
-            if getattr(mat_entry, 'skip_textures', False):
-                slot_mdf_paths[slot_type] = make_mdf_path(
-                    base_path, tex_name, slot_type,
-                    cls._abbrev_map, cls._use_art_prefix,
-                )
-                continue
-
-            # --- cache key construction ---
-            ch_map = cls._channel_maps[slot_type]
-            needed_pt = {src[0] for src in ch_map.values()
-                         if src is not None and isinstance(src, tuple)}
-            key_parts = []
-            cache_ok = True
-            for pt in sorted(needed_pt):
-                sv = strategies.get(pt)
-                if sv:
-                    sid = _make_source_id(sv)
-                    if sid is not None:
-                        key_parts.append((pt, sid))
-                    else:
-                        cache_ok = False
-                        break
-                else:
-                    cache_ok = False
-                    break
-
-            cache_key = None
-            if cache_ok:
-                ch_ov = frozenset((k, v) for k, v in pbr_channels.items() if k in needed_pt)
-                cache_key = (slot_type, tuple(key_parts), ch_ov)
-                cached = comp_cache.get(cache_key)
-                if cached is not None:
-                    slot_mdf_paths[slot_type] = cached[2]
-                    continue
-
-                # Only attempt downgrade for cacheable slots (no BAKE involved)
-                rgba = _try_downgrade_slot(slot_type, strategies, pbr_channels, cls._channel_maps)
-                if rgba is not None:
-                    # If every channel is at its PBR default value the slot carries
-                    # no meaningful data — redirect to the null texture directly
-                    # instead of generating a solid PNG/DDS/TEX.
-                    null = cls._null_tex_by_type.get(slot_type)
-                    if null:
-                        default_rgba = _try_downgrade_slot(
-                            slot_type, _DEFAULT_STRATEGIES, {}, cls._channel_maps)
-                        if default_rgba is not None and all(
-                                abs(a - b) < 1e-4 for a, b in zip(rgba, default_rgba)):
-                            slot_mdf_paths[slot_type] = null
-                            if cache_key is not None:
-                                comp_cache[cache_key] = (None, None, null)
-                            print(f"[{cls._log_tag}]   {slot_type} -> NULL (all-default)")
-                            continue
-
-                    hint = f"{tex_name}_{slot_type.lower()}_dg"
-                    composed = _generate_solid_texture_path(rgba, temp_dir, hint, size=256)
-                    if composed:
-                        disk_path = make_disk_path(
-                            natives_root, base_path, tex_name, slot_type,
-                            cls._abbrev_map, cls._tex_version, cls._use_art_prefix,
-                        )
-                        write_slot_tex(
-                            composed, disk_path, temp_dir,
-                            dds_fmt=resolve_dds_format(slot_type, SRGB_SLOT_TYPES),
-                            generate_mipmaps=effective_mipmaps,
-                            image_to_dds=ImageListToDDS,
-                            dds_to_tex=lambda p, o: DDSToTex(p, cls._tex_version, o),
-                            grade_mode=grade_mode,
-                        )
-
-                        mdf_path = make_mdf_path(
-                            base_path, tex_name, slot_type,
-                            cls._abbrev_map, cls._use_art_prefix,
-                        )
-                        slot_mdf_paths[slot_type] = mdf_path
-                        comp_cache[cache_key] = (composed, disk_path, mdf_path)
-                        continue
-
-            # --- full composition path ---
-            _t_comp = time.time()
-            normal_flip_g = getattr(settings, 'flip_normal_g', False)
-            composed = _compose_channels(
-                slot_type, pbr_paths, pbr_channels, temp_dir, tex_name,
-                pbr_inv=pbr_inv,
-                channel_maps=cls._channel_maps,
-                normal_flip_g=normal_flip_g,
-                bake_ao_into_color=bake_ao,
-                ao_strength=getattr(mat_entry, 'ao_strength', 1.0),
-                octahedral=getattr(settings, 'octahedral_normals', False),
-            )
-            # print(f"[{cls._log_tag}]   合成通道 {slot_type}: {time.time() - _t_comp:.2f}s", flush=True)
-            if composed:
-                disk_path = make_disk_path(
-                    natives_root, base_path, tex_name, slot_type,
-                    cls._abbrev_map, cls._tex_version, cls._use_art_prefix,
-                )
-                write_slot_tex(
-                    composed, disk_path, temp_dir,
-                    dds_fmt=resolve_dds_format(slot_type, SRGB_SLOT_TYPES),
-                    generate_mipmaps=effective_mipmaps,
-                    image_to_dds=ImageListToDDS,
-                    dds_to_tex=lambda p, o: DDSToTex(p, cls._tex_version, o),
-                    grade_mode=grade_mode,
-                )
-
-                mdf_path = make_mdf_path(
-                    base_path, tex_name, slot_type,
-                    cls._abbrev_map, cls._use_art_prefix,
-                )
-                slot_mdf_paths[slot_type] = mdf_path
-
-                if cache_key is not None:
-                    comp_cache[cache_key] = (composed, disk_path, mdf_path)
-                print(f"[{cls._log_tag}]   {slot_type} -> {os.path.basename(disk_path)}")
-            else:
-                null = cls._null_tex_by_type.get(slot_type)
-                if null:
-                    slot_mdf_paths[slot_type] = null
-
-        # Toon shading: copy albedo binding path to all emissive slots
-        if use_toon and emissive_slots:
-            albedo_path = next(
-                (slot_mdf_paths[st] for st in albedo_slots if st in slot_mdf_paths),
-                None,
-            )
-            for st in emissive_slots:
-                if albedo_path:
-                    slot_mdf_paths[st] = albedo_path
-                else:
-                    null = cls._null_tex_by_type.get(st)
-                    if null:
-                        slot_mdf_paths[st] = null
+        writer = SlotWriter(
+            cache=comp_cache, temp_dir=temp_dir, disk_path=_disk_path, binding=_mdf_path,
+            srgb_slots=SRGB_SLOT_TYPES, write_tex=write_slot_tex,
+            resolve_format=resolve_dds_format, image_to_dds=ImageListToDDS,
+            dds_to_tex=lambda p, o: DDSToTex(p, cls._tex_version, o),
+            mipmaps=job.mipmaps, grade_mode=job.grade_mode, log_tag=cls._log_tag,
+            mip_quality=getattr(settings, 'global_mip_quality', None))
+        slot_mdf_paths, _files = run_generator_slots(
+            job, mat, slot_types, pbr_paths, writer, temp_dir, tex_name,
+            channel_maps=cls._channel_maps, null_for=_null,
+            placeholder_slots=cls._placeholder_slots,
+            keep_unlisted=_keep_unlisted, placeholder=_placeholder,
+            compose_extra=dict(octahedral=getattr(settings, 'octahedral_normals', False)),
+            mat_entry=mat_entry, settings=settings)
 
         # Create MDF2 material from preset and update texture binding paths
         _t = time.time()

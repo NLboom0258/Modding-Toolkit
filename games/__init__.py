@@ -1,4 +1,4 @@
-from . import mhwi, mhws, mhrs, re4, re9, dmc5
+from . import mhwi, mhws, mhrs, re4, re9, dmc5, oni
 
 modules = [
     mhwi,
@@ -7,6 +7,7 @@ modules = [
     re4,
     re9,
     dmc5,
+    oni,
 ]
 
 def register():

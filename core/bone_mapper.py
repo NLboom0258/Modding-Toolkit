@@ -1,4 +1,5 @@
 import bpy
+import fnmatch
 import json
 import os
 import re
@@ -104,6 +105,7 @@ class BoneMapManager:
         self.preset_info = {}       # 存储 JSON 中的 "preset_info" 内容
         self.reverse_mapping = {}   # 反向查找表：仅存储每个 Standard Key 对应的第一个 Main Candidate
         self.exclude_bones = set()  # 顶级 "exclude" 字段：不是物理骨，但不属于任何标准骨骼映射
+        self.exclude_patterns = ()  # exclude 里带 * 的条目，按 fnmatch 通配（见 exclude_matches）
 
     def get_preset_path(self, filename, is_import_x=False):
         """路径获取"""
@@ -135,7 +137,9 @@ class BoneMapManager:
             
             self.preset_info = data.get("preset_info", {})
             self.mapping_data = data.get("mappings", {})
-            self.exclude_bones = set(data.get("exclude", []))
+            exclude = data.get("exclude", [])
+            self.exclude_bones = {n for n in exclude if "*" not in n}
+            self.exclude_patterns = tuple(n for n in exclude if "*" in n)
 
             # 生成反向映射 (主要为了兼容导出逻辑：GameBoneName -> StandardKey)
             # 我们只取 mappings 中每个 standard_key 的 main 列表里的第一个元素作为主键
@@ -152,6 +156,41 @@ class BoneMapManager:
         except Exception as e:
             print(f"[Error] Failed to parse JSON: {e}")
             return False
+
+    def exclude_matches(self, names):
+        """*names* 中被 exclude 命中的那些。
+
+        不带 ``*`` 的条目按原样比对；带 ``*`` 的按 fnmatch 通配（区分大小写）。
+        通配是给"命名约定"用的：MMD 的 X操作 / X調整 / X親 是控制把手，前面的 X 每个
+        模型都不一样，逐个列名字列不完。只认 ``*`` 才算通配，是因为 ``[`` ``?`` 在
+        骨骼名里是真实字符，不能让旧的逐字条目突然变了含义。"""
+        names = set(names)
+        hit = self.exclude_bones & names
+        for pat in self.exclude_patterns:
+            hit.update(n for n in names if fnmatch.fnmatchcase(n, pat))
+        return hit
+
+    def _bone_lookup(self, armature_obj):
+        """(set of bone names, {归一化名: 实际骨名}) for *armature_obj*, cached.
+
+        Rebuilt only when the armature's bone names change.  The main panel's
+        "Show Mapping Details" calls get_matches_for_standard for ~52 keys on
+        every redraw, and each call used to re-normalise every bone with a regex
+        and test membership against a list: ~42 ms per redraw on an 800-bone
+        rig, so the sidebar lagged on mouse hover.
+        """
+        names = tuple(armature_obj.data.bones.keys())
+        hit = getattr(self, "_lookup_cache", None)
+        if hit is not None and hit[0] == names:
+            return hit[1], hit[2]
+        # 归一化查找表：{归一化名: 实际骨名}，碰撞时保留第一个
+        norm_lookup = {}
+        for b in names:
+            norm = _normalize_bone_name(b)
+            if norm not in norm_lookup:
+                norm_lookup[norm] = b
+        self._lookup_cache = (names, set(names), norm_lookup)
+        return self._lookup_cache[1], norm_lookup
 
     def get_matches_for_standard(self, armature_obj, standard_key, fold_aux=False):
         """
@@ -177,14 +216,7 @@ class BoneMapManager:
         if standard_key not in self.mapping_data:
             return None, []
         bone_entry = self.mapping_data[standard_key]
-        existing_bones = armature_obj.data.bones.keys()
-
-        # 归一化查找表：{归一化名: 实际骨名}，碰撞时保留第一个
-        norm_lookup = {}
-        for b in existing_bones:
-            norm = _normalize_bone_name(b)
-            if norm not in norm_lookup:
-                norm_lookup[norm] = b
+        existing_bones, norm_lookup = self._bone_lookup(armature_obj)
 
         def find_bone(name):
             """精确匹配优先，归一化匹配兜底，返回实际骨名"""

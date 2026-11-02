@@ -25,6 +25,9 @@ silently replaced by identity, which would leave that bone in the source game's
 convention with nothing to show for it until an animation twists it in-game.
 """
 
+import importlib
+import sys
+
 import bpy
 from mathutils import Matrix, Vector
 
@@ -35,6 +38,7 @@ from .bone_correction import (DEFAULT_TOLERANCE_DEG, derive_bone_correction,
 from .bone_mapper import BoneMapManager, auto_detect_preset, build_cross_game_map
 from . import twist_chain
 from .i18n import T
+from . import poll_msg
 from .mesh_port import PLUMBING_BONES, build_port_plan, origin_shift
 from .ref_skeleton import get_reference_skeleton_items, import_reference_armature
 from . import weight_utils
@@ -51,16 +55,23 @@ from .port_consent import gate
 #: CrossGameBoneMap off the preset while this set and mesh_port._INSERT_RULES key
 #: off the other spelling, so a mismatch yields a silently *empty* mapping rather
 #: than an error.  One spelling, everywhere.
-FAMILY_A = frozenset({"MHWS", "RE4", "SF6", "DMC5", "MHRS"})
+#:
+#: ONI is measured: 172 bones shared with MHWilds by name, all 172 at 0 degrees rest
+#: orientation difference (vanilla ch001_00_00 vs an MHWilds body, 2026-10-14).
+FAMILY_A = frozenset({"MHWS", "RE4", "SF6", "DMC5", "MHRS", "ONI"})
 
 #: Ported rigs are offered for the games with a reference skeleton to derive against.
 #: MHRS joined once it had one (assets/reference_skeletons/mhrs/) and a native bone
 #: table; it is the first member whose rig origin is not on the ground, which is what
 #: RIG_ORIGIN and origin_shift() exist for.
-PORTABLE_GAMES = ("MHWS", "RE4", "RE9", "MHRS")
+#:
+#: ONI is a port *target* only for now: no UI section offers it as a source, and it
+#: has no native bone table, which the source side needs to tell rig furniture from
+#: the model's own bones.
+PORTABLE_GAMES = ("MHWS", "RE4", "RE9", "MHRS", "ONI")
 
 #: Reference skeletons live under assets/reference_skeletons/<lowercased game_code>/.
-_REF_DIRS = {"MHWS": "mhws", "RE4": "re4", "RE9": "re9", "MHRS": "mhrs"}
+_REF_DIRS = {"MHWS": "mhws", "RE4": "re4", "RE9": "re9", "MHRS": "mhrs", "ONI": "oni"}
 
 _TEMP_PREFIX = "__port_tmp__"
 
@@ -151,6 +162,131 @@ def duplicate_mesh_collection(col, arm_obj, suffix):
     return new_arm
 
 
+def reme_re9_axes_module():
+    """RE Mesh Editor's ``re9_bone_axes`` module, or None.
+
+    Only the Dimcirui fork has it, announced as ``REME_FEATURES["re9_bone_axes"]``.
+    Upstream / older REME exports bones as they stand in Blender, so a rig marked for
+    it would go out in the wrong axes -- there, ports into RE9 stay unmarked.
+    """
+    for name in bpy.context.preferences.addons.keys():
+        feats = getattr(sys.modules.get(name), "REME_FEATURES", None)
+        if not isinstance(feats, dict) or feats.get("re9_bone_axes", 0) < 1:
+            continue
+        try:
+            mod = importlib.import_module(name + ".modules.mesh.re9_bone_axes")
+        except Exception:
+            return None
+        return mod if hasattr(mod, "computeCorrections") else None
+    return None
+
+
+_ROT_NEG90_X = Matrix(((1.0, 0.0, 0.0), (0.0, 0.0, 1.0), (0.0, -1.0, 0.0)))
+
+
+def convert_to_reme_axes(arm_obj, axes_mod):
+    """Turn a rig in RE9 file axes into one RE Mesh Editor shows converted.
+
+    Does what REME's importer does to a fresh RE9 import, so the result is
+    indistinguishable from one: *axes_mod*.computeCorrections picks each bone's C from
+    its file rotation, the rest becomes ``file @ C^-1`` and C is stored for the
+    exporter to multiply back.  The file axes therefore come out exactly as they were
+    before this ran -- the port's own (validated) correction still decides them.
+
+    File rotations are taken in REME's export space, ``Rx(-90) @ matrix_world @
+    matrix_local``; C is bone-local and right-multiplied, so the rest edit itself is
+    the same in Blender's armature space.  Rest-only, as in ``apply_corrections``:
+    the mesh does not move.  Returns the number of bones converted.
+    """
+    if bpy.context.mode != 'OBJECT':
+        bpy.ops.object.mode_set(mode='OBJECT')
+    bones = list(arm_obj.data.bones)
+    index = {b.name: i for i, b in enumerate(bones)}
+    world = _ROT_NEG90_X @ arm_obj.matrix_world.to_3x3().normalized()
+    parents = [index[b.parent.name] if b.parent else -1 for b in bones]
+    rotations = [(world @ b.matrix_local.to_3x3()).normalized() for b in bones]
+    corrections = axes_mod.computeCorrections([b.name for b in bones], parents, rotations)
+    return _set_reme_axes(arm_obj, {b.name: Matrix(corrections[i])
+                                    for i, b in enumerate(bones)})
+
+
+def _rest_times(arm_obj, mats):
+    """Right-multiply each named bone's rest rotation by its matrix in *mats*.
+
+    Heads stay put and the pose is not touched, so this is a rest-only relabel that
+    moves no vertex (see ``apply_corrections``).
+    """
+    if bpy.context.mode != 'OBJECT':
+        bpy.ops.object.mode_set(mode='OBJECT')
+    bpy.context.view_layer.objects.active = arm_obj
+    bpy.ops.object.mode_set(mode='EDIT')
+    try:
+        eb = arm_obj.data.edit_bones
+        for name, mat in mats.items():
+            e = eb.get(name)
+            if e is None:
+                continue
+            m = (e.matrix.to_3x3().normalized() @ mat).to_4x4()
+            m.translation = e.head
+            e.matrix = m
+    finally:
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def _set_reme_axes(arm_obj, corrections):
+    """Show *arm_obj* in REME's converted axes: rest ``@ C^-1``, C stored, flag set."""
+    _rest_times(arm_obj, {n: c.inverted() for n, c in corrections.items()})
+    data = arm_obj.data
+    for name, c in corrections.items():
+        if name in data.bones:
+            data.bones[name]["reAxisCorrection"] = [v for row in c for v in row]
+    data["REMeshBoneAxes"] = "RE9"
+    return len(corrections)
+
+
+def revert_reme_axes(arm_obj):
+    """Put a REME-converted RE9 rig back into RE9's file axes; returns the C removed.
+
+    Rest becomes ``rest @ C`` -- exactly the matrices REME's exporter would write --
+    and the markers go, so what is left is an ordinary unconverted RE9 rig.  The
+    returned ``{bone: C}`` lets ``_set_reme_axes`` restore it as it was.
+    """
+    corrections = {}
+    for b in arm_obj.data.bones:
+        v = b.get("reAxisCorrection")
+        if v is not None and len(v) == 9:
+            corrections[b.name] = Matrix((v[0:3], v[3:6], v[6:9]))
+    _rest_times(arm_obj, corrections)
+    data = arm_obj.data
+    for b in data.bones:
+        if "reAxisCorrection" in b:
+            del b["reAxisCorrection"]
+    if "REMeshBoneAxes" in data:
+        del data["REMeshBoneAxes"]
+    return corrections
+
+
+def file_axes_copy(arm_obj):
+    """A throwaway copy of *arm_obj* in RE9's file axes, or None when it is not
+    REME-converted (the rig itself already is in file axes then).
+
+    For code that reads bone frames off a user's rig to write a file without going
+    through REME's exporter, which is what multiplies C back.  The copy holds the
+    armature only; remove it with ``bpy.data.objects.remove`` and its data with
+    ``bpy.data.armatures.remove``.
+    """
+    if arm_obj.data.get("REMeshBoneAxes") != "RE9":
+        return None
+    copy = arm_obj.copy()
+    copy.data = arm_obj.data.copy()
+    copy.animation_data_clear()
+    bpy.context.scene.collection.objects.link(copy)
+    copy.hide_viewport = False          # revert_reme_axes enters Edit Mode on it
+    copy.hide_set(False)
+    revert_reme_axes(copy)
+    return copy
+
+
 def _fallback_table(source_game, target_game, cross):
     """The per-bone C to fall back on when the derivation rejects a bone.
 
@@ -188,6 +324,28 @@ def _armature_only_copy(arm_obj):
     probe.name = arm_obj.name + "_probe"
     bpy.context.scene.collection.objects.link(probe)
     return probe
+
+
+def _discard_copy(arm_obj, col=None):
+    """Remove a refused port's copy: the armature, its meshes, their data, and *col*.
+
+    The data blocks go too, not just the objects -- an orphaned armature or mesh
+    would otherwise sit in the file until a save-and-reload purges it.  *col* is
+    removed only once it is empty, so nothing else in it is lost.
+    """
+    objs = [arm_obj] + pose_bake.attached_meshes(arm_obj)
+    datas = [o.data for o in objs]
+    for obj in objs:
+        bpy.data.objects.remove(obj, do_unlink=True)
+    for data in datas:
+        if data is None or data.users:
+            continue
+        if isinstance(data, bpy.types.Armature):
+            bpy.data.armatures.remove(data)
+        else:
+            bpy.data.meshes.remove(data)
+    if col is not None and not col.objects and not col.children:
+        bpy.data.collections.remove(col)
 
 
 def _tpose(context, arm_obj):
@@ -243,6 +401,22 @@ def _insert_bones(arm_obj, inserts, ref_arm):
     if not inserts:
         return 0
     ref_bones = ref_arm.data.bones if ref_arm is not None else {}
+
+    # Parents before children.  The plan lists inserts alphabetically, and a
+    # ref_offset bone whose parent is *also* being inserted is skipped outright when
+    # it comes first -- it has no parent to be offset from yet.  Measured on
+    # MHWS -> ONI: Wakizashi_Saya_root sorts before its parent Wakizashi_root and
+    # was silently left out.  Depth in the reference rig fixes the order for every
+    # rule; the second pass below still covers bones the reference does not have.
+    def _depth(name):
+        ref = ref_bones.get(name) if ref_bones else None
+        d = 0
+        while ref is not None and ref.parent is not None:
+            d += 1
+            ref = ref.parent
+        return d
+    inserts = sorted(inserts, key=lambda r: _depth(r[0]))
+
     bpy.context.view_layer.objects.active = arm_obj
     bpy.ops.object.mode_set(mode='EDIT')
     eb = arm_obj.data.edit_bones
@@ -680,7 +854,7 @@ class MODDER_OT_PortMeshCrossGame(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return any(o.type == 'ARMATURE' for o in bpy.data.objects)
+        return poll_msg.armature_in_scene(cls, context)
 
     def invoke(self, context, event):
         self._lines = []
@@ -870,19 +1044,67 @@ class MODDER_OT_PortMeshCrossGame(bpy.types.Operator):
         # Copy unless told otherwise. The meshes come too: merging supernumerary
         # bones moves vertex groups, which live on the mesh, so an armature-only
         # copy would have nothing to transfer the weights on.
-        if not self.replace_original:
-            if self.skeleton_only:
-                arm = _armature_only_copy(arm)
-                arm.name = f"{arm.name.replace('_probe', '')}_{self.target_game}"
-                arm.data.name = arm.name
+        if self.replace_original:
+            return self._port(context, arm)
+        copy_col = None
+        if self.skeleton_only:
+            arm = _armature_only_copy(arm)
+            arm.name = f"{arm.name.replace('_probe', '')}_{self.target_game}"
+            arm.data.name = arm.name
+        else:
+            col = bpy.data.collections.get(self.source_collection)
+            if col is not None:
+                arm = duplicate_mesh_collection(col, arm, self.target_game)
+                copy_col = arm.users_collection[0]
             else:
-                col = bpy.data.collections.get(self.source_collection)
-                if col is not None:
-                    arm = duplicate_mesh_collection(col, arm, self.target_game)
-                else:
-                    arm = bone_utils.duplicate_armature_with_meshes(
-                        arm, f"{arm.name}_{self.target_game}")
+                arm = bone_utils.duplicate_armature_with_meshes(
+                    arm, f"{arm.name}_{self.target_game}")
+        # The copy has to exist before the plan can be checked -- the plan is built
+        # on it -- so every refusal in _port would otherwise leave a half-made second
+        # model in the scene.  Global undo is off for the run; nothing else takes it
+        # back.
+        try:
+            result = self._port(context, arm)
+        except Exception:
+            _discard_copy(arm, copy_col)
+            raise
+        if 'CANCELLED' in result:
+            _discard_copy(arm, copy_col)
+        return result
 
+    def _port(self, context, arm):
+        """_port_steps, plus taking the origin shift back if it does not finish.
+
+        The shift is applied before any validation, so on "Replace the Original"
+        every refusal below (blocked plan, missing reference, pose mismatch,
+        unbacked splits) used to leave the user's own rig moved by the origin
+        offset (1.0468 m for an MHRS pair) -- with global undo off for the run, so
+        nothing took it back.  A copy needs no such care: it is discarded whole.
+
+        An RE9 rig RE Mesh Editor showed in converted axes goes back to RE9's file
+        axes first, so everything below sees an ordinary RE9 rig and applies RE9's C
+        exactly once.  Treating it as family A instead was measured and rejected: a
+        bone REME left upright (no table entry, not coaxial -- ``L_Wep`` on the RE9
+        reference) has no RE9 orientation left to derive from, and came out 79.8
+        degrees off the unconverted rig's port.  Undone on a refusal, like the shift.
+        """
+        from .pose_ops import _has_reme_re9_axes
+
+        dz = origin_shift(self.source_game, self.target_game)
+        converted = (revert_reme_axes(arm)
+                     if self.source_game == "RE9" and _has_reme_re9_axes(arm) else None)
+        result = {'CANCELLED'}
+        try:
+            result = self._port_steps(context, arm)
+        finally:
+            if 'CANCELLED' in result and self.replace_original:
+                if dz:
+                    _translate_rig(arm, -dz)
+                if converted:
+                    _set_reme_axes(arm, converted)
+        return result
+
+    def _port_steps(self, context, arm):
         # Into the target's rig frame before anything measures against the
         # reference, which is imported in that frame.  Nothing downstream actually
         # depends on the order -- the insert rules are origin-agnostic (colocate and
@@ -895,6 +1117,7 @@ class MODDER_OT_PortMeshCrossGame(bpy.types.Operator):
             _translate_rig(arm, dz)
 
         ref_arm = None
+        probe = None
         if self.reference_skeleton and self.reference_skeleton != "NONE":
             ref_arm = import_reference_armature(_REF_DIRS.get(self.target_game, ""),
                                                 self.reference_skeleton)
@@ -941,6 +1164,7 @@ class MODDER_OT_PortMeshCrossGame(bpy.types.Operator):
                     {b.name: b.matrix_local.to_3x3() for b in ref_arm.data.bones},
                     cross)
                 bpy.data.objects.remove(probe, do_unlink=True)
+                probe = None
                 if correction_set.pose_mismatch_suspected:
                     # Over half the bones failed the signed-permutation gate, which
                     # means the two rigs are not in the same physical pose -- the
@@ -960,9 +1184,19 @@ class MODDER_OT_PortMeshCrossGame(bpy.types.Operator):
 
             base_names = set(cross.mapping.values()) | {n for n, _r, _a in plan.inserts}
             counts = execute_port(arm, plan, ref_arm, correction_set, base_names)
+            if self.target_game == "RE9":
+                # The port above put the rig in RE9's file axes, as it always has.
+                # Where the installed REME can convert them back on export, show it
+                # the way that REME imports RE9 -- the file comes out the same.
+                axes_mod = reme_re9_axes_module()
+                if axes_mod is not None:
+                    convert_to_reme_axes(arm, axes_mod)
         finally:
             if ref_arm is not None:
                 bpy.data.objects.remove(ref_arm, do_unlink=True)
+            # Only still set when _tpose or derive_bone_correction raised.
+            if probe is not None:
+                bpy.data.objects.remove(probe, do_unlink=True)
 
         msg = T("core.mesh_port_ops.done").format(
             game=self.target_game, name=arm.name, **counts)

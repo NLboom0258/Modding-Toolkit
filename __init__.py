@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Modding Toolkit",
     "author": "Dimcirui",
-    "version": (2, 7, 6),
+    "version": (2, 11, 1),
     "blender": (3, 0, 0),
     "location": "View3D > Sidebar > MOD Toolkit",
     "description": "Modding Toolkit for Capcom's games",
@@ -34,13 +34,25 @@ from .core import mrl3_port_ops
 from .core import ctc_port_ops
 from .core import mhwi_batch_port_ops
 from .core import pre_export_check_ops
+from .core import pre_export_fix_ops
 from .core import ref_model_ops
 from .core import stale_cleanup_ops
+from .core import shapekey_export
 from . import ui, games
+from .ui import game_sections
 
 class MT_Preferences(AddonPreferences):
     bl_idname = __name__
-    
+
+    # 侧栏顶部选中的游戏。放在偏好里而不是 Scene 上：切换游戏只是看哪一组按钮，
+    # 不该成为撤销步骤，也不该把 .blend 标成已修改；而且换文件时还记得。
+    active_game: EnumProperty(
+        name="Active Game",
+        description="The game whose tools the sidebar shows",
+        items=game_sections.game_items,
+        default=game_sections.default_game_index(),
+    )
+
     auto_check_update: BoolProperty(
         name="Auto-check for Update",
         description="If enabled, auto-check for updates using an interval",
@@ -95,14 +107,31 @@ class MT_Preferences(AddonPreferences):
         default=False,
     )
 
+    # MHWI：这个 mod 是否要求玩家装"解除部位物理上限"插件。装了以后 arm / wst / leg 与
+    # body 等同（300–511，各受 255 总数限制）。这是制作者对自己的 mod 做的决定，不是
+    # 某个 .blend 的属性，而且只会从"不要求"变成"要求"，所以放在偏好里永久保存，默认关。
+    # 移植物理骨骼、拆分并重命名物理骨的弹窗里都会显示并可直接切换。
+    mhwi_physics_unlocked: BoolProperty(
+        name="MHWI: Use the \"Remove Physics Limit\" Plugin",
+        description=(
+            "Use the \"Remove Physics Limit\" plugin, which lifts the per-part physics bone "
+            "limit: arm / wst / leg then use IDs 300-511 like body.\n"
+            "Off: arm / wst / leg simulate only IDs 150-199"
+        ),
+        default=False,
+    )
+
     def draw(self, context):
         layout = self.layout
         layout.prop(self, "show_console_on_batch_export")
         layout.prop(self, "show_personal_tools")
+        layout.prop(self, "mhwi_physics_unlocked",
+                    text=i18n.T("core.standard_ops.graft_unlocked_plugin"))
         addon_updater_ops.update_settings_ui(self, context)
         # Under the updater UI, because it is the updater's merge-never-delete
         # behaviour that creates the leftovers -- see core/stale_cleanup.py.
         stale_cleanup_ops.draw_preferences_row(layout)
+        stale_cleanup_ops.draw_kept_presets(layout)
 
 
 modules = [
@@ -141,8 +170,11 @@ modules = [
     # After mdf_port_ops: it imports that module's collection picker and shared
     # "Mod Root" row rather than restating either.
     pre_export_check_ops,
+    pre_export_fix_ops,
     ref_model_ops,
     stale_cleanup_ops,
+    # The SKS profile picker in the batch export dialogs.
+    shapekey_export,
     games,
     ui,
 ]
@@ -157,6 +189,24 @@ def register():
         mod.register()
 
     _start_chain_patch_timer()
+    if not bpy.app.timers.is_registered(_background_update_check):
+        bpy.app.timers.register(_background_update_check, first_interval=3.0)
+
+
+def _background_update_check():
+    """One-shot: honour the "Auto-check for Update" preference.
+
+    Nothing ever called addon_updater_ops.check_for_update_background(), so the
+    checkbox and its interval fields were drawn but no check ever ran.  The
+    updater's own docstring advises against doing it inside register(), hence
+    the timer.  With the preference off it returns without touching the network
+    (check_for_update_async bails on a disabled interval).
+    """
+    try:
+        addon_updater_ops.check_for_update_background()
+    except Exception as e:
+        print(f"[Modding-Toolkit] background update check skipped: {e}")
+    return None
 
 #: Remaining deferred attempts at patching RE Chain's import (see below).
 _chain_patch_retries = 20
@@ -212,12 +262,29 @@ def _start_chain_patch_timer():
         bpy.app.timers.register(_patch_chain_import, first_interval=0.5,
                                 persistent=True)
 
+def _unregister_step(label, fn):
+    """Run one unregister step; a failure is printed, not propagated.
+
+    Unregister used to be all-or-nothing: the first exception aborted every step
+    after it, leaving the rest registered, and the next enable then failed on
+    already-registered classes.  Measured trigger: when the updater bailed out of
+    its own register() (updater.error), unregister still unregistered its classes
+    and raised on the first one.
+    """
+    try:
+        fn()
+    except Exception as e:
+        print(f"[Modding-Toolkit] unregister {label} failed: {e}")
+
+
 def unregister():
-    addon_updater_ops.unregister()
-    bpy.utils.unregister_class(MT_Preferences)
+    _unregister_step("updater", addon_updater_ops.unregister)
+    _unregister_step("preferences", lambda: bpy.utils.unregister_class(MT_Preferences))
 
     if bpy.app.timers.is_registered(_patch_chain_import):
         bpy.app.timers.unregister(_patch_chain_import)
+    if bpy.app.timers.is_registered(_background_update_check):
+        bpy.app.timers.unregister(_background_update_check)
     try:
         from .core.re_chain_utils import (uninstall_fast_chain_import,
                                           uninstall_chain_type_sync)
@@ -227,7 +294,7 @@ def unregister():
         pass
 
     for mod in reversed(modules):
-        mod.unregister()
+        _unregister_step(mod.__name__.rsplit(".", 1)[-1], mod.unregister)
 
 if __name__ == "__main__":
     register()

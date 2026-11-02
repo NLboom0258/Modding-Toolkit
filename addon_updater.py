@@ -1058,6 +1058,18 @@ class SingletonUpdater:
                             print("Failed to pre-remove " + file)
                             self.print_trace()
 
+        # Modding-Toolkit: built-in presets the user edited are not overwritten.
+        # The rule lives in core/preset_guard.py; any failure here falls back to
+        # the stock behaviour rather than aborting the update.
+        try:
+            from .core import preset_guard
+            preset_hashes = preset_guard.load_hashes(merger, base)
+        except Exception:
+            preset_guard = None
+            preset_hashes = None
+            self.print_trace()
+        kept_presets = []
+
         # Walk through the temp addon sub folder for replacements
         # this implements the overwrite rules, which apply after
         # the above pre-removal rules. This also performs the
@@ -1076,16 +1088,55 @@ class SingletonUpdater:
                 dest_file = os.path.join(dest_path, file)
                 srcFile = os.path.join(path, file)
 
+                if os.path.isfile(dest_file) and preset_hashes is not None:
+                    rel = os.path.relpath(dest_file, base).replace(os.sep, "/")
+                    try:
+                        keep = preset_guard.is_user_modified(
+                            rel, dest_file, preset_hashes)
+                    except Exception:
+                        keep = False
+                        self.print_trace()
+                    if keep:
+                        kept_presets.append(rel)
+                        print("Kept user-edited preset, not overwritten: " + rel)
+                        # Modding-Toolkit: the new official version used to go
+                        # down with the staging folder, freezing the user on their
+                        # edit for good.  It is kept beside it as "<name>.json.new"
+                        # (not a *.json, so no dropdown lists it) for them to
+                        # compare or adopt; the preferences list these files.
+                        try:
+                            shutil.copy2(srcFile, dest_file + ".new")
+                        except OSError:
+                            self.print_trace()
+                        continue
+
                 # Decide to replace if file already exists, and copy new over.
                 if os.path.isfile(dest_file):
                     # Otherwise, check each file for overwrite pattern match.
+                    # Modding-Toolkit: patterns are also tried against the
+                    # '/'-joined path relative to the addon root -- stock code
+                    # matched the bare filename only, so "assets/*" never matched
+                    # and changed assets never reached updater users.
+                    rel_file = os.path.relpath(dest_file, base).replace(os.sep, "/")
                     replaced = False
                     for pattern in self._overwrite_patterns:
-                        if fnmatch.filter([file], pattern):
+                        if (fnmatch.fnmatch(file, pattern)
+                                or fnmatch.fnmatch(rel_file, pattern)):
                             replaced = True
                             break
                     if replaced:
-                        os.remove(dest_file)
+                        try:
+                            os.remove(dest_file)
+                        except OSError:
+                            # A DLL loaded through ctypes (texconv, GDeflate) can't
+                            # be deleted on Windows, but it can be renamed aside;
+                            # the leftover is not in MANIFEST.txt, so stale cleanup
+                            # takes it later.
+                            try:
+                                os.replace(dest_file, dest_file + ".old")
+                            except OSError:
+                                print("Could not replace (in use?): " + rel_file)
+                                continue
                         os.rename(srcFile, dest_file)
                         self.print_verbose(
                             "Overwrote file " + os.path.basename(dest_file))
@@ -1098,6 +1149,12 @@ class SingletonUpdater:
                     os.rename(srcFile, dest_file)
                     self.print_verbose(
                         "New file " + os.path.basename(dest_file))
+
+        # Recorded for a post-update notice; the new official versions of these
+        # files are discarded with the staging folder below.
+        if kept_presets:
+            self._json["kept_presets"] = kept_presets
+            self.save_updater_json()
 
         # now remove the temp staging folder and downloaded zip
         try:

@@ -5,6 +5,8 @@ merge facial bones, convert to T-pose -- and which ``mhws.preprocess_model`` alr
 copies internally as steps 3a-3c.  This exposes the same thing as a standalone button
 for every game, plus a third switch for auxiliary bones, and picks the character where
 a game ships more than one (RE4R has Leon / Ada / Ashley, RE9 has Leon / Grace).
+FBX bodies get one more switch, "create mesh collection", to stand in for the
+``.mesh`` collection RE Mesh Editor's importer used to make for them.
 
 Order is not arbitrary.  Merges run **before** the T-pose conversion: T-posing rewrites
 rest orientations, and doing it first would mean the merge -- which walks the parent
@@ -160,6 +162,40 @@ def import_model(game, ident):
     return next((o for o in made if o.type == 'ARMATURE'), None)
 
 
+def _is_fbx_model(game, ident):
+    entry = _entry(game, ident)
+    return entry is not None and entry[2] == "fbx"
+
+
+def move_into_mesh_collection(objects, name):
+    """Create an RE Mesh collection called *name* and move *objects* into it.
+
+    The FBX bodies need this and the others do not: RE Mesh Editor's own importer
+    already puts what it reads into a ``.mesh`` collection, which is where these
+    bodies used to come from before they were bundled as FBX.  Without it the
+    imported body sits loose in the active collection, and every RE Mesh Editor
+    tool that asks for a mesh collection (the exporter, the MDF panel) cannot see it.
+
+    The collection is made by RE Mesh Editor's ``create_mesh_collection`` rather
+    than by hand, so its ``~TYPE`` tag and colour are whatever that addon writes
+    today.  Returns the collection, or None when the operator is not registered.
+    """
+    if not re_mesh_op_available("create_mesh_collection"):
+        return None
+    before = set(bpy.data.collections)
+    call_re_mesh_op("create_mesh_collection", 'EXEC_DEFAULT',
+                    collectionName=name, lodCount=1)
+    made = [c for c in bpy.data.collections if c not in before]
+    if not made:
+        return None
+    col = made[0]
+    for obj in objects:
+        for old in list(obj.users_collection):
+            old.objects.unlink(obj)
+        col.objects.link(obj)
+    return col
+
+
 def _parents(arm_obj):
     return {b.name: (b.parent.name if b.parent else None) for b in arm_obj.data.bones}
 
@@ -208,16 +244,20 @@ def apply_merges(arm_obj, game, merge_facial, merge_aux):
 class MODDER_OT_ImportReferenceModel(bpy.types.Operator):
     bl_idname = "modder.import_reference_model"
     bl_label = "Import Reference Model"
-    #: No 'UNDO' for the same reason as the mesh port: the merges go through
-    #: ``bpy.data``, so a redo-panel re-run would import a second copy rather than
-    #: revise the first.
-    bl_options = {'REGISTER'}
+    #: 'UNDO' is required, not optional.  Without it this operator pushes no undo
+    #: step at all -- the FBX importer and the other operators it calls are nested
+    #: Python calls, and Blender suppresses undo pushes for those -- so the imported
+    #: objects never enter the undo stack, and the next Ctrl+Z crashes Blender
+    #: (EXCEPTION_ACCESS_VIOLATION in outliner_draw_tree_element, reproduced on 5.1
+    #: with every option combination, the bare FBX import included).
+    bl_options = {'REGISTER', 'UNDO'}
 
     source_game: bpy.props.StringProperty(options={'HIDDEN'})
     model: bpy.props.EnumProperty(name="Model", items=_model_items)
     to_tpose: bpy.props.BoolProperty(name="To T-Pose", default=True)
     merge_facial: bpy.props.BoolProperty(name="Merge Facial Bones", default=True)
     merge_aux: bpy.props.BoolProperty(name="Merge Auxiliary Bones", default=False)
+    mesh_collection: bpy.props.BoolProperty(name="Create Mesh Collection", default=True)
 
     @classmethod
     def description(cls, context, properties):
@@ -266,6 +306,15 @@ class MODDER_OT_ImportReferenceModel(bpy.types.Operator):
             if not aux.enabled:
                 layout.label(text=T("core.ref_model_ops.no_native_skeleton"), icon='INFO')
 
+        # Outside the OPTIONLESS_GAMES block: MHRS has no other options, but its
+        # body is FBX too and needs the collection as much as the others.
+        if _is_fbx_model(game, self._valid_model()):
+            row = layout.row()
+            row.enabled = re_mesh_op_available("create_mesh_collection")
+            row.prop(self, "mesh_collection", text=T("core.ref_model_ops.mesh_collection"))
+            if not row.enabled:
+                layout.label(text=T("ui.main_panel.label_need_re_mesh_editor"), icon='INFO')
+
         ok, reason = model_available(game, self._valid_model())
         if not ok:
             layout.label(text=T(reason), icon='ERROR')
@@ -278,6 +327,7 @@ class MODDER_OT_ImportReferenceModel(bpy.types.Operator):
             self.report({'ERROR'}, T(reason))
             return {'CANCELLED'}
 
+        before = {o.name_full for o in bpy.data.objects}
         arm = import_model(game, model)
         if arm is None:
             self.report({'ERROR'}, T("core.ref_model_ops.import_failed"))
@@ -294,6 +344,26 @@ class MODDER_OT_ImportReferenceModel(bpy.types.Operator):
                 context.view_layer.objects.active = arm
                 bpy.ops.modder.ree_to_tpose()
                 posed = True
+
+        # The RE9 bodies are FBX in RE9's file axes.  Where the installed REME
+        # converts RE9 axes on import (Dimcirui fork), show this one the same way, so
+        # it matches the user's own RE9 imports.  After the merges and the T-pose, as
+        # the port into RE9 does: those keep their validated file-axes path, and the
+        # conversion leaves the file axes -- what REME exports -- exactly as they are.
+        if game == "RE9" and _is_fbx_model(game, model):
+            from .mesh_port_ops import convert_to_reme_axes, reme_re9_axes_module
+            axes_mod = reme_re9_axes_module()
+            if axes_mod is not None:
+                convert_to_reme_axes(arm, axes_mod)
+
+        # Last, so it collects whatever the merges and the T-pose left behind.
+        # Compared by name rather than by object: the T-pose step rebinds meshes,
+        # and a set of the objects from before would hold references to freed data.
+        if self.mesh_collection and _is_fbx_model(game, model):
+            made = [o for o in bpy.data.objects if o.name_full not in before]
+            _subdir, filename = _entry(game, model)[3]
+            if move_into_mesh_collection(made, os.path.splitext(filename)[0]) is None:
+                self.report({'WARNING'}, T("core.ref_model_ops.mesh_collection_skipped"))
 
         self.report({'INFO'}, T("core.ref_model_ops.done").format(
             name=arm.name, facial=facial, aux=aux,

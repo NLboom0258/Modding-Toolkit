@@ -30,6 +30,11 @@ class MODDER_OT_CleanStaleFiles(bpy.types.Operator):
         return T("core.stale_cleanup_ops.desc")
 
     def invoke(self, context, event):
+        _lines, problem = stale_cleanup.manifest_status()
+        if problem and problem[0] == "stale":
+            self.report({'ERROR'}, T("core.stale_cleanup_ops.stale_manifest").format(
+                listed=problem[1] or "?", installed=problem[2] or "?"))
+            return {'CANCELLED'}
         self._manifest = stale_cleanup.read_manifest()
         if self._manifest is None:
             self.report({'ERROR'}, T("core.stale_cleanup_ops.no_manifest"))
@@ -46,7 +51,7 @@ class MODDER_OT_CleanStaleFiles(bpy.types.Operator):
         for rel in self._stale:
             print(f"[Modding-Toolkit]   stale: {rel}")
         for rel in self._kept:
-            print(f"[Modding-Toolkit]   kept (assets/presets/): {rel}")
+            print(f"[Modding-Toolkit]   kept (user folder): {rel}")
         return context.window_manager.invoke_props_dialog(self, width=460)
 
     def draw(self, context):
@@ -96,7 +101,49 @@ def draw_preferences_row(layout):
                  text=T("core.stale_cleanup_ops.button"), icon='TRASH')
 
 
-classes = [MODDER_OT_CleanStaleFiles]
+def _kept_presets():
+    """Presets the last update left as the user had edited them, or []."""
+    try:
+        from .. import addon_updater_ops
+        return list(addon_updater_ops.updater.json.get("kept_presets", []))
+    except Exception:
+        return []
+
+
+class MODDER_OT_DismissKeptPresets(bpy.types.Operator):
+    bl_idname = "modder.dismiss_kept_presets"
+    bl_label = "Dismiss"
+    bl_options = {'INTERNAL'}
+
+    def execute(self, context):
+        try:
+            from .. import addon_updater_ops
+            addon_updater_ops.updater.json.pop("kept_presets", None)
+            addon_updater_ops.updater.save_updater_json()
+        except Exception as e:
+            self.report({'WARNING'}, str(e))
+        return {'FINISHED'}
+
+
+def draw_kept_presets(layout):
+    """The updater records which edited presets it kept, but nothing showed it."""
+    kept = _kept_presets()
+    if not kept:
+        return
+    box = layout.box()
+    box.label(text=T("core.stale_cleanup_ops.kept_presets_title").format(n=len(kept)),
+              icon='INFO')
+    col = box.column(align=True)
+    for rel in kept[:8]:
+        col.label(text=rel)
+    if len(kept) > 8:
+        col.label(text=f"... (+{len(kept) - 8})")
+    box.label(text=T("core.stale_cleanup_ops.kept_presets_hint"))
+    box.operator(MODDER_OT_DismissKeptPresets.bl_idname,
+                 text=T("core.stale_cleanup_ops.kept_presets_dismiss"), icon='CHECKMARK')
+
+
+classes = [MODDER_OT_CleanStaleFiles, MODDER_OT_DismissKeptPresets]
 
 
 def register():

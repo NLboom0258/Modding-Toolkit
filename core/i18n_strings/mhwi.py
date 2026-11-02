@@ -34,14 +34,33 @@ STRINGS = {
         "EN": "Aligned: {aligned}, skipped physics bones: {skip}",
         "ZH": "对齐: {aligned}, 跳过物理骨: {skip}"},
 
+    # ── MHWI_OT_PreprocessModel ──────────────────────────────────────────────
+    "mhwi.operators.preprocess_model_desc": {
+        "EN": "Auto-detect MMD/VRChat -> pose correction -> import the MHWI reference body -> lift it so its "
+              "soles stand on the ground -> arm-height scale and Y-offset calibration -> skeleton alignment "
+              "-> lower both back together.\n"
+              "The reference ends up reshaped to the model's proportions. Requires the MHW Model Editor add-on.",
+        "ZH": "自动检测 MMD/VRChat → 姿态修正 → 导入猎人参考身体 → 把它抬到脚底着地 → 按手臂高度缩放、"
+              "校准 Y 偏移 → 骨架对齐 → 两边一起放回原位。\n"
+              "对齐后参考骨架会被吸附成这具模型的比例。需要 MHW Model Editor 插件。"},
+    "mhwi.operators.no_mhwi_preset_detected": {
+        "EN": "Could not auto-detect an MHWI bone preset; please manually select the target preset in the panel "
+              "and retry",
+        "ZH": "未能自动检测到猎人骨骼预设，请在面板中手动选择目标预设后重试"},
+
     # ── MHWI_OT_AutoCreateChains ─────────────────────────────────────────────
     "mhwi.operators.auto_create_chains_desc": {
-        "EN": "In Pose Mode, automatically create a CTC Chain for each linear chain based on "
-              "the chain_role property of physics bones.\n"
-              "Chains with branches are skipped and reported; resolve branches manually, then run again.\n"
+        "EN": "In Pose Mode, automatically create CTC Chains from the chain_role property of "
+              "physics bones.\n"
+              "A CTC chain must be linear, so forks are split: a branch marked as the main-chain "
+              "continuation (or picked by Graft) carries on through the fork, every other branch "
+              "becomes its own chain. Only one level of branches is built; sub-branches tagged "
+              "no_chain are left without a chain and reported.\n"
               "Requires the MHW Model Editor add-on.",
-        "ZH": "在姿态模式下，根据物理骨骼的 chain_role 属性自动为每条线性链创建 CTC Chain。\n"
-              "存在分叉的链会被跳过并报告，需用户手动处理分叉后再次运行。\n"
+        "ZH": "在姿态模式下，根据物理骨骼的 chain_role 属性自动创建 CTC Chain。\n"
+              "CTC 的一条链必须是线性的，所以分叉会被拆开：标为主链延伸（或移植时自动选定）的一支"
+              "穿过分叉继续，其余分支各自另起一条链。只生成单层分支；标为 no_chain 的子分支"
+              "不生成链，并会在结果里报告。\n"
               "需要 MHW Model Editor 插件。"},
     "mhwi.operators.auto_refresh_name": {
         "EN": "Create Directly (auto-refresh bone colors)", "ZH": "直接创建（自动刷新骨骼颜色）"},
@@ -56,11 +75,6 @@ STRINGS = {
     "mhwi.operators.no_markers_hint": {
         "EN": "It's recommended to mark chains manually with the physics chain tools first.",
         "ZH": "建议先使用物理链工具手动标记后再使用此功能。"},
-    "mhwi.operators.branch_detected": {
-        "EN": "{n} chain(s) have branches ({names}); CTC doesn't support branching chains. "
-              "Mark the branch direction with \"Mark as Main Chain Continue\" and try again",
-        "ZH": "检测到 {n} 条链存在分叉（{names}），CTC 不支持分叉链，"
-              "请使用【标记为主链延伸】标记分叉方向后重试"},
     "mhwi.operators.auto_create_ctc_failed": {
         "EN": "Failed to auto-create CTC Collection", "ZH": "自动创建 CTC Collection 失败"},
     "mhwi.operators.collection_not_found": {
@@ -75,80 +89,111 @@ STRINGS = {
         "EN": "{n} chain(s) created", "ZH": "已创建 {n} 条链"},
     "mhwi.operators.chains_skipped_existing": {
         "EN": "{n} already existed, skipped", "ZH": "已存在跳过 {n} 条"},
-    "mhwi.operators.chains_skipped_branch": {
-        "EN": "{n} skipped due to branching: {names}", "ZH": "因分叉跳过 {n} 条: {names}"},
+    "mhwi.operators.chains_failed": {
+        "EN": "{n} failed to create: {names}", "ZH": "创建失败 {n} 条: {names}"},
+    "mhwi.operators.chains_too_short": {
+        "EN": "{n} too short (a chain needs at least 2 bones): {names}",
+        "ZH": "太短跳过 {n} 条（一条链至少 2 根骨）: {names}"},
+    "mhwi.operators.chains_no_chain": {
+        "EN": "{n} sub-branch(es) got no chain (bones and weights kept, physics-free): {names}",
+        "ZH": "{n} 处子分支不生成链（骨骼与权重保留，无物理）: {names}"},
     "mhwi.operators.list_sep": {"EN": ", ", "ZH": "，"},
 
     # ── MHWI_OT_SplitPhysicsBones ────────────────────────────────────────────
     "mhwi.operators.split_physics_bones_desc": {
-        "EN": "Split physics bones into separate armatures by body region (bones are not renamed).\n"
-              "Armature object names get a region suffix (_body/_arm/_wst/_leg).\n"
-              "When total bone count is <=255, direct rename or split are both available; >255 requires splitting.",
-        "ZH": "将物理骨骼按部位拆分到不同骨架（不重命名骨骼）。\n"
-              "骨架对象名会加上部位后缀（_body/_arm/_wst/_leg）。\n"
-              "骨架总数 ≤255 时可选直接重命名或拆分；>255 时必须拆分。"},
-    "mhwi.operators.fast_mode_direct": {"EN": "Direct Rename", "ZH": "直接重命名"},
-    "mhwi.operators.fast_mode_direct_desc": {
-        "EN": "One step: rename all physics bones directly into the 300-512 range",
-        "ZH": "一步到位，全部物理骨命名到 300~512"},
-    "mhwi.operators.fast_mode_split": {"EN": "Split into Multiple Regions", "ZH": "拆分为多个部位"},
-    "mhwi.operators.fast_mode_split_desc": {
-        "EN": "Split the armature by region, then process with \"Batch Rename\" afterward",
-        "ZH": "按部位拆分骨架，后续用「一键重命名」处理"},
+        "EN": "Rename physics bones to MhBone_xxx; split into parts (meshes included) only when they do not fit.\n"
+              "Already processed and it fits: renumbered incrementally right away -- bones whose ID fits keep it.\n"
+              "Otherwise a dialog asks what to make of it: when using the \"Remove Physics Limit\" plugin, everything follows the\n"
+              "no-limit rules (300-511); without it, choose body (no limit) or another part (physics 150-199,\n"
+              "tails 200-245 then 260-299). Body over 255 bones in total is split; another part that does not fit\n"
+              "is refused -- make it body, use the plugin, or simplify it yourself.\n"
+              "With several armatures selected, the processed ones that fit are renumbered and the rest listed.",
+        "ZH": "把物理骨重命名为 MhBone_xxx；装不下时才按部位拆分（网格一起处理）。\n"
+              "已处理过且装得下：直接增量重新编号——编号已合规的骨保持不动。\n"
+              "其余情况弹窗确认要做成什么：使用「解除物理上限」插件时一律按无限制规则（300~511）；\n"
+              "不使用时选 body（无限制）或其他部位（物理 150~199，末端 200~245、满了接 260~299）。\n"
+              "body 总骨数超 255 时拆分；其他部位装不下时不执行——改做 body、使用插件或自行简化。\n"
+              "同时选中多副骨架时：已处理过且装得下的重新编号，其余列出来。"},
+    "mhwi.operators.target_body": {"EN": "Body", "ZH": "body"},
+    "mhwi.operators.target_body_desc": {
+        "EN": "No ID range limit: physics bones go to 300-511; over 255 bones in total is split into parts",
+        "ZH": "无编号范围限制：物理骨编到 300~511；总骨数超过 255 时拆分到多个部位"},
+    "mhwi.operators.target_part": {"EN": "Other part (arm / wst / leg)", "ZH": "其他部位（arm / wst / leg）"},
+    "mhwi.operators.target_part_desc": {
+        "EN": "Range-limited: only 150-199 has physics (50 bones); tails 200-245 then 260-299 (86)",
+        "ZH": "有范围限制：只有 150~199 有物理（50 根）；末端 200~245、满了接 260~299（86 根）"},
+    "mhwi.operators.processed_header": {
+        "EN": "Already processed ({state}), but renumbering by its current IDs does not fit:",
+        "ZH": "这副骨架已处理过（{state}），但按现有编号直接重命名装不下："},
+    "mhwi.operators.outcome_rename": {
+        "EN": "Fits: renamed by {rule} rules, no split",
+        "ZH": "装得下：按{rule}规则直接重命名，不拆分"},
+    "mhwi.operators.outcome_split": {
+        "EN": "Over 255 bones in total: split into parts, then rename",
+        "ZH": "总骨数超过 255：拆分到多个部位后重命名"},
+    "mhwi.operators.overflow_resplit": {
+        "EN": "This already-processed armature is split as a whole set: it becomes body",
+        "ZH": "这副已处理过的骨架会被当作整套拆分：它自己变成 body"},
+    "mhwi.operators.outcome_block": {
+        "EN": "Does not fit a range-limited part:", "ZH": "做成有范围限制的部位装不下："},
+    "mhwi.operators.block_option_body": {
+        "EN": "- make it body instead (it can be split there)", "ZH": "· 改为做成 body（那边可以拆分）"},
+    "mhwi.operators.block_option_plugin": {
+        "EN": "- or use the \"Remove Physics Limit\" plugin (tick it above)", "ZH": "· 或者使用「解除物理上限」插件（勾选上方选项）"},
+    "mhwi.operators.block_option_simplify": {
+        "EN": "- or simplify the physics bones yourself", "ZH": "· 或者自行简化物理骨"},
+    "mhwi.operators.block_noop": {
+        "EN": "OK does nothing in this state -- change the choice above or cancel",
+        "ZH": "这种情况下点确定不会执行任何操作，请调整上方选项或取消"},
+    "mhwi.operators.renumber_only": {
+        "EN": "{name}: renamed by {rule} rules without splitting ({changed} renamed, {kept} kept, {fail} failed)",
+        "ZH": "{name}：按{rule}规则重命名，未拆分（改名 {changed} 根，保留 {kept} 根，失败 {fail} 根）"},
+    "mhwi.operators.renumber_many_done": {
+        "EN": "Renumbered {n} armature(s): {changed} renamed, {kept} kept, {fail} failed",
+        "ZH": "重新编号 {n} 副骨架：改名 {changed} 根，保留 {kept} 根，失败 {fail} 根"},
+    "mhwi.operators.renumber_need_split": {
+        "EN": "Not touched, these need splitting -- select each on its own: {names}",
+        "ZH": "以下骨架需要拆分，未处理，请逐个单独选中：{names}"},
+    "mhwi.operators.rule_body": {"EN": "no-range-limit", "ZH": "无范围限制"},
+    "mhwi.operators.rule_slot": {"EN": "range-limited", "ZH": "有范围限制"},
+    "mhwi.operators.state_partial": {"EN": "partly renamed", "ZH": "部分已重命名"},
+    "mhwi.operators.state_normalized": {"EN": "fully renamed", "ZH": "已全部重命名"},
+    "mhwi.operators.overflow_physics": {"EN": "Physics bones {n}/{cap}", "ZH": "物理骨 {n}/{cap}"},
+    "mhwi.operators.overflow_tail": {"EN": "Tail bones {n}/{cap}", "ZH": "末端骨 {n}/{cap}"},
+    "mhwi.operators.overflow_total": {"EN": "Total bones {n}/{cap}", "ZH": "总骨数 {n}/{cap}"},
     "mhwi.operators.region_head": {"EN": "Head", "ZH": "头部"},
-    "mhwi.operators.region_arms": {"EN": "Arms", "ZH": "双臂"},
-    "mhwi.operators.region_torso": {"EN": "Torso", "ZH": "躯干"},
-    "mhwi.operators.region_legs": {"EN": "Legs", "ZH": "双腿"},
+    "mhwi.operators.region_upper": {"EN": "Upper Body", "ZH": "上半身"},
+    "mhwi.operators.region_lower": {"EN": "Lower Body", "ZH": "下半身"},
     "mhwi.operators.col_region": {"EN": "Region", "ZH": "区域"},
     "mhwi.operators.col_bone_count": {"EN": "Physics Bones", "ZH": "物理骨数"},
     "mhwi.operators.col_target_slot": {"EN": "Target Slot", "ZH": "目标部位"},
-    "mhwi.operators.capacity_status": {"EN": "Capacity status:", "ZH": "容量状态："},
-    "mhwi.operators.capacity_exceeded": {
-        "EN": "Warning: {slot} exceeds capacity limit, please adjust allocation",
-        "ZH": "警告：{slot} 超出容量限制，请调整分配"},
     "mhwi.operators.cannot_load_world_preset": {
         "EN": "Cannot load the Monster Hunter World preset", "ZH": "无法加载怪猎世界预设"},
     "mhwi.operators.no_physics_bones_found": {
         "EN": "No physics bones found to process", "ZH": "未找到需要处理的物理骨骼"},
-    "mhwi.operators.isolated_physics_bones": {
-        "EN": "All physics bones are isolated bones, cannot auto-assign regions",
-        "ZH": "物理骨骼均为孤立骨骼，无法自动分配区域"},
-    "mhwi.operators.fast_path_prompt": {
-        "EN": "Physics bone count is within the body limit — how to proceed?",
-        "ZH": "物理骨数未超出 body 限制范围，如何处理？"},
     "mhwi.operators.confirm_region_targets": {
         "EN": "Please confirm the target slot for each region:", "ZH": "请确认各区域的目标部位："},
-    "mhwi.operators.over_255_prompt": {
-        "EN": "Total bone count exceeds 255; please assign a target slot for each region:",
-        "ZH": "总骨骼数超过 255，请分配各区域的目标部位："},
-    "mhwi.operators.exceeds_bone_count": {
-        "EN": "Currently over by {n} bone(s) (ID range insufficient); please use split mode instead",
-        "ZH": "当前超出了 {n} 个骨骼（ID 范围不足），请改用拆分模式"},
     "mhwi.operators.rename_done": {
         "EN": "Rename complete: {success} succeeded, {fail} failed",
         "ZH": "重命名完成：成功 {success} 根，失败 {fail} 根"},
-    "mhwi.operators.slot_capacity_exceeded": {
-        "EN": "{slot} exceeds capacity limit ({count}/{cap}); please adjust allocation first",
-        "ZH": "{slot} 超出容量限制（{count}/{cap}），请先调整分配"},
+    "mhwi.operators.split_overflow": {
+        "EN": "{n} bone(s) fit in no part (largest: {names}); decimate when grafting, or use the \"Remove Physics Limit\" plugin",
+        "ZH": "还有 {n} 根骨放不下（最大的几组：{names}）；移植时勾选抽稀，或使用「解除物理上限」插件"},
+    "mhwi.operators.split_spare_note": {
+        "EN": "What does not fit its region's part goes to {slot}, then to any part with room",
+        "ZH": "放不进本区域部位的先进 {slot}，再进任何还有空的部位"},
+    "mhwi.operators.split_auto_pack": {
+        "EN": "Without the plugin, groups are packed by size: arm / wst / leg first, the rest into body",
+        "ZH": "未装插件：按大小自动装箱，arm / wst / leg 优先，放不下的进 body"},
+    "mhwi.operators.split_mesh_summary": {
+        "EN": "Meshes: {moved} moved whole, {split} split by face; {verts} vertex(es) had another part's physics weight moved to its anchor bone",
+        "ZH": "网格：整块移走 {moved} 个，按面拆开 {split} 个；{verts} 个顶点上别的部位的物理权重改挂到锚点骨"},
+    "mhwi.operators.split_no_mod3": {
+        "EN": "The armature is not inside a .mod3 collection; each new part was put in a plain collection — move it into its own .mod3 collection before exporting",
+        "ZH": "骨架不在 .mod3 集合里，新部位放进了普通集合；导出前请各自放进单独的 .mod3 集合"},
     "mhwi.operators.split_done": {
         "EN": "Split complete: {n} armature(s) generated ({names})",
         "ZH": "拆分完成：已生成 {n} 个骨架（{names}）"},
-
-    # ── MHWI_OT_BatchRenamePhysicsBones ──────────────────────────────────────
-    "mhwi.operators.batch_rename_desc": {
-        "EN": "Batch-rename physics bones on all selected armatures to the MhBone_xxx format.\n"
-              "Armatures with names containing _body use the 300-512 range; others use 150-200 "
-              "(non-tail) + 201-245 (tail).\n"
-              "Run \"Split Physics Bones\" first to split armatures, then run this operation.",
-        "ZH": "对选中的所有骨架批量重命名物理骨骼为 MhBone_xxx 格式。\n"
-              "名称含 _body 的骨架使用 300~512 范围；其他骨架使用 150~200（非尾骨）+ 201~245（尾骨）范围。\n"
-              "请先用「拆分物理骨」完成骨架拆分，再运行此操作。"},
-    "mhwi.operators.warning_label": {"EN": "Warning", "ZH": "警告"},
-    "mhwi.operators.batch_rename_over_limit": {
-        "EN": "Currently over by {n} bone(s); recommend simplifying bones before renaming.",
-        "ZH": "当前超出了 {n} 个骨骼，建议先简化骨骼后再进行命名。"},
-    "mhwi.operators.confirm_rename_anyway": {
-        "EN": "Proceed with renaming anyway?", "ZH": "确定仍然进行重命名？"},
 
     # ══════════════════════════════════════════════════════════════════════
     # games/mhwi/batch_import.py
@@ -390,8 +435,6 @@ STRINGS = {
         "EN": "e.g. pl/f_equip/pl042_0500/helm/tex", "ZH": "例：pl/f_equip/pl042_0500/helm/tex"},
     "mhwi.mrl3_tex_processor_ui.select_mrl3_then_refresh": {
         "EN": "Select an MRL3 collection and click Refresh", "ZH": "选择 MRL3 集合并点击 Refresh"},
-    "mhwi.mrl3_tex_processor_ui.use_direct_instead": {"EN": "Use DIRECT instead", "ZH": "请改用 DIRECT"},
-    "mhwi.mrl3_tex_processor_ui.no_default": {"EN": "(no default)", "ZH": "(无默认)"},
 
     # ══════════════════════════════════════════════════════════════════════
     # games/mhwi/shader_defs.py — packed shader sockets
@@ -472,4 +515,29 @@ STRINGS = {
                                   "ZH": "已将 {n} 个网格的显示条件设为 {gid}"},
     "mhwi.operators.disp_renamed_suffix": {"EN": "; {n} renamed to mod3 format first",
                                             "ZH": "；其中 {n} 个先重命名为 mod3 格式"},
+    "mhwi.operators.add_facial_bones_desc": {
+        "EN": "Graft the facial bones from the native character skeleton onto the current skeleton",
+        "ZH": "将原生角色骨架的表情骨骼移植到当前骨架"},
+    "mhwi.operators.facial_bones_warning": {
+        "EN": "Using this feature will clear any existing facial bones!", "ZH": "使用该功能将清除原本存在的表情骨！"},
+    # The face motions set every facial bone's local position outright, so a bone moved (or the face scaled)
+    # relative to its parent gets pulled back in game and the mesh deforms; moving / rotating the whole face
+    # together with the head bone 004 is fine.
+    "mhwi.operators.facial_bones_keep_positions": {
+        "EN": "Avoid moving or scaling facial bones (moving / rotating them together with 004 is fine) unless the face actually deforms in game",
+        "ZH": "尽量不要调整表情骨位置或整体缩放（可连同 004 一起平移、旋转），除非实际游戏内出现变形"},
+    "mhwi.operators.facial_target_armature": {"EN": "Skeleton", "ZH": "骨架"},
+    "mhwi.operators.facial_no_reference": {
+        "EN": "Select a reference character (add the file to assets/reference_skeletons/mhwi/)",
+        "ZH": "请选择参考角色（添加文件到 assets/reference_skeletons/mhwi/）"},
+    "mhwi.operators.facial_no_head_bone": {
+        "EN": "Head bone {bone} not found on the target skeleton; facial bones attach to it",
+        "ZH": "目标骨架中未找到头骨 {bone}，表情骨需要挂在它下面"},
+    "mhwi.operators.facial_ref_import_failed": {
+        "EN": "Failed to import reference skeleton: {name}", "ZH": "参考骨架导入失败: {name}"},
+    "mhwi.operators.facial_ref_empty": {
+        "EN": "No facial bones found under {bone} on the reference skeleton",
+        "ZH": "参考骨架中 {bone} 之下没有表情骨"},
+    "mhwi.operators.facial_ref_female": {"EN": "Female", "ZH": "女性"},
+    "mhwi.operators.facial_ref_male": {"EN": "Male", "ZH": "男性"},
 }

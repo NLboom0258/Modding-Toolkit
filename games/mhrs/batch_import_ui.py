@@ -2,9 +2,11 @@ import bpy
 from collections import defaultdict
 
 from ...core.i18n import T
+from ...core import mod_root
 from .batch_import import FT_ORDER
 from .batch_export import _load_scheme, get_mhrs_genders, MHRS_PARTS, MHRS_PART_LABEL_KEYS
 from .batch_export_ui import _FILETYPE_ICONS
+from ...core import optional_editors
 
 IMPORTER_WINDOW_WIDTH = 560
 
@@ -48,8 +50,9 @@ def _build_group_map(items):
     result = {}
     for gkey, gp_map in raw.items():
         result[gkey] = {
-            gp: sorted(its, key=lambda x: FT_ORDER.index(x.filetype)
-                       if x.filetype in FT_ORDER else 99)
+            gp: sorted(its, key=lambda x: (FT_ORDER.index(optional_editors.slot_type(x.filetype))
+                                           if optional_editors.slot_type(x.filetype) in FT_ORDER else 99,
+                                           x.filetype))
             for gp, its in gp_map.items()
         }
     return result
@@ -60,7 +63,10 @@ def _build_group_map(items):
 class MHRS_OT_BatchImportDialog(bpy.types.Operator):
     bl_idname  = "mhrs.batch_import_dialog"
     bl_label   = "MHRS Batch Importer"
-    bl_options = {'REGISTER'}
+    # UNDO 必须加在这个入口上：execute 里的 mhrs.batch_import 是嵌套的 Python 调用，
+    # Blender 会抑制它的撤销推送。没有它，导入的东西完全不进撤销栈，下一次 Ctrl+Z
+    # 直接崩（与 modder.import_reference_model 同一个问题，5.1 实测）。
+    bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
     def description(cls, context, properties):
@@ -78,7 +84,7 @@ class MHRS_OT_BatchImportDialog(bpy.types.Operator):
         layout.prop(settings, "mhrs_armor_scheme", text=T("core.export_prep.armor_pack"))
 
         # ── Mod Root ──
-        natives_root = scene.get("mhrs_natives_root", "")
+        natives_root = mod_root.read(scene, "mhrs_natives_root")
         row = layout.row(align=True)
         row.operator("mhrs.set_natives_root", text="Mod Root", icon='FILE_FOLDER')
         if natives_root:
@@ -156,7 +162,8 @@ class MHRS_OT_BatchImportDialog(bpy.types.Operator):
                 row.label(text=f"{T(MHRS_PART_LABEL_KEYS.get(part, part))}  ({_gender_label(gender)})")
                 for it in part_items:
                     row.prop(it, "enabled", text=it.filetype.upper(),
-                             icon=_FILETYPE_ICONS.get(it.filetype, 'FILE'), toggle=True)
+                             icon=_FILETYPE_ICONS.get(optional_editors.slot_type(it.filetype),
+                                                      'CONSTRAINT_BONE'), toggle=True)
 
     def execute(self, context):
         bpy.ops.mhrs.batch_import()

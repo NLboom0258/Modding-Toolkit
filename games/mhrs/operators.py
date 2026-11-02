@@ -1,6 +1,7 @@
 import bpy
 
 from ...core.i18n import T
+from ...core import poll_msg
 from ...core.re_chain_utils import REChainConfig, auto_create_re_chains, _is_valid_chain_collection
 from ...core.standard_ops import _run_bone_color_refresh
 
@@ -76,11 +77,8 @@ class MHRS_OT_AutoCreateChains(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return (context.mode == 'POSE'
-                and context.active_object is not None
-                and context.active_object.type == 'ARMATURE'
-                and hasattr(bpy.ops, 're_chain')
-                and hasattr(bpy.ops.re_chain, 'create_chain_settings'))
+        return (poll_msg.pose_mode_armature(cls, context)
+                and poll_msg.addon(cls, 're_chain', 'create_chain_settings', "RE Chain Editor"))
 
     def invoke(self, context, event):
         arm = context.active_object
@@ -151,7 +149,7 @@ class MHRS_OT_AutoCreateChains(bpy.types.Operator):
             collider_filter_path="",
             apply_angle_ramp=self.apply_angle_ramp,
         )
-        status = auto_create_re_chains(context, armature, config)
+        status = auto_create_re_chains(context, armature, config, report=self.report)
         if status == {'CANCELLED'}:
             self.report({'ERROR'}, T("mhrs.operators.create_failed"))
             return {'CANCELLED'}

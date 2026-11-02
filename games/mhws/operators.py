@@ -3,6 +3,8 @@ import sys
 import time
 import bpy
 from ...core.i18n import T
+from ...core import mesh_utils
+from ...core import poll_msg
 from ...core import weight_utils, facial_maps
 from ...core import bone_utils
 from ...core import ref_skeleton
@@ -42,9 +44,13 @@ class MHWS_OT_EndfieldFaceRename(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return any(o.type == 'MESH' for o in context.selected_objects)
+        return poll_msg.selected_mesh(cls, context)
 
     def execute(self, context):
+        with mesh_utils.object_mode(context):
+            return self._execute(context)
+
+    def _execute(self, context):
         total = 0
         for obj in context.selected_objects:
             if obj.type != 'MESH':
@@ -74,24 +80,28 @@ def _transfer_partial(obj, source_names, targets_with_ratios):
             tgt_vg = obj.vertex_groups.new(name=tgt_name)
         target_vgs.append((tgt_vg, ratio))
 
-    for src_name in source_names:
-        src_vg = obj.vertex_groups.get(src_name)
-        if src_vg is None:
-            continue
-        for vert in obj.data.vertices:
-            try:
-                src_w = src_vg.weight(vert.index)
-            except RuntimeError:
-                continue
+    src_vgs = [vg for vg in (obj.vertex_groups.get(n) for n in source_names) if vg is not None]
+    if not src_vgs:
+        return
+    by_index = {vg.index: vg for vg in obj.vertex_groups}
+    # One read of each vertex's own groups instead of vg.weight() per (source,
+    # vertex) -- which raises RuntimeError for every vertex outside the group:
+    # ~30 sources x every face vertex, about a million exceptions.  Same result:
+    # vertices are independent, and within one the sources run in the same order.
+    for vert in obj.data.vertices:
+        w = {g.group: g.weight for g in vert.groups}
+        touched = set()
+        for src_vg in src_vgs:
+            src_w = w.get(src_vg.index, 0.0)
             if src_w <= 0.0:
                 continue
             for tgt_vg, ratio in target_vgs:
-                try:
-                    tgt_w = tgt_vg.weight(vert.index)
-                except RuntimeError:
-                    tgt_w = 0.0
-                tgt_vg.add([vert.index], min(tgt_w + src_w * ratio, 1.0), 'REPLACE')
-            src_vg.add([vert.index], src_w * remain_ratio, 'REPLACE')
+                w[tgt_vg.index] = min(w.get(tgt_vg.index, 0.0) + src_w * ratio, 1.0)
+                touched.add(tgt_vg.index)
+            w[src_vg.index] = src_w * remain_ratio
+            touched.add(src_vg.index)
+        for idx in touched:
+            by_index[idx].add([vert.index], w[idx], 'REPLACE')
 
 
 class MHWS_OT_FaceWeightSimplify(bpy.types.Operator):
@@ -105,9 +115,13 @@ class MHWS_OT_FaceWeightSimplify(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.active_object and context.active_object.type == 'MESH'
+        return poll_msg.active_mesh(cls, context)
     
     def execute(self, context):
+        with mesh_utils.object_mode(context):
+            return self._execute(context)
+
+    def _execute(self, context):
         obj = context.active_object
         
         # 1. 合并到 Head
@@ -267,11 +281,8 @@ class MHWS_OT_AutoCreateChains(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return (context.mode == 'POSE'
-                and context.active_object is not None
-                and context.active_object.type == 'ARMATURE'
-                and hasattr(bpy.ops, 're_chain')
-                and hasattr(bpy.ops.re_chain, 'create_chain_settings'))
+        return (poll_msg.pose_mode_armature(cls, context)
+                and poll_msg.addon(cls, 're_chain', 'create_chain_settings', "RE Chain Editor"))
 
     def invoke(self, context, event):
         arm = context.active_object
@@ -351,7 +362,7 @@ class MHWS_OT_AutoCreateChains(bpy.types.Operator):
         )
 
         armature = context.active_object
-        status = auto_create_re_chains(context, armature, config)
+        status = auto_create_re_chains(context, armature, config, report=self.report)
 
         if status == {'CANCELLED'}:
             self.report({'ERROR'}, T("mhws.operators.chain_create_failed"))
@@ -566,10 +577,7 @@ class MHWS_OT_PreprocessModel(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return (
-            context.active_object is not None
-            and context.active_object.type == 'ARMATURE'
-        )
+        return poll_msg.active_armature(cls, context)
 
     def execute(self, context):
         settings = context.scene.mhw_suite_settings
@@ -701,7 +709,7 @@ class MHWS_OT_AddFacialBones(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return any(o.type == 'ARMATURE' for o in bpy.data.objects)
+        return poll_msg.armature_in_scene(cls, context)
 
     def invoke(self, context, event):
         active = context.active_object
@@ -816,8 +824,7 @@ class MHWS_OT_OptimizeSkeleton(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        obj = context.active_object
-        return obj is not None and obj.type == 'ARMATURE'
+        return poll_msg.active_armature(cls, context)
 
     def execute(self, context):
         arm_obj = context.active_object
@@ -1017,8 +1024,7 @@ class MHWS_OT_OptimizeAuxBones(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        obj = context.active_object
-        return obj is not None and obj.type == 'ARMATURE'
+        return poll_msg.active_armature(cls, context)
 
     def execute(self, context):
         arm_obj = context.active_object
@@ -1063,11 +1069,10 @@ class MHWS_OT_OptimizeAuxBones(bpy.types.Operator):
             if bones.get(base) is not None and bones.get(hj) is not None
         ]
 
-        mesh_objects = [
-            o for o in bpy.data.objects
-            if o.type == 'MESH'
-            and any(m.type == 'ARMATURE' and m.object == arm_obj for m in o.modifiers)
-        ]
+        # attached_meshes, not a modifier filter: a mesh whose Armature modifier has an
+        # empty target (or none, parented by hand) still carries this rig's weights.
+        from ...core import pose_bake
+        mesh_objects = pose_bake.attached_meshes(arm_obj)
 
         renamed = 0
         for obj in mesh_objects:

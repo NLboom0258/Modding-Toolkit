@@ -8,7 +8,13 @@ from ..re9.batch_export import _do_export_mesh, _do_export_mdf2, _do_export_chai
 from ...core.re_mesh_compat import call_re_mesh_op, re_mesh_op_available
 from ...core import console_export
 from ...core import export_prep
+from ...core import export_autofix
+from ...core import mod_root
+from ...core import lua_bone_system
 from ...core.i18n import T
+from ...core import json_cache
+from ...core import shapekey_export
+from ...core import optional_editors
 
 # MHWs 游戏级文件后缀常量
 MHWS_EXTS = {
@@ -17,6 +23,7 @@ MHWS_EXTS = {
     "chain2": "chain2.14",
     "clsp":   "clsp.3",
     "gpuc":   "gpuc.241111760",
+    "jcns":   "jcns.102",
 }
 
 # 5个固定部位（内部/日志用英文名；UI 绘制处按 id 通过 _PART_LABEL_KEYS 查表动态翻译）
@@ -53,7 +60,7 @@ def get_mhws_variants(self=None, context=None):
 DEFAULT_FILE_TYPES = ["mesh", "mdf2", "chain2", "clsp"]
 
 # 规范导出顺序，确保不管 JSON 数据怎么存都按此顺序处理
-_CANONICAL_FILE_TYPE_ORDER = ["mesh", "mdf2", "chain2", "clsp", "gpuc"]
+_CANONICAL_FILE_TYPE_ORDER = ["mesh", "mdf2", "chain2", "clsp", "jcns", "gpuc"]
 _CANONICAL_FILE_TYPE_INDEX = {ft: i for i, ft in enumerate(_CANONICAL_FILE_TYPE_ORDER)}
 
 
@@ -94,11 +101,7 @@ def get_mhws_schemes_callback(self, context):
 def _load_scheme(filename):
     if not filename or filename == 'NONE':
         return None
-    filepath = os.path.join(_get_mhws_schemes_dir(), filename)
-    if not os.path.exists(filepath):
-        return None
-    with open(filepath, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    return json_cache.load(os.path.join(_get_mhws_schemes_dir(), filename))
 
 
 _armor_cache = []
@@ -131,6 +134,80 @@ def set_binding(scene, armor_id, variant, part, filetype, value):
     scene[_make_key(armor_id, variant, part, filetype)] = value
 
 
+def bound_pairs(scene, armor_id, variant):
+    """``[(part_id, mdf_col, mesh_col)]`` for every part with a mesh or mdf2
+    bound -- what auto-fix runs over.  Either collection may be None: a part
+    with only a mesh still gets its weights cleaned."""
+    out = []
+    parts = [part_id for part_id, _name in MHWS_PARTS]
+    # The Lua Bone System's custom head is exported too (_do_lua_bone_export)
+    # but is not one of MHWS_PARTS, so its face mesh got no triangulate /
+    # weight / mirror fix before going out.
+    settings = getattr(scene, "mhw_suite_settings", None)
+    if settings is not None and getattr(settings, "mhws_use_lua_bone_system", False):
+        parts.append("head")
+    for part_id in parts:
+        mdf = bpy.data.collections.get(get_binding(scene, armor_id, variant, part_id, "mdf2") or "")
+        mesh = bpy.data.collections.get(get_binding(scene, armor_id, variant, part_id, "mesh") or "")
+        if mdf is not None or mesh is not None:
+            out.append((part_id, mdf, mesh))
+    return out
+
+
+def bound_physics(scene, armor_id, variant, armor_set=None):
+    """``[PhysPart]`` for every active part with a chain2 or clsp bound -- what
+    the physics check and the constraint-target auto-fix run over.  A slot the
+    armor set does not export for that part counts as unbound."""
+    from ...core.pre_export_physics import PhysPart
+    mask = armor_set.get("parts_mask", 0b11111) if armor_set else 0b11111
+    out = []
+    for part_id, part_name in MHWS_PARTS:
+        if not (mask & (1 << (int(part_id) - 1))):
+            continue
+        fts = _resolve_part_file_types(armor_set, part_id) if armor_set else DEFAULT_FILE_TYPES
+        if ignore_slot_limits(scene):
+            fts = list(fts) + ["chain2", "clsp"]
+
+        def col(ft):
+            if ft not in fts:
+                return None
+            return bpy.data.collections.get(get_binding(scene, armor_id, variant, part_id, ft) or "")
+
+        chain, clsp = col("chain2"), col("clsp")
+        if chain is None and clsp is None:
+            continue
+        mesh = bpy.data.collections.get(get_binding(scene, armor_id, variant, part_id, "mesh") or "")
+        out.append(PhysPart(T(_PART_LABEL_KEYS.get(part_id, part_name)), part_id,
+                            chain, clsp, mesh, "clsp" in fts))
+    return out
+
+
+_base_bones = []
+
+
+def base_bone_names():
+    """Bone names of the vanilla player skeleton (the bundled reference
+    fbxskel): the game always has these, so a collider on one of them resolves
+    even when the part being exported does not carry the bone."""
+    if not _base_bones:
+        from .fbxskel import _parse_fbxskel
+        try:
+            with open(_REFERENCE_FBXSKEL, "rb") as fh:
+                _base_bones.extend(b["name"] for b in _parse_fbxskel(fh.read()))
+        except (OSError, RuntimeError):
+            _base_bones.append("")      # read once; an empty name matches nothing
+    return frozenset(n for n in _base_bones if n)
+
+
+def physics_context(scene, armor_id, variant, armor_set=None):
+    """What the pre-export check needs to judge this armor's physics."""
+    def bind_clsp(part_id, collection_name):
+        set_binding(bpy.context.scene, armor_id, variant, part_id, "clsp", collection_name)
+    return {'parts': bound_physics(scene, armor_id, variant, armor_set),
+            'runtime_bones': base_bone_names(),
+            'bind_clsp': bind_clsp}
+
+
 def _get_blank_path(filetype):
     """Return the path to the built-in blank file for the given filetype."""
     addon_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -149,9 +226,52 @@ def _resolve_part_file_types(armor_set, part_id):
     return armor_set.get("file_types", DEFAULT_FILE_TYPES)
 
 
-def _make_filepath(natives_root, base_path, part_id, armor_id, filetype):
+def ignore_slot_limits(scene):
+    """The batch exporter's "Ignore Slot Limits" toggle: every part gets every
+    slot, for a mod whose .pfb was edited to load files the vanilla part has none of."""
+    settings = getattr(scene, "mhw_suite_settings", None)
+    return bool(getattr(settings, "mhws_ignore_slot_limits", False))
+
+
+def vanilla_slots(armor_set, variant, part_id):
+    """The slots a variant's vanilla part ships, the files its prefab loads.
+
+    The armor set's table gives mesh / mdf2 / chain2 / clsp.  gpuc and jcns come
+    from the variant's own lists (scripts/build_mhws_vanilla_slots.py, read off the
+    vanilla file list): male and female models differ there.  A variant the list
+    did not know keeps the table's gpuc, and has no jcns."""
+    fts = list(_resolve_part_file_types(armor_set, part_id) if armor_set else DEFAULT_FILE_TYPES)
+    vd = (armor_set or {}).get("variants", {}).get(variant) or {}
+    if "gpuc" in vd:
+        fts = [ft for ft in fts if ft != "gpuc"] + (["gpuc"] if part_id in vd["gpuc"] else [])
+    fts += [optional_editors.jcns_slot(s) for s in vd.get("jcns", {}).get(part_id, [])]
+    return fts
+
+
+def part_slots(armor_set, variant, part_id, unlocked=False, optional=None):
+    """The slots a part shows and exports, in canonical order.
+
+    Its vanilla slots, of which jcns only while its editor is there (gpuc shows
+    either way: without the editor it is the blank copy).  *unlocked* adds every
+    other one -- chain2, clsp, a gpuc, and a plain "jcns" under the mesh's own
+    name.  *optional*: the editor slots usable, default those that can export."""
+    if optional is None:
+        optional = optional_editors.available_slots()
+    slots = [s for s in vanilla_slots(armor_set, variant, part_id)
+             if optional_editors.slot_type(s) != "jcns" or "jcns" in optional]
+    if unlocked:
+        slots += [ft for ft in ("chain2", "clsp") if ft not in slots]
+        if "gpuc" in optional and "gpuc" not in slots:
+            slots.append("gpuc")
+        if "jcns" in optional and "jcns" not in slots:
+            slots.append("jcns")
+    return sorted(slots, key=lambda s: _CANONICAL_FILE_TYPE_INDEX.get(
+        optional_editors.slot_type(s), len(_CANONICAL_FILE_TYPE_ORDER)))
+
+
+def _make_filepath(natives_root, base_path, part_id, armor_id, filetype, suffix=""):
     ext = MHWS_EXTS[filetype]
-    filename = f"{armor_id}{part_id}.{ext}"
+    filename = f"{armor_id}{part_id}{suffix}.{ext}"
     bp = base_path.replace("/", os.sep)
     return os.path.join(natives_root, bp, part_id, filename)
 
@@ -211,6 +331,14 @@ def _copy_bone_matrices(context, src_arm, dst_arm):
     bpy.ops.object.mode_set(mode='OBJECT')
 
 
+def preset_default_name(settings, variant_armor_id):
+    """SKS preset name when the user left it empty: the Bonesystem FBXSkel
+    name when that export is on, else the body part's export ID."""
+    if settings.mhws_use_bonesystem and settings.mhws_fbxskel_name.strip():
+        return settings.mhws_fbxskel_name.strip()
+    return f"{variant_armor_id}2"
+
+
 def _do_bonesystem_export(context, settings, variant_armor_id):
     """
     Generate reference skeleton, copy user's armature pose onto it,
@@ -223,7 +351,10 @@ def _do_bonesystem_export(context, settings, variant_armor_id):
     """
     from .fbxskel import load_reference_skeleton, export_fbxskel, write_fbxskel
 
-    natives_root  = context.scene.get("mhws_natives_root", "")
+    # Through mod_root like the mesh export: an old .blend holding ".../natives"
+    # otherwise sent the fbxskel/JSON to natives/natives/stm while the meshes
+    # went to the normalised root.
+    natives_root  = mod_root.read(context.scene, "mhws_natives_root")
     fbxskel_name  = settings.mhws_fbxskel_name.strip()
     user_arm      = settings.mhws_bs_armature
 
@@ -306,6 +437,118 @@ def _do_bonesystem_export(context, settings, variant_armor_id):
                 o.select_set(True)
 
 
+# ── Lua Bone System (Wilds community script, distinct from MHRS's LuaBoneSystem) ──
+# reframework/autorun/lua bone system/joints.lua's JointList, verbatim order.
+_LUA_BONE_JOINTS = [
+    'root', 'Hip', 'Spine_0', 'Spine_1', 'Spine_2', 'Neck_0', 'Neck_1', 'Head',
+    'R_Eye', 'L_Eye', 'HeadRX_HJ_01', 'Neck_1_HJ_00', 'Neck_0_HJ_00',
+    'L_Shoulder', 'L_UpperArm', 'L_Forearm', 'L_Hand', 'L_Thumb1', 'L_Thumb2',
+    'L_Thumb3', 'L_Thumb_HJ_02', 'L_Thumb_HJ_01', 'L_Thumb_HJ_00', 'L_Thumb_HJ_03',
+    'L_IndexF1', 'L_IndexF2', 'L_IndexF3', 'L_IndexF_HJ_03', 'L_IndexF_HJ_02',
+    'L_IndexF_HJ_00', 'L_IndexF_HJ_01', 'L_IndexF_HJ_04', 'L_MiddleF1', 'L_MiddleF2',
+    'L_MiddleF3', 'L_MiddleF_HJ_03', 'L_MiddleF_HJ_02', 'L_MiddleF_HJ_00',
+    'L_MiddleF_HJ_01', 'L_MiddleF_HJ_04', 'L_Palm', 'L_RingF1', 'L_RingF2', 'L_RingF3',
+    'L_RingF_HJ_03', 'L_RingF_HJ_02', 'L_RingF_HJ_00', 'L_RingF_HJ_01', 'L_RingF_HJ_04',
+    'L_PinkyF1', 'L_PinkyF2', 'L_PinkyF3', 'L_PinkyF_HJ_03', 'L_PinkyF_HJ_02',
+    'L_PinkyF_HJ_00', 'L_PinkyF_HJ_01', 'L_PinkyF_HJ_04', 'L_Hand_HJ_01',
+    'L_HandRZ_HJ_00', 'L_Hand_HJ_00', 'L_ForearmTwist_HJ_02', 'L_ForearmRY_HJ_00',
+    'L_ForearmRY_HJ_01', 'L_ForearmTwist_HJ_01', 'L_ForearmTwist_HJ_00',
+    'L_Forearm_HJ_00', 'L_Elbow_HJ_00', 'L_UpperArmTwist_HJ_00', 'L_UpperArmTwist_HJ_01',
+    'L_Triceps_HJ_00', 'L_Biceps_HJ_00', 'L_Biceps_HJ_01', 'L_UpperArmTwist_HJ_02',
+    'L_ForearmDouble_HJ_00', 'L_UpperArm_HJ_00', 'L_Deltoid_HJ_00', 'L_Deltoid_HJ_01',
+    'L_Deltoid_HJ_02', 'L_Shoulder_HJ_00', 'L_UpperArmDouble_HJ_00',
+    'R_Shoulder', 'R_UpperArm', 'R_Forearm', 'R_Hand', 'R_Thumb1', 'R_Thumb2',
+    'R_Thumb3', 'R_Thumb_HJ_02', 'R_Thumb_HJ_01', 'R_Thumb_HJ_00', 'R_Thumb_HJ_03',
+    'R_IndexF1', 'R_IndexF2', 'R_IndexF3', 'R_IndexF_HJ_03', 'R_IndexF_HJ_02',
+    'R_IndexF_HJ_00', 'R_IndexF_HJ_01', 'R_IndexF_HJ_04', 'R_MiddleF1', 'R_MiddleF2',
+    'R_MiddleF3', 'R_MiddleF_HJ_03', 'R_MiddleF_HJ_02', 'R_MiddleF_HJ_00',
+    'R_MiddleF_HJ_01', 'R_MiddleF_HJ_04', 'R_Palm', 'R_RingF1', 'R_RingF2', 'R_RingF3',
+    'R_RingF_HJ_03', 'R_RingF_HJ_02', 'R_RingF_HJ_00', 'R_RingF_HJ_01', 'R_RingF_HJ_04',
+    'R_PinkyF1', 'R_PinkyF2', 'R_PinkyF3', 'R_PinkyF_HJ_03', 'R_PinkyF_HJ_02',
+    'R_PinkyF_HJ_00', 'R_PinkyF_HJ_01', 'R_PinkyF_HJ_04', 'R_Hand_HJ_01',
+    'R_HandRZ_HJ_00', 'R_Hand_HJ_00', 'R_ForearmTwist_HJ_02', 'R_ForearmRY_HJ_00',
+    'R_ForearmRY_HJ_01', 'R_ForearmTwist_HJ_01', 'R_ForearmTwist_HJ_00',
+    'R_Forearm_HJ_00', 'R_Elbow_HJ_00', 'R_UpperArmTwist_HJ_00', 'R_UpperArmTwist_HJ_01',
+    'R_Triceps_HJ_00', 'R_Biceps_HJ_00', 'R_Biceps_HJ_01', 'R_UpperArmTwist_HJ_02',
+    'R_ForearmDouble_HJ_00', 'R_UpperArm_HJ_00', 'R_Deltoid_HJ_00', 'R_Deltoid_HJ_01',
+    'R_Deltoid_HJ_02', 'R_Shoulder_HJ_00', 'R_UpperArmDouble_HJ_00',
+    'L_Traps_HJ_00', 'L_Traps_HJ_01', 'L_Pec_HJ_00', 'L_Pec_HJ_01', 'L_Lats_HJ_00',
+    'L_Lats_HJ_01', 'R_Traps_HJ_00', 'R_Traps_HJ_01', 'R_Pec_HJ_00', 'R_Pec_HJ_01',
+    'R_Lats_HJ_00', 'R_Lats_HJ_01', 'Spine_2_HJ_00', 'R_Bust_HJ_00', 'R_Bust_HJ_01',
+    'L_Bust_HJ_00', 'L_Bust_HJ_01', 'Spine_1_HJ_00', 'Spine_0_HJ_00',
+    'L_Thigh', 'L_Knee', 'L_Shin', 'L_Foot', 'L_Instep', 'L_Toe', 'L_Foot_HJ_00',
+    'L_Calf_HJ_00', 'L_Shin_HJ_00', 'L_Shin_HJ_01', 'L_Knee_HJ_00', 'L_KneeDouble_HJ_00',
+    'L_KneeRX_HJ_00', 'L_ThighTwist_HJ_00', 'L_ThighTwist_HJ_01', 'L_ThighTwist_HJ_02',
+    'R_Thigh', 'R_Knee', 'R_Shin', 'R_Foot', 'R_Instep', 'R_Toe', 'R_Foot_HJ_00',
+    'R_Calf_HJ_00', 'R_Shin_HJ_00', 'R_Shin_HJ_01', 'R_KneeRX_HJ_00', 'R_Knee_HJ_00',
+    'R_KneeDouble_HJ_00', 'R_ThighTwist_HJ_00', 'R_ThighTwist_HJ_01', 'R_ThighTwist_HJ_02',
+    'L_ThighRZ_HJ_00', 'L_ThighRZ_HJ_01', 'R_ThighRZ_HJ_00', 'R_ThighRZ_HJ_01',
+    'L_Hip_HJ_00', 'L_Hip_HJ_01', 'R_Hip_HJ_00', 'R_Hip_HJ_01',
+    'L_ThighRX_HJ_00', 'L_ThighRX_HJ_01', 'R_ThighRX_HJ_00', 'R_ThighRX_HJ_01',
+    'Hip_HJ_00', 'Ground_Angle',
+]
+
+
+def _do_lua_bone_export(context, natives_root, settings, scene, armor_id, variant, variant_armor_id):
+    """Write the Wilds "lua bone system" custom json, and the matching custom
+    head mesh/mdf2 if bound, for this armor set.
+
+    Unlike MHRS's LuaBoneSystem (core/lua_bone_system.build_offsets), this
+    community script for Wilds does not diff against a base/vanilla rig -- it
+    captures each joint's raw LocalPosition in-game and reapplies it verbatim
+    (confirmed by diffing a real shipped custom json against the same reshaped
+    rig re-read in Blender; see core.lua_bone_system.absolute_positions).
+
+    The runtime script keys its file lookup on the equipped Helmet's own model
+    id (its get_HelmID() scans for that specific part), so the json -- and the
+    head mesh/mdf2 below -- must be named/placed under that same id regardless
+    of which part triggered the export, not one copy per part as MHRS's
+    version needs.
+
+    The head mesh/mdf2 are optional: the script falls back to the vanilla
+    default head (folder "0000") when they're absent, so a missing binding is
+    reported but does not fail the export.
+
+    Returns (ok: bool, message: str).
+    """
+    user_arm = settings.mhws_bs_armature
+    if user_arm is None or user_arm.type != 'ARMATURE':
+        return False, T("mhws.batch_export.lua_bone_select_armature")
+
+    target = lua_bone_system.local_rest_positions(user_arm)
+    positions = lua_bone_system.absolute_positions(target, _LUA_BONE_JOINTS)
+
+    helm_id = f"{variant_armor_id}3"
+    out_dir = os.path.join(natives_root, "reframework", "data", "lua bone system", "custom")
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, f"{helm_id}.json")
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(positions, f, indent=4, sort_keys=True)
+
+    missing = sorted(set(_LUA_BONE_JOINTS) - set(target))
+
+    # The script's own path template: Art/Model/Character/ch00/{001|000}/{HelmID}/ch00_{gender}_0000.{ext}
+    gender_dir = "001" if variant.startswith("f") else "000"
+    head_dir = os.path.join(natives_root, "natives", "STM", "Art", "Model", "Character",
+                             "ch00", gender_dir, helm_id)
+    head_written = 0
+    for filetype, export_func in (("mesh", _do_export_mesh), ("mdf2", _do_export_mdf2)):
+        col_name = get_binding(scene, armor_id, variant, "head", filetype)
+        if not col_name or col_name not in bpy.data.collections:
+            continue
+        head_path = os.path.join(head_dir, f"ch00_{gender_dir}_0000.{MHWS_EXTS[filetype]}")
+        try:
+            export_func(head_path, col_name)
+            head_written += 1
+        except Exception as err:
+            # Same as every other part: a failed file is logged and counted out,
+            # it does not abort the whole export before the summary is reported.
+            print(f"[MHWs] FAILED head {filetype}: {err}")
+
+    return True, T("mhws.batch_export.lua_bone_export_done").format(
+        name=os.path.basename(out_path), missing=len(missing), head=head_written)
+
+
 # ── 导出 Operator ──────────────────────────────────────────────
 
 class MHWS_OT_BatchExport(bpy.types.Operator):
@@ -317,71 +560,9 @@ class MHWS_OT_BatchExport(bpy.types.Operator):
     def description(cls, context, properties):
         return T("mhws.batch_export.batch_export_desc")
 
-    def _bound_mesh_collections(self, scene, settings):
-        """Every distinct mesh collection bound to the selected armor set."""
-        armor_id = settings.mhws_selected_armor
-        variant = settings.mhws_armor_variant
-        seen = set()
-        mesh_collections = []
-        for part_id, _ in MHWS_PARTS:
-            col_name = get_binding(scene, armor_id, variant, part_id, "mesh")
-            if col_name and col_name not in seen:
-                col = bpy.data.collections.get(col_name)
-                if col:
-                    mesh_collections.append(col)
-                    seen.add(col_name)
-        return mesh_collections
-
-    def _cleanup_mesh_collections(self, context, scene, settings):
-        """Run RE Mesh cleanup operators on all bound mesh collections before export."""
-        if not re_mesh_op_available('delete_loose'):
-            self.report({'WARNING'}, T("mhws.batch_export.re_mesh_not_installed_cleanup_skip"))
-            return
-
-        mesh_collections = self._bound_mesh_collections(scene, settings)
-        if not mesh_collections:
-            return
-
-        # mode_set 需要活动物体；无活动物体时必定已在 OBJECT 模式，直接跳过即可，
-        # 否则 poll 失败抛 "上下文缺失活动物体"（手动导出有选中物体故不复现）。
-        if context.view_layer.objects.active is not None and context.mode != 'OBJECT':
-            bpy.ops.object.mode_set(mode='OBJECT')
-        bpy.ops.object.select_all(action='DESELECT')
-        for col in mesh_collections:
-            for obj in [o for o in col.objects if o.type == 'MESH']:
-                context.view_layer.objects.active = obj
-                obj.select_set(True)
-                try: call_re_mesh_op('delete_loose')
-                except Exception: pass
-                try: call_re_mesh_op('solve_repeated_uvs')
-                except Exception: pass
-                try: call_re_mesh_op('remove_zero_weight_vertex_groups')
-                except Exception: pass
-                try:
-                    call_re_mesh_op('limit_total_normalize', maxWeights='12')
-                except Exception:
-                    try:
-                        bpy.ops.object.vertex_group_limit_total(limit=12)
-                        bpy.ops.object.vertex_group_normalize_all(lock_active=False)
-                    except Exception:
-                        pass
-                obj.select_set(False)
-
     def execute(self, context):
         show_console = console_export.get_preferences(context).show_console_on_batch_export
         with console_export.kept_open_for_export(show_console):
-            return self._execute_with_triangulation(context)
-
-    def _execute_with_triangulation(self, context):
-        # Triangulation rides on the modifier stack: RE Mesh Editor exports
-        # evaluated geometry, so the mesh data is never touched and the
-        # modifiers come off again even if the export raises.
-        settings = context.scene.mhw_suite_settings
-        if not settings.mhws_triangulate_face:
-            return self._run_export(context)
-        with export_prep.triangulated_for_export(context.scene.objects, 'mhws') as touched:
-            if touched:
-                print("[MHWS] triangulating {n} face mesh(es) for export".format(n=len(touched)))
             return self._run_export(context)
 
     def _run_export(self, context):
@@ -392,10 +573,7 @@ class MHWS_OT_BatchExport(bpy.types.Operator):
             self.report({'ERROR'}, "RE Mesh Editor not installed")
             return {'CANCELLED'}
 
-        if settings.mhws_cleanup_before_export:
-            self._cleanup_mesh_collections(context, scene, settings)
-
-        natives_root = scene.get("mhws_natives_root", "")
+        natives_root = mod_root.read(scene, "mhws_natives_root")
         if not natives_root or not os.path.isdir(natives_root):
             self.report({'ERROR'}, T("core.export_prep.set_mod_root_first"))
             return {'CANCELLED'}
@@ -426,19 +604,81 @@ class MHWS_OT_BatchExport(bpy.types.Operator):
         base_path = variant_data["base_path"].replace("\\", "/")
         parts_mask = armor_set.get("parts_mask", 0b11111)
 
+        # Auto-fix only after every check above has passed: an export that
+        # cancels must not leave its fixes behind. Persistent fixes first (one
+        # undo step), then the temporary ones wrap the export itself and come
+        # off again even if it raises.
+        pairs = bound_pairs(scene, armor_id, variant)
+        ids = export_autofix.enabled_items(context, 'MHWS')
+        done = export_autofix.apply(context, 'MHWS', pairs, ids,
+                                    bound_physics(scene, armor_id, variant, armor_set))
+        meshes = [mesh for _p, _mdf, mesh in pairs if mesh is not None]
+        with export_autofix.temporary(context, 'MHWS', pairs, ids) as tmp, \
+                shapekey_export.session(context, 'MHWS', meshes, natives_root) as sk:
+            result = self._export(context, scene, settings, natives_root, armor_id, armor_set,
+                                  variant, variant_armor_id, base_path, parts_mask)
+            # SKS names the model after the armor ID and binds it through the
+            # body part (slot 2); see core/sks_profiles.write_presets.
+            paths, msg = shapekey_export.write_presets(
+                sk, natives_root, variant_armor_id, f"{variant_armor_id}2",
+                preset_default_name(settings, variant_armor_id))
+            if msg:
+                self.report({'INFO'}, T(msg).format(n=len(paths)))
+        fixed = {k: v for k, v in list(done.items()) + list(tmp.items()) if v}
+        if fixed:
+            print("[MHWs] auto-fix: " + ", ".join(f"{k}={v}" for k, v in fixed.items()))
+            self.report({'INFO'}, T("core.pre_export_check_ops.autofix_done").format(
+                n=sum(fixed.values())))
+        return result
+
+    def _export(self, context, scene, settings, natives_root, armor_id, armor_set,
+                variant, variant_armor_id, base_path, parts_mask):
         export_count = 0
         fail_count = 0
         skip_count = 0
         use_blank = settings.mhws_use_blank_export
+        unlocked = ignore_slot_limits(scene)
 
         for part_id, part_name in MHWS_PARTS:
             if not (parts_mask & (1 << (int(part_id) - 1))):
                 continue
-            part_fts = _canonical_order_file_types(
-                _resolve_part_file_types(armor_set, part_id))
-            for filetype in part_fts:
+            vanilla = vanilla_slots(armor_set, variant, part_id)
+            for slot in part_slots(armor_set, variant, part_id, unlocked):
+                filetype = optional_editors.slot_type(slot)
                 filepath = _make_filepath(natives_root, base_path, part_id, variant_armor_id, filetype)
-                label = f"{part_name} {filetype.upper()}"
+                label = f"{part_name} {slot.upper()}"
+
+                # jcns / gpuc: bindable only while their editor is installed.  An
+                # unbound one is not counted at all, so with nothing bound the
+                # summary reads as it did before these slots existed.
+                if filetype in optional_editors.EDITORS:
+                    col = (get_binding(scene, armor_id, variant, part_id, slot)
+                           if optional_editors.available(filetype) else "")
+                    if col and col not in bpy.data.collections:
+                        print(f"[MHWs] SKIP {label}: collection '{col}' not found")
+                        col = ""
+                    if col:
+                        if filetype == "jcns":
+                            # A vanilla slot replaces that vanilla file; the free one
+                            # the unlock adds (no vanilla jcns of that name) takes
+                            # the mesh's own name.
+                            suffix = optional_editors.slot_suffix(slot)
+                            filepath = _make_filepath(natives_root, base_path, part_id, variant_armor_id,
+                                                      filetype, suffix)
+                        try:
+                            print(f"[MHWs] {label}: {col} -> {os.path.basename(filepath)}")
+                            optional_editors.export(filetype, filepath, col,
+                                                    int(MHWS_EXTS[filetype].rsplit(".", 1)[1]))
+                            export_count += 1
+                        except Exception as err:
+                            print(f"[MHWs] FAILED {label}: {err}")
+                            fail_count += 1
+                        continue
+                    if slot not in vanilla:
+                        continue
+                elif slot not in vanilla and not get_binding(scene, armor_id, variant, part_id, slot):
+                    # A chain2 / clsp slot only the unlock opened: nothing to blank.
+                    continue
 
                 # gpuc: always copy blank, unconditionally (no collection binding)
                 # gpuc files break mods when other files are edited, so must be replaced with blank
@@ -490,6 +730,20 @@ class MHWS_OT_BatchExport(bpy.types.Operator):
                 self.report({'WARNING'}, msg)
                 fail_count += 1
 
+        # ── Lua Bone System ──
+        # Mutually exclusive with Bonesystem; the props' update callbacks enforce
+        # it, but a .blend saved before that can still have both on.
+        if settings.mhws_use_lua_bone_system and settings.mhws_use_bonesystem:
+            self.report({'WARNING'}, T("mhws.batch_export.lua_bone_skipped_both"))
+        elif settings.mhws_use_lua_bone_system:
+            ok, msg = _do_lua_bone_export(
+                context, natives_root, settings, scene, armor_id, variant, variant_armor_id)
+            if ok:
+                self.report({'INFO'}, msg)
+            else:
+                self.report({'WARNING'}, msg)
+                fail_count += 1
+
         if fail_count > 0:
             self.report({'WARNING'}, T("mhws.batch_export.done_with_fail").format(
                 export=export_count, fail=fail_count, skip=skip_count))
@@ -512,12 +766,16 @@ class MHWS_OT_SetNativesRoot(bpy.types.Operator):
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
     def execute(self, context):
-        path = self.directory.rstrip("/\\")
-        # If the user selected the natives folder itself, step up one level
-        if os.path.basename(path).lower() == "natives":
-            path = os.path.dirname(path)
+        # A root picked one level too deep (…/natives, …/natives/STM) or one
+        # too shallow (the folder holding the mod) is corrected here; see
+        # core/mod_root.py for the rules.
+        mod_root.clear_cache()
+        path, status = mod_root.normalize(self.directory.rstrip("/\\"))
         context.scene["mhws_natives_root"] = path
-        self.report({'INFO'}, f"MHWs Mod root: {path}")
+        if status == mod_root.AMBIGUOUS:
+            self.report({'WARNING'}, T("core.mod_root.ambiguous"))
+        else:
+            self.report({'INFO'}, f"MHWs Mod root: {path}")
         return {'FINISHED'}
 
 

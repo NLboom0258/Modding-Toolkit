@@ -134,6 +134,12 @@ MODELS = {
         ("v", None, "remesh", "assets/dmc5/reference_models/pl0200.mesh.1808282334"),
         ("vergil", None, "remesh", "assets/dmc5/reference_models/pl0800.mesh.1808282334"),
     ],
+
+    # The vanilla ch001_00_00 body the cross-game port measures against, doubling as
+    # the reference model the way MHRS's shadow FBXs do.
+    "ONI": [
+        ("musashi", None, "fbx", ("oni", "musashi.fbx")),
+    ],
 }
 
 #: Root of the facial rig per game.  Everything **below** it merges into it.
@@ -166,7 +172,11 @@ def has_facial_rig(game_code):
 #: 79-bone rig is a product decision nobody has made, and the reference body is
 #: imported to be measured against, not to be edited down.  Revisit on purpose,
 #: not as a side effect of the native skeleton landing.
-OPTIONLESS_GAMES = frozenset({"MHWI", "MHRS"})
+#:
+#: ONI joins for the same reasons as MHWI: no native bone table to define
+#: "auxiliary" against, and its reference body (ch001_00_00) carries no facial rig
+#: -- the head is a separate part.
+OPTIONLESS_GAMES = frozenset({"MHWI", "MHRS", "ONI"})
 
 
 def _assets_dir():
