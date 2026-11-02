@@ -1343,7 +1343,7 @@ class MdfTexProcessBase(bpy.types.Operator):
                         cls._abbrev_map, cls._tex_version, cls._use_art_prefix),
                     binding=lambda st, _n=tex_name: make_mdf_path(
                         base_path, _n, st, cls._abbrev_map, cls._use_art_prefix),
-                    srgb_slots=SRGB_SLOT_TYPES, write_tex=write_slot_tex,
+                    srgb_slots=cls._srgb_slot_types, write_tex=write_slot_tex,
                     resolve_format=resolve_dds_format, image_to_dds=ImageListToDDS,
                     dds_to_tex=lambda p, o: DDSToTex(p, cls._tex_version, o),
                     mipmaps=effective_mipmaps, grade_mode=grade_mode, log_tag=cls._log_tag,
