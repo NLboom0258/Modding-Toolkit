@@ -220,6 +220,10 @@ def unpack_channels(png_path, slot_type, channel_maps=None, octahedral=False):
             continue
         if src is None or isinstance(src, (int, float)):
             continue
+        if not isinstance(src, tuple):
+            # Derived channels (``'normal_z'``) carry nothing of their own: the
+            # plane they were rebuilt from already has its two channels from R/G.
+            continue
         pbr_type, ch_idx = src[0], src[1]
         invert = len(src) > 2 and src[2] is True
         data = pix[:, :, _CH[out_ch]].copy()

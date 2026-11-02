@@ -47,6 +47,22 @@ DMC5_SRGB_SLOT_TYPES = SRGB_SLOT_TYPES | {'BaseMetalMap', 'TimeLock_EmissiveColo
 # time-stop emissive colour map (RGB = emissive, A unused).
 DMC5_SLOT_CHANNEL_MAPS = {
     **BASE_SLOT_CHANNEL_MAPS,
+    # Unlike RE4/RE9 -- whose shaders rebuild the normal's Z themselves, which is
+    # why the shared table writes a constant 1.0 into B -- DMC5's two most-used
+    # materials read all three channels.  Measured from the main-pass shaders
+    # (_analysis/samples/shaders/, character_default + env_emissive): they sample
+    # this texture, decode 2c-1 on each channel and weight r.x / r.y / r.z into
+    # the TBN; roughness comes from A times VAR_Roughness.
+    #
+    # So B has to carry a real Z.  'normal_z' reconstructs it from R/G rather
+    # than copying whatever the source holds -- see _compose_channels, and note
+    # the slot row in the dialog says so, so nobody wonders why B is not white.
+    'NormalRoughnessMap': {
+        'R': ('normal', 0),
+        'G': ('normal', 1),
+        'B': 'normal_z',
+        'A': ('roughness', 0),
+    },
     'BaseMetalMap': {
         'R': ('color', 0),
         'G': ('color', 1),

@@ -554,6 +554,10 @@ STRINGS = {
     "core.mdf_tex_processor_ui_base.inputs_unread": {
         "EN": "Not read by this material's slots: {names}", "ZH": "本材质的槽位不读取：{names}"},
     "core.mdf_tex_processor_ui_base.fixed": {"EN": "fixed {v}", "ZH": "固定 {v}"},
+    "core.mdf_tex_processor_ui_base.normal_z": {"EN": "Normal Z", "ZH": "法线 Z"},
+    "core.mdf_tex_processor_ui_base.normal_z_rebuilt": {
+        "EN": "rebuilt from R/G (this game reads Z)",
+        "ZH": "由 R/G 重建（该游戏会用到 Z）"},
     "core.mdf_tex_processor_ui_base.neutral": {"EN": "no input, neutral {v}", "ZH": "无输入，中性值 {v}"},
     "core.mdf_tex_processor_ui_base.no_input": {"EN": "no input", "ZH": "无输入"},
     "core.mdf_tex_processor_ui_base.inverted_rule": {"EN": "(inverted by the slot)", "ZH": "（槽位规则反相）"},

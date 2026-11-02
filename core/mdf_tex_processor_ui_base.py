@@ -329,6 +329,14 @@ class MdfTexDialogBase(bpy.types.Operator):
             split = row.split(factor=0.12, align=True)
             split.label(text=" ".join(chans) if len(chans) < 3 else "".join(chans))
             inner = split.split(factor=0.36, align=True)
+            if src == 'normal_z':
+                # Derived, not read from the source image: the game wants a real
+                # Z here (DMC5) and computes nothing itself, so the dialog has to
+                # say so -- otherwise B sitting at 255 looks like a mistake.
+                inner.label(text=T("core.mdf_tex_processor_ui_base.normal_z"))
+                inner.label(text=T("core.mdf_tex_processor_ui_base.normal_z_rebuilt"),
+                            icon='FORWARD')
+                continue
             if not isinstance(src, tuple):
                 inner.label(text="—")
                 inner.label(text=T("core.mdf_tex_processor_ui_base.fixed").format(

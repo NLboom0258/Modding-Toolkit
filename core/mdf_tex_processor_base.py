@@ -642,7 +642,8 @@ def _compose_channels(slot_type, pbr_paths, pbr_channels, temp_dir, tex_name, pb
                        pbr_arrays=None, octahedral=True):
     """Compose a packed texture from PBR inputs for the given slot type.
     channel_maps: optional override; defaults to BASE_SLOT_CHANNEL_MAPS.
-    Channel map values: tuple (pbr_type, ch_idx[, True]) | None (=0.0) | float (constant).
+    Channel map values: tuple (pbr_type, ch_idx[, True]) | None (=0.0) | float (constant)
+        | 'normal_z' (reconstructed from the slots' own R/G, see below).
     normal_flip_g: when True, inverts the G channel of the normal map (OpenGL to DirectX).
     bake_ao_into_color: multiply the AO map into this slot's colour channels.  For
         a game with no AO slot that is the only way to keep an AO map at all --
@@ -747,6 +748,10 @@ def _compose_channels(slot_type, pbr_paths, pbr_channels, temp_dir, tex_name, pb
         if isinstance(src, (int, float)):
             result[:, :, out_i] = float(src)
             continue
+        if src == 'normal_z':
+            # Filled in below, once R and G are final -- it reads them back, so
+            # the reconstruction follows normal_flip_g and any rule inversion.
+            continue
         pbr_type = src[0]
         in_ch_i  = src[1]
         invert   = len(src) > 2 and src[2] is True
@@ -769,6 +774,26 @@ def _compose_channels(slot_type, pbr_paths, pbr_channels, temp_dir, tex_name, pb
             if normal_flip_g and pbr_type == 'normal' and in_ch_i == 1:
                 data = 1.0 - data
             result[:, :, out_i] = data
+
+    z_channels = [ch for ch, src in ch_map.items() if src == 'normal_z']
+    if z_channels:
+        # A unit normal satisfies x^2 + y^2 + z^2 = 1, so Z is fully determined
+        # by the other two.  Reconstructing it -- rather than reading the
+        # source's own B -- is the only rule that works for both kinds of input:
+        # a full XYZ map agrees by construction (minus that channel's
+        # compression noise), while an RG-only map has nothing usable in B and
+        # would otherwise flatten the normal outright.
+        #
+        # Slots that want this say so in their game's *_SLOT_CHANNEL_MAPS with
+        # 'B': 'normal_z'.  DMC5's NormalRoughnessMap is one: its shaders decode
+        # 2c-1 per channel and weight all three into the TBN, so B has to carry
+        # the real Z.  Games whose shaders rebuild Z themselves (RE4/RE9) keep
+        # the constant 1.0 from the base table.
+        nx = result[:, :, _CH['R']] * 2.0 - 1.0
+        ny = result[:, :, _CH['G']] * 2.0 - 1.0
+        nz = np.sqrt(np.maximum(0.0, 1.0 - nx * nx - ny * ny))
+        for ch in z_channels:
+            result[:, :, _CH[ch]] = nz * 0.5 + 0.5
 
     if octahedral and slot_type in NORMAL_OCTAHEDRAL_SLOT_TYPES:
         # These pack a third quantity (AO/cavity) into B, which a plain
