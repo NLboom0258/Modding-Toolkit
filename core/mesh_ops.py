@@ -1316,10 +1316,6 @@ class MHW_OT_RenameMeshREFormat(bpy.types.Operator):
 
     bl_idname = "mhw.rename_mesh_re_format"
     bl_label = "Rename Meshes (RE Format)"
-class MHW_OT_ClearEmptyVGroups(bpy.types.Operator):
-    """Remove every vertex group that no vertex is weighted to, on all selected meshes"""
-    bl_idname = "mhw.clear_empty_vgroups"
-    bl_label = "Clear Empty Vertex Groups"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -1343,6 +1339,17 @@ class MHW_OT_ClearEmptyVGroups(bpy.types.Operator):
         plan = rename_mesh_objects(meshes)
         self.report({'INFO'}, T("ui.main_panel.mesh_rename_done").format(count=len(plan)))
         return {'FINISHED'}
+
+
+class MHW_OT_ClearEmptyVGroups(bpy.types.Operator):
+    """Remove every vertex group that no vertex is weighted to, on all selected meshes"""
+    bl_idname = "mhw.clear_empty_vgroups"
+    bl_label = "Clear Empty Vertex Groups"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return poll_msg.selected_mesh(cls, context)
 
     @classmethod
     def description(cls, context, properties):
