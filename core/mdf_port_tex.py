@@ -390,7 +390,8 @@ def write_ported_tex(source, dst_slot_type, dst_cfg, tex_name, dst_natives_root,
         return mdf_path, False
 
     disk_path = make_disk_path(dst_natives_root, dst_base_path, tex_name, dst_slot_type,
-                               dst_cfg['abbrev_map'], dst_cfg['tex_version'], dst_cfg['use_art_prefix'])
+                               dst_cfg['abbrev_map'], dst_cfg['tex_version'], dst_cfg['use_art_prefix'],
+                               dst_cfg.get('platform_segment', 'STM'))
     tex_version = dst_cfg['tex_version']
 
     if kind == "tex":

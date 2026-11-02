@@ -1377,7 +1377,8 @@ class MdfTexProcessBase(bpy.types.Operator):
                     cache=tex_cache, temp_dir=temp_dir,
                     disk_path=lambda st, _n=tex_name: make_disk_path(
                         natives_root, base_path, _n, st,
-                        cls._abbrev_map, cls._tex_version, cls._use_art_prefix),
+                        cls._abbrev_map, cls._tex_version, cls._use_art_prefix,
+                        cls._platform_segment),
                     binding=lambda st, _n=tex_name: make_mdf_path(
                         base_path, _n, st, cls._abbrev_map, cls._use_art_prefix),
                     srgb_slots=cls._srgb_slot_types, write_tex=write_slot_tex,
@@ -1421,7 +1422,8 @@ class MdfTexProcessBase(bpy.types.Operator):
                                 write_slot_tex(
                                     src, make_disk_path(
                                         natives_root, base_path, tex_name, slot.texture_type,
-                                        cls._abbrev_map, cls._tex_version, cls._use_art_prefix),
+                                        cls._abbrev_map, cls._tex_version, cls._use_art_prefix,
+                                        cls._platform_segment),
                                     temp_dir, dds_fmt=None, generate_mipmaps=True,
                                     image_to_dds=ImageListToDDS,
                                     dds_to_tex=lambda p, o: DDSToTex(p, cls._tex_version, o))
