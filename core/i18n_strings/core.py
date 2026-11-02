@@ -520,6 +520,7 @@ STRINGS = {
     "core.mdf_tex_processor_base.pbr_cavity": {"EN": "Cavity", "ZH": "Cavity (缝隙遮蔽)"},
     "core.mdf_tex_processor_base.pbr_translucency": {"EN": "Translucency", "ZH": "Translucency (透光)"},
     "core.mdf_tex_processor_base.pbr_sss": {"EN": "SSS", "ZH": "SSS (次表面散射)"},
+    "core.mdf_tex_processor_base.pbr_emissive_mask": {"EN": "Emissive Mask", "ZH": "自发光遮罩"},
 
     "core.mdf_tex_processor_base.prop_invert": {"EN": "Invert", "ZH": "反相"},
     "core.mdf_tex_processor_base.normal_flip_g_desc": {

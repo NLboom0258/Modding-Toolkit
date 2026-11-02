@@ -73,7 +73,29 @@ DMC5_SLOT_CHANNEL_MAPS = {
         'R': ('alpha', 0),
         'G': ('translucency', 0),
         'B': ('ao', 0),
-        'A': ('emissive', 0),
+        # A is a MASK, not a colour.  The main-pass shader multiplies it into
+        # ``BaseMetalMap.rgb x VAR_EmissiveColor``, i.e. the glow's colour comes
+        # from the albedo texture and the material parameter -- this channel only
+        # says where it glows and how strongly.  Mapping it to ('emissive', 0)
+        # used to copy a source colour map's R channel in here, which silently
+        # killed any glow whose colour is not mostly red (a blue emissive map has
+        # almost nothing in R).  Hence the dedicated 'emissive_mask' input.
+        'A': ('emissive_mask', 0),
+    },
+    # Same R/G/B as the Emissive variant, but the fourth channel is NOT an
+    # emissive mask -- DMC5 reads it as a SPECULAR REFLECTANCE map:
+    #     (A - 1) * VAR_Use_SpecularReflectanceMap + 1, then * VAR_SpecularReflectance
+    # and packs the result into RT1.w.  The SSS quantity itself is the material
+    # parameter VAR_SSS_Channel (written into RT3.w), not a texture -- which is
+    # why nothing is gained by keeping the base table's ('sss', 0) here.
+    # Overridden with the neutral 1.0: unmodulated reflectance, which is exactly
+    # what "no specular map" means, so nothing changes unless someone connects an
+    # input and would otherwise write SSS data into a reflectance channel.
+    'AlphaTranslucentOcclusionSSSMap': {
+        'R': ('alpha', 0),
+        'G': ('translucency', 0),
+        'B': ('ao', 0),
+        'A': 1.0,
     },
     'TimeLock_EmissiveColor': {
         'R': ('emissive', 0),

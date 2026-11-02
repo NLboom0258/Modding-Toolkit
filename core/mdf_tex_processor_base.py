@@ -30,7 +30,7 @@ from .placeholder_tex import placeholder_dds, PLACEHOLDER_FALLBACK, is_prefab_bo
 #: both were a constant 1.0, so SSS had no input and a cross-game port
 #: silently dropped it.
 PBR_TYPES = ['color', 'alpha', 'emissive', 'normal', 'roughness', 'metallic', 'ao',
-             'cavity', 'translucency', 'sss']
+             'cavity', 'translucency', 'sss', 'emissive_mask']
 
 _PBR_TYPE_LABEL_KEYS = {
     'color':        "core.mdf_tex_processor_base.pbr_color",
@@ -43,6 +43,7 @@ _PBR_TYPE_LABEL_KEYS = {
     'cavity':       "core.mdf_tex_processor_base.pbr_cavity",
     'translucency': "core.mdf_tex_processor_base.pbr_translucency",
     'sss':          "core.mdf_tex_processor_base.pbr_sss",
+    'emissive_mask': "core.mdf_tex_processor_base.pbr_emissive_mask",
 }
 
 class _LiveTranslatedLabels(dict):
@@ -77,11 +78,13 @@ PBR_DEFAULTS = {
     # 1-neutral: the constant both SSS channels were written with before they
     # had an input, so an unconnected SSS exports exactly as it used to.
     'sss':          [1.0, 1.0, 1.0, 1.0],
+    # 0-neutral: unconnected means "nothing glows".
+    'emissive_mask': [0.0, 0.0, 0.0, 1.0],
 }
 
 # Only these PBR types expose a per-channel selector in the UI
 PBR_CHANNEL_SELECTABLE = {'alpha', 'roughness', 'metallic', 'ao', 'cavity', 'translucency',
-                          'sss'}
+                          'sss', 'emissive_mask'}
 
 # Slot types that should be converted as BC7_UNORM_SRGB (colour / emissive data).
 #
@@ -987,6 +990,12 @@ class MdfTexPBRInputs(bpy.types.PropertyGroup):
     cavity:       bpy.props.StringProperty(name="Cavity",               subtype='FILE_PATH')
     translucency: bpy.props.StringProperty(name="Translucency",         subtype='FILE_PATH')
     sss:          bpy.props.StringProperty(name="SSS",                 subtype='FILE_PATH')
+    # A slot channel that only gates an effect needs a mask, not a colour.  The
+    # two are separate inputs because one image cannot be both: feeding an
+    # emissive colour map into a mask channel reads a single channel of it,
+    # which silently kills a glow whose colour happens not to live there (a
+    # pure-blue emissive map has almost nothing in R).
+    emissive_mask: bpy.props.StringProperty(name="Emissive Mask",        subtype='FILE_PATH')
     alpha_ch:        bpy.props.EnumProperty(name="", items=_CH_ENUM_ITEMS, default='R')
     roughness_ch:    bpy.props.EnumProperty(name="", items=_CH_ENUM_ITEMS, default='R')
     metallic_ch:     bpy.props.EnumProperty(name="", items=_CH_ENUM_ITEMS, default='R')
@@ -994,6 +1003,7 @@ class MdfTexPBRInputs(bpy.types.PropertyGroup):
     cavity_ch:       bpy.props.EnumProperty(name="", items=_CH_ENUM_ITEMS, default='R')
     translucency_ch: bpy.props.EnumProperty(name="", items=_CH_ENUM_ITEMS, default='R')
     sss_ch:          bpy.props.EnumProperty(name="", items=_CH_ENUM_ITEMS, default='R')
+    emissive_mask_ch: bpy.props.EnumProperty(name="", items=_CH_ENUM_ITEMS, default='R')
     alpha_inv:        bpy.props.BoolProperty(name="Invert", default=False)
     roughness_inv:    bpy.props.BoolProperty(name="Invert", default=False)
     metallic_inv:     bpy.props.BoolProperty(name="Invert", default=False)
@@ -1001,6 +1011,7 @@ class MdfTexPBRInputs(bpy.types.PropertyGroup):
     cavity_inv:       bpy.props.BoolProperty(name="Invert", default=False)
     translucency_inv: bpy.props.BoolProperty(name="Invert", default=False)
     sss_inv:          bpy.props.BoolProperty(name="Invert", default=False)
+    emissive_mask_inv: bpy.props.BoolProperty(name="Invert", default=False)
     normal_flip_g: bpy.props.BoolProperty(name="GL>DX", default=False,
                                           description="Flip the normal map's G channel when composing (OpenGL to DirectX)")
 
