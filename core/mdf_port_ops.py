@@ -195,7 +195,8 @@ def _draw_mod_root_row(layout, context, game_code, cfg, show_hint=False):
     return bool(natives_root)
 
 
-def _scan_source_textures(targets, vanilla_set, src_natives_root, tex_version):
+def _scan_source_textures(targets, vanilla_set, src_natives_root, tex_version,
+                          platform_segment='STM'):
     """``(total, missing)`` over every custom texture binding across *targets*
     -- *missing* holds the full expected disk path for each one that isn't
     there. Runs before any mdf output is touched: a wrong directory or a
@@ -210,7 +211,8 @@ def _scan_source_textures(targets, vanilla_set, src_natives_root, tex_version):
             if not is_custom_tex_path(b.path, vanilla_set):
                 continue
             total += 1
-            disk_path = mdf_port_tex.resolve_source_disk_path(src_natives_root, b.path, tex_version)
+            disk_path = mdf_port_tex.resolve_source_disk_path(
+                src_natives_root, b.path, tex_version, platform_segment)
             if not os.path.isfile(disk_path):
                 missing.append(disk_path)
     return total, missing
@@ -460,7 +462,8 @@ class MODDER_OT_PortMdfMaterialCrossGame(bpy.types.Operator):
             # deep in the per-material loop below.
             if not no_source_root:
                 total, missing = _scan_source_textures(
-                    targets, vanilla_set, src_natives_root, src_cfg["tex_version"])
+                    targets, vanilla_set, src_natives_root, src_cfg["tex_version"],
+                    src_cfg.get("platform_segment", "STM"))
                 if total > 0 and len(missing) == total:
                     print(f"[MDF Port] no source textures found under natives_root='{src_natives_root}'")
                     for p in missing[:5]:
@@ -485,7 +488,8 @@ class MODDER_OT_PortMdfMaterialCrossGame(bpy.types.Operator):
             if no_source_root:
                 return None
             return mdf_port_tex.resolve_source_disk_path(
-                src_natives_root, path, src_cfg["tex_version"])
+                src_natives_root, path, src_cfg["tex_version"],
+                src_cfg.get("platform_segment", "STM"))
 
         try:
             for obj in targets:
@@ -590,7 +594,8 @@ class MODDER_OT_PortMdfMaterialCrossGame(bpy.types.Operator):
                                 tex_skipped_no_source += 1
                                 continue
                             src_disk_path = mdf_port_tex.resolve_source_disk_path(
-                                src_natives_root, old_path, src_cfg["tex_version"])
+                                src_natives_root, old_path, src_cfg["tex_version"],
+                                src_cfg.get("platform_segment", "STM"))
                             if not os.path.isfile(src_disk_path):
                                 print(f"[MDF Port] {old_name}: source texture not found on disk: "
                                       f"{src_disk_path}")

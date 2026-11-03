@@ -2842,8 +2842,12 @@ class MdfGenProcessBase(bpy.types.Operator):
             return make_mdf_path(base_path, tex_name, st, cls._abbrev_map, cls._use_art_prefix)
 
         def _disk_path(st):
+            # platform_segment matters for any game that is not natives/STM (DMC5
+            # is x64).  getattr keeps every existing generator on the old
+            # behaviour until its class declares one.
             return make_disk_path(natives_root, base_path, tex_name, st,
-                                  cls._abbrev_map, cls._tex_version, cls._use_art_prefix)
+                                  cls._abbrev_map, cls._tex_version, cls._use_art_prefix,
+                                  getattr(cls, '_platform_segment', 'STM'))
 
         def _placeholder(st):
             if not natives_root:

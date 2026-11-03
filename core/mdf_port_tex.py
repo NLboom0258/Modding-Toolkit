@@ -347,11 +347,17 @@ def rewrite_tex_container(src_tex_path, dst_tex_version, out_path):
 
 # ── Path resolution + write-out ──────────────────────────────────────────────
 
-def resolve_source_disk_path(natives_root, mdf_path, tex_version):
+def resolve_source_disk_path(natives_root, mdf_path, tex_version, platform_segment='STM'):
     """Absolute path of a binding's on-disk .tex. Bindings store the mdf path
-    with no natives/STM/ prefix and no version suffix (confirmed in
+    with no natives/<platform>/ prefix and no version suffix (confirmed in
     mdf_material_convert_base.is_custom_tex_path's docstring) -- the inverse
     of make_disk_path, but from the stored string rather than its parts.
+
+    ``platform_segment`` is the game's ``natives/<platform>/`` directory.  It is
+    a parameter rather than a constant because DMC5 ships under ``natives/x64``:
+    reading a DMC5 mod as a porting *source* used to look under ``natives/STM``
+    and report every texture as missing (the callers pass the source game's
+    config, see mdf_port_ops).
 
     Prefers the addon's own known tex_version for this game, but falls back
     to whatever version suffix is actually on disk when that exact file isn't
@@ -364,7 +370,7 @@ def resolve_source_disk_path(natives_root, mdf_path, tex_version):
     number.
     """
     rel = mdf_path.strip('/\\').replace('\\', '/')
-    base = os.path.join(natives_root, 'natives', 'STM', *rel.split('/'))
+    base = os.path.join(natives_root, 'natives', platform_segment, *rel.split('/'))
     exact = f"{base}.{tex_version}"
     if os.path.isfile(exact):
         return exact
