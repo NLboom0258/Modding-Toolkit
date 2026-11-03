@@ -1496,7 +1496,12 @@ class MdfTexProcessBase(bpy.types.Operator):
                                                   pbr_channels, pbr_inv, normal_flip_g,
                                                   getattr(settings, 'octahedral_normals', False),
                                                   cls._channel_maps)
-                        hit = writer.cached(key)
+                        # Per-slot format override (FORMAT_AUTO unless the user picked
+                        # one).  Resolved once here so the cache key and the write
+                        # cannot disagree.
+                        dds_fmt = resolve_slot_dds_format(
+                            slot.texture_type, slot.format_override, cls._srgb_slot_types)
+                        hit = writer.cached(key, dds_fmt)
                         if hit is not None:
                             binding.path = hit[2]
                             if slot.texture_type == 'BaseDielectricMap':
@@ -1537,7 +1542,8 @@ class MdfTexProcessBase(bpy.types.Operator):
                                 skip_count += 1
                                 continue
 
-                        binding.path, _src = writer.write(slot.texture_type, src_img, key, note="")
+                        binding.path, _src = writer.write(slot.texture_type, src_img, key,
+                                                          note="", dds_fmt=dds_fmt)
                         if slot.texture_type == 'BaseDielectricMap':
                             albd_path_out = binding.path
                         export_count += 1

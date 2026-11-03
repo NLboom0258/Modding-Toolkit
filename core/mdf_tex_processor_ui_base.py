@@ -6,7 +6,9 @@ from .mdf_tex_processor_base import (
     PBR_TYPES, PBR_TYPE_LABELS, PBR_CHANNEL_SELECTABLE, PBR_DEFAULTS,
     BASE_COMMON_SLOT_TYPES, BASE_NULL_TEX_BY_TYPE, BASE_SLOT_CHANNEL_MAPS,
     BASE_TEXTURE_TYPE_ABBREV, register_game_tables, slot_status, FEATURE_CHANNELS,
+    FORMAT_AUTO,
 )
+from .slot_resolver import resolve_slot_dds_format
 from .mdf_tex_slot_status import recipe_inputs
 from .slot_defaults import SlotNulls
 
@@ -306,6 +308,21 @@ class MdfTexDialogBase(bpy.types.Operator):
             mode_sub = right.row(align=True)
             mode_sub.scale_x = 0.8
             mode_sub.prop(slot, "mode", text="")
+            # Only the modes that actually re-encode a texture: DEFAULT / SKIP /
+            # PLACEHOLDER never write one, so a format control there would be a
+            # switch that does nothing.  skip_textures is the material-level
+            # "only update paths" toggle, same reason.
+            srgb_types = getattr(cls, '_srgb_slot_types', None)
+            if st.mode in ('COMPOSE', 'DIRECT') and not mat.skip_textures:
+                fmt_sub = right.row(align=True)
+                fmt_sub.scale_x = 0.9
+                fmt_sub.prop(slot, "format_override", text="")
+                if slot.format_override == FORMAT_AUTO and srgb_types is not None:
+                    # Spell out what AUTO resolved to.  A wrong sRGB tag renders
+                    # the texture washed out and stays invisible until it is in
+                    # the game, so leaving this a black box defeats its purpose.
+                    fmt_sub.label(text=resolve_slot_dds_format(
+                        slot.texture_type, FORMAT_AUTO, srgb_types))
             pick_op = right.operator(f"{pfx}.{self._op_stem}_pick_direct", text="",
                                      icon='FILEBROWSER')
             pick_op.mat_index  = mi

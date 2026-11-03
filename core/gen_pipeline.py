@@ -48,21 +48,31 @@ class SlotWriter:
     #: against the old behaviour.
     _encode_in_key = True
 
-    def _key(self, key):
+    def _key(self, key, dds_fmt=None):
         if key is None or not self._encode_in_key:
             return key
-        return (key, ('encode', self.mipmaps, self.mip_quality, self.grade_mode))
+        if dds_fmt is None:
+            return (key, ('encode', self.mipmaps, self.mip_quality, self.grade_mode))
+        return (key, ('encode', self.mipmaps, self.mip_quality, self.grade_mode, dds_fmt))
 
-    def cached(self, key):
-        return self.cache.get(self._key(key)) if key is not None else None
+    def cached(self, key, dds_fmt=None):
+        return self.cache.get(self._key(key, dds_fmt)) if key is not None else None
 
-    def write(self, slot_type, src, cache_key=None, note=""):
-        """Write ``src`` as the slot's texture; returns (binding, src)."""
+    def write(self, slot_type, src, cache_key=None, note="", dds_fmt=None):
+        """Write ``src`` as the slot's texture; returns (binding, src).
+
+        ``dds_fmt`` lets the caller pick the format for this one write (the
+        processor's per-slot override, already resolved).  None means "ask
+        ``resolve_format``" -- which is what every other caller does, so this
+        module stays unaware of what an override even is.
+        """
         disk = self.disk_path(slot_type)
+        if dds_fmt is None:
+            dds_fmt = self._resolve_format(slot_type, self.srgb_slots)
         extra = {} if self.mip_quality is None else {"mip_quality": self.mip_quality}
         self._write_tex(
             src, disk, self.temp_dir,
-            dds_fmt=self._resolve_format(slot_type, self.srgb_slots),
+            dds_fmt=dds_fmt,
             generate_mipmaps=self.mipmaps,
             image_to_dds=self.image_to_dds,
             dds_to_tex=self.dds_to_tex,
@@ -71,7 +81,9 @@ class SlotWriter:
         )
         binding = self.binding(slot_type)
         if cache_key is not None:
-            self.cache[self._key(cache_key)] = (src, disk, binding)
+            # The format is part of the key: the same source encoded once as
+            # SRGB and once as linear must not collapse into one cache entry.
+            self.cache[self._key(cache_key, dds_fmt)] = (src, disk, binding)
         if note is not None:
             print(f"[{self.log_tag}]   {slot_type} -> {os.path.basename(disk)}"
                   + (f" ({note})" if note else ""))
