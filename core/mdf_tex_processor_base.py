@@ -868,7 +868,8 @@ def _capture_material_state(m):
 
 
 def _capture_slot(s):
-    d = {'mode': s.mode, 'direct_image': s.direct_image}
+    d = {'mode': s.mode, 'direct_image': s.direct_image,
+         'format_override': s.format_override}
     feat = {c: [getattr(s, f"feat_{c.lower()}"), getattr(s, f"feat_{c.lower()}_ch"),
                 getattr(s, f"feat_{c.lower()}_inv")]
             for c in FEATURE_CHANNELS if getattr(s, f"feat_{c.lower()}")}
@@ -957,6 +958,8 @@ def _do_refresh(settings, col, scene, is_null_fn=None):
                 sd = prev_slots[binding.textureType]
                 if isinstance(sd, dict):
                     mode, slot.direct_image = sd.get('mode', 'AUTO'), sd.get('direct_image', '')
+                    # Absent in state saved before the override existed.
+                    slot.format_override = sd.get('format_override', FORMAT_AUTO)
                     _restore_slot_features(slot, sd)
                 else:
                     mode, slot.direct_image = sd
@@ -1069,6 +1072,21 @@ class MdfTexSlotItem(bpy.types.PropertyGroup):
         default=4,
     )
     direct_image: bpy.props.StringProperty(name="Direct Image", subtype='FILE_PATH')
+    #: Per-slot DXGI format override -- only the sRGB bit is selectable.
+    #:
+    #: 'AUTO' (0) asks the slot-type rule; see slot_resolver.resolve_slot_dds_format.
+    #: Worth touching only for a slot whose *name* says nothing about its content
+    #: (DMC5 ships plenty: kizu_Map01, cu_Base_Map, _Texture2D), because a wrong
+    #: sRGB tag renders the texture washed out and is invisible until it is in the
+    #: game.  The pixels are never gamma-converted -- only the tag changes.
+    #:
+    #: Values survive builds that had no RNA for this property: PropertyGroup fields
+    #: round-trip as IDProperties, and 0/1/2 still line up with the item numbers.
+    format_override: bpy.props.EnumProperty(
+        name="Format",
+        items=get_mdf_tex_slot_format_items,
+        default=0,  # 'AUTO' -- dynamic items require an int index default
+    )
     # UI only: whether the dialog shows this slot's per-channel rows.
     expanded:     bpy.props.BoolProperty(default=False)
     # Per-channel inputs of a feature-mask slot (see FEATURE_CHANNELS).
@@ -1281,6 +1299,7 @@ class MdfTexPasteMaterialBase(bpy.types.Operator):
                 sd = slot_data[slot.texture_type]
                 slot.mode         = sd.get('mode', 'AUTO')
                 slot.direct_image = sd.get('direct_image', '')
+                slot.format_override = sd.get('format_override', FORMAT_AUTO)
                 _restore_slot_features(slot, sd)
         self.report({'INFO'}, T("core.mdf_tex_processor_base.pasted_to_material").format(name=mat.material_name))
         return {'FINISHED'}
